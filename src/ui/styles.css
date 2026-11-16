@@ -134,7 +134,7 @@ button {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px 1fr 340px;
+  grid-template-columns: 290px 1fr 360px;
 }
 .panel {
   background: var(--panel);
@@ -167,41 +167,155 @@ button {
   margin: 0;
   padding: 0;
 }
-.rider {
+/* 라이더 카드 — 왼쪽 색 띠 = 엔진 단계 색 */
+.rider-card {
   width: 100%;
   text-align: left;
-  border: 1px solid transparent;
-  background: transparent;
-  border-radius: 6px;
-  padding: 6px;
-  display: grid;
-  grid-template-columns: 12px auto 1fr;
-  gap: 2px 6px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--rider-color, var(--muted));
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
-.rider:hover {
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+.rider-card:hover {
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
 }
-.rider.sel {
+.rider-card.sel {
   border-color: var(--accent);
+  border-left-color: var(--rider-color, var(--accent));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
 }
-.rider .dot {
+.rc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.rc-id {
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rc-id .dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  margin-top: 4px;
+  background: var(--rider-color, var(--muted));
 }
-.rider .rid {
-  font-weight: 600;
-}
-.rider .phase {
-  color: var(--muted);
-}
-.rider .dl,
-.rider .note {
-  grid-column: 2 / 4;
+.rc-done {
   font-size: 12px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.rc-phase {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.rc-delivery {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 2px 8px;
+  font-size: 12px;
+}
+.rc-dl {
+  font: 12px ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: var(--muted);
+}
+.rc-stage {
+  grid-column: 1 / 3;
+  color: var(--muted);
+}
+.rc-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 배송 단계 막대 */
+.progress {
+  --step-on: var(--accent);
+}
+.progress.tone-done {
+  --step-on: #2fbf71;
+}
+.progress.tone-warn {
+  --step-on: #e09b1a;
+}
+.progress.tone-fail {
+  --step-on: #e5484d;
+}
+.progress ol {
+  list-style: none;
+  margin: 6px 0 2px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+}
+.progress li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+/* 점 사이 선 */
+.progress li + li::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--line);
+}
+.progress li.past::before,
+.progress li.now::before {
+  background: var(--step-on);
+}
+.progress .dot {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 2px solid var(--line);
+}
+.progress li.past .dot {
+  background: var(--step-on);
+  border-color: var(--step-on);
+}
+.progress li.now .dot {
+  border-color: var(--step-on);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--step-on) 25%, transparent);
+  background: var(--step-on);
+}
+.progress .lbl {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.progress li.now .lbl {
+  color: var(--ink);
+  font-weight: 700;
+}
+.progress.compact ol {
+  margin: 0;
+  width: 108px;
+}
+.progress.compact .dot {
+  width: 9px;
+  height: 9px;
+}
+.progress.compact li + li::before {
+  top: 4px;
 }
 
 .map-wrap {
@@ -326,6 +440,59 @@ button {
   border-radius: 6px;
   padding: 6px 8px;
   margin-bottom: 6px;
+}
+/* 배송 카드 — 누르면 지도에서 보여 줌 */
+.dcard {
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.dcard:hover {
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
+}
+.dcard.picked {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.dcard.tone-fail {
+  border-left: 4px solid #e5484d;
+}
+.dcard.tone-warn {
+  border-left: 4px solid #e09b1a;
+}
+.stage-text {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.raw-states {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.raw-states code {
+  font-size: 11px;
+}
+.chip-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chip-btn {
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chip-btn.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
 }
 .card-head {
   display: flex;
@@ -501,4 +668,19 @@ code {
     border: 0;
     border-top: 1px solid var(--line);
   }
+}
+
+/* 고른 배송의 고객 핀 — 크게, 고리 */
+.mk-cust.mk-hl .mk-cust-pin {
+  width: 20px;
+  height: 20px;
+  left: -1px;
+  top: -6px;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--cust-color) 35%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.mk-cust.mk-hl .mk-cust-label {
+  font-weight: 700;
+  font-size: 12px;
 }

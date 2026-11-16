@@ -7,6 +7,7 @@ import { loadKakaoMaps } from '../render/kakao';
 import { KakaoSurface } from '../render/KakaoSurface';
 import { PlaneSurface } from '../render/PlaneSurface';
 import type { MapSurface } from '../render/surface';
+import { PHASE_LABEL } from '../sim/rider';
 import type { World } from '../sim/world';
 
 /** useSyncExternalStore 로 구독하는 작은 변경 알림. */
@@ -151,9 +152,47 @@ export class AppController {
   private lastStep = 0;
 
   select(id: string | null) {
+    if (id !== this.selected) this.selectedDelivery = null; // 다른 라이더를 고르면 전에 누른 배송 강조는 푼다
     this.selected = id;
+    if (!id) {
+      this.follow = false;
+      this.selectedDelivery = null;
+    }
     const r = id ? this.sim.riders.find((x) => x.id === id) : undefined;
     if (r?.pos) this.surface?.panTo(r.pos);
+    this.ticker.emit();
+  }
+
+  /** 고른 라이더를 지도가 계속 따라간다(약 1초마다 가운데로) */
+  follow = false;
+  private lastFollowAt = 0;
+
+  toggleFollow() {
+    if (!this.selected) return;
+    this.follow = !this.follow;
+    this.lastFollowAt = 0;
+    this.ticker.emit();
+  }
+
+  /** 오른쪽에서 고른 배송 — 지도에서 고객 핀을 강조하고 MFC·고객·라이더가 다 보이게 맞춘다 */
+  selectedDelivery: string | null = null;
+
+  selectDelivery(deliveryId: string | null) {
+    if (!deliveryId || this.selectedDelivery === deliveryId) {
+      this.selectedDelivery = null;
+      this.ticker.emit();
+      return;
+    }
+    this.selectedDelivery = deliveryId;
+    const card = this.sim.deliveryCards().find((c) => c.deliveryId === deliveryId);
+    // 배정 라이더가 있으면 그 라이더로 거른다(오른쪽 탭·지도 강조) — 따라가기는 끈다(지도를 배송 범위로 맞추므로)
+    if (card?.riderId && this.sim.riders.some((r) => r.id === card.riderId)) this.selected = card.riderId;
+    this.follow = false;
+    const pts = [this.sim.mfcLocation];
+    if (card?.customer) pts.push(card.customer);
+    const rider = card?.riderId ? this.sim.riders.find((r) => r.id === card.riderId) : undefined;
+    if (rider?.pos) pts.push(rider.pos);
+    this.surface?.fitTo(pts);
     this.ticker.emit();
   }
 
@@ -196,7 +235,13 @@ export class AppController {
         color: PHASE_COLOR[r.phase],
         label: r.id.replace(/^RD-/, ''),
         selected: r.id === this.selected,
+        title: `${r.id} · ${PHASE_LABEL[r.phase]}${r.deliveryId ? ` · ${r.deliveryId}` : ''}`,
       });
+      // 따라가기 — 매 프레임 옮기면 지도가 흔들려서 약 1초마다
+      if (this.follow && r.id === this.selected && performance.now() - this.lastFollowAt > 1000) {
+        this.lastFollowAt = performance.now();
+        s.panTo(r.pos);
+      }
       const kind = r.phase === 'TO_STORE' ? 'TO_STORE' : r.phase === 'TO_CUSTOMER' ? 'TO_CUSTOMER' : null;
       if (kind && r.path) s.upsertRoute(r.id, r.path, kind, r.pathKind === 'ROAD');
       else s.removeRoute(r.id);
@@ -212,7 +257,12 @@ export class AppController {
           continue;
         }
       }
-      s.upsertCustomer(c.deliveryId, { pos: c.customer, color: customerColor(c), label: c.deliveryId.replace(/^DL-/, '') });
+      s.upsertCustomer(c.deliveryId, {
+        pos: c.customer,
+        color: customerColor(c),
+        label: c.deliveryId.replace(/^DL-/, ''),
+        highlight: c.deliveryId === this.selectedDelivery,
+      });
     }
     s.frame();
   }

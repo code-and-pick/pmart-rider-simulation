@@ -9,12 +9,16 @@ export interface RiderMarkerState {
   color: string;
   label: string;
   selected: boolean;
+  /** 마우스를 올리면 보이는 설명(단계·배송) */
+  title: string;
 }
 
 export interface CustomerPinState {
   pos: LatLng;
   color: string;
   label: string;
+  /** 고른 배송이면 크게·강조 */
+  highlight: boolean;
 }
 
 export type RouteKind = 'TO_STORE' | 'TO_CUSTOMER';
@@ -33,6 +37,8 @@ export interface MapSurface {
   upsertRoute(id: string, points: LatLng[], kind: RouteKind, road: boolean): void;
   removeRoute(id: string): void;
   panTo(pos: LatLng): void;
+  /** 점들이 다 보이게 지도 범위를 맞춘다(배송을 누르면 MFC·고객·라이더) */
+  fitTo(points: LatLng[]): void;
   /** 매 프레임 끝(평면은 여기서 다시 그린다) */
   frame(): void;
   destroy(): void;

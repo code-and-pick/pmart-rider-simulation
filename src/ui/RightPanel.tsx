@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useApp } from '../app/App';
 import { dur, seoulTime } from './format';
+import { displayStage } from '../domain/displayStage';
+import { Progress } from './Progress';
 import { apiFor, cardsFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
 type Tab = 'deliveries' | 'events' | 'api' | 'notes';
@@ -48,9 +50,14 @@ export function RightPanel() {
           <span>
             <b>{sel}</b> 만 보는 중
           </span>
-          <button className="chip-x" aria-label="전체 보기" title="전체 보기" onClick={() => app.select(null)}>
-            ✕
-          </button>
+          <span className="chip-actions">
+            <button className={`chip-btn ${app.follow ? 'on' : ''}`} aria-pressed={app.follow} onClick={() => app.toggleFollow()} title="지도가 이 라이더를 계속 따라간다">
+              {app.follow ? '따라가는 중' : '따라가기'}
+            </button>
+            <button className="chip-x" aria-label="전체 보기" title="전체 보기" onClick={() => app.select(null)}>
+              ✕
+            </button>
+          </span>
         </div>
       )}
       <div className="tabs" role="tablist">
@@ -63,27 +70,36 @@ export function RightPanel() {
       <div className="tab-body">
         {tab === 'deliveries' && (
           <ul className="cards">
-            {cards.slice(0, 60).map((c) => (
-              <li key={c.deliveryId} className="card">
-                <div className="card-head">
-                  <b>{c.deliveryId}</b>
-                  {sel ? (
-                    <span className={`role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
-                  ) : (
-                    <span className="muted">{c.riderId ?? (c.radiusKm ? `반경 ${c.radiusKm}km 탐색` : '')}</span>
-                  )}
-                </div>
-                {/* 두 서비스의 두 상태를 출처와 함께(docs/design.md §4) */}
-                <div className="states">
-                  <span className="src">배차</span>
-                  <code>{c.dispatchState ?? '(아직 못 읽음)'}</code>
-                  <span className="src">수행</span>
-                  <code>{c.executionState ?? '(사본 없음)'}</code>
-                  <span className="src">출고</span>
-                  <code>{c.shipmentId ?? (c.dispatchState ? '(dispatch 에 없음)' : '—')}</code>
-                </div>
-              </li>
-            ))}
+            {cards.slice(0, 60).map((c) => {
+              const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm);
+              const picked = app.selectedDelivery === c.deliveryId;
+              return (
+                <li key={c.deliveryId}>
+                  <button
+                    className={`card dcard tone-${stage.tone} ${picked ? 'picked' : ''}`}
+                    aria-pressed={picked}
+                    title="누르면 지도에서 이 배송(MFC·고객·라이더)을 보여 준다"
+                    onClick={() => app.selectDelivery(c.deliveryId)}
+                  >
+                    <div className="card-head">
+                      <b>{c.deliveryId}</b>
+                      {sel ? (
+                        <span className={`role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
+                      ) : (
+                        <span className="muted">{c.riderId ?? ''}</span>
+                      )}
+                    </div>
+                    <Progress stage={stage} />
+                    <div className="stage-text">{stage.text}</div>
+                    {/* 원래 두 상태를 출처와 함께 작게(docs/design.md §4 — 위 단계는 화면용 계산) */}
+                    <div className="raw-states">
+                      배차 <code>{c.dispatchState ?? '—'}</code> · 수행 <code>{c.executionState ?? '사본 없음'}</code> · 출고{' '}
+                      <code>{c.shipmentId ?? '—'}</code>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
             {cards.length === 0 && (
               <li className="empty">
                 {sel

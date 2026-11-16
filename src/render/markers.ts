@@ -19,8 +19,9 @@ export function createRiderEl(): HTMLElement {
   return el;
 }
 
-export function updateRiderEl(el: HTMLElement, color: string, label: string, heading: number, selected: boolean): void {
+export function updateRiderEl(el: HTMLElement, color: string, label: string, heading: number, selected: boolean, title = ''): void {
   el.style.setProperty('--rider-color', color);
+  if (el.title !== title) el.title = title;
   // 진행 방향이 서쪽이면 그림을 좌우로 뒤집는다
   el.classList.toggle('mk-west', heading > 180 && heading < 360);
   el.classList.toggle('mk-selected', selected);
@@ -49,8 +50,9 @@ export function createCustomerEl(): HTMLElement {
   return el;
 }
 
-export function updateCustomerEl(el: HTMLElement, color: string, label: string): void {
+export function updateCustomerEl(el: HTMLElement, color: string, label: string, highlight = false): void {
   el.style.setProperty('--cust-color', color);
+  el.classList.toggle('mk-hl', highlight);
   const lab = el.querySelector('.mk-cust-label') as HTMLElement;
   if (lab.textContent !== label) lab.textContent = label;
 }

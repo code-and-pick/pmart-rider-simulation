@@ -6,12 +6,17 @@ export interface KLatLng {
   getLat(): number;
   getLng(): number;
 }
+export interface KLatLngBounds {
+  extend(p: KLatLng): void;
+}
 export interface KMap {
   setCenter(p: KLatLng): void;
   panTo(p: KLatLng): void;
   relayout(): void;
   getLevel(): number;
   setLevel(level: number): void;
+  /** 범위가 다 보이게(여백 px: 위·오른쪽·아래·왼쪽) */
+  setBounds(b: KLatLngBounds, paddingTop?: number, paddingRight?: number, paddingBottom?: number, paddingLeft?: number): void;
 }
 export interface KCustomOverlay {
   setPosition(p: KLatLng): void;
@@ -29,6 +34,7 @@ export interface KPolyline {
 export interface KakaoMaps {
   load(cb: () => void): void;
   LatLng: new (lat: number, lng: number) => KLatLng;
+  LatLngBounds: new () => KLatLngBounds;
   Map: new (el: HTMLElement, opts: { center: KLatLng; level: number }) => KMap;
   CustomOverlay: new (opts: {
     position: KLatLng;

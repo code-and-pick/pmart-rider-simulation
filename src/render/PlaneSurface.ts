@@ -104,7 +104,7 @@ export class PlaneSurface implements MapSurface {
     }
     r.pos = s.pos;
     r.el.style.zIndex = s.selected ? '20' : '10';
-    updateRiderEl(r.el, s.color, s.label, s.heading, s.selected);
+    updateRiderEl(r.el, s.color, s.label, s.heading, s.selected, s.title);
   }
 
   removeRider(id: string): void {
@@ -121,7 +121,8 @@ export class PlaneSurface implements MapSurface {
       c = { el, pos: s.pos };
       this.customers.set(id, c);
     }
-    updateCustomerEl(c.el, s.color, s.label);
+    updateCustomerEl(c.el, s.color, s.label, s.highlight);
+    c.el.style.zIndex = s.highlight ? '15' : '5';
   }
 
   removeCustomer(id: string): void {
@@ -135,6 +136,20 @@ export class PlaneSurface implements MapSurface {
 
   removeRoute(id: string): void {
     this.routes.delete(id);
+  }
+
+  fitTo(points: LatLng[]): void {
+    if (!points.length) return;
+    const ms = points.map((p) => this.toM(p));
+    const xs = ms.map((m) => m.x);
+    const ys = ms.map((m) => m.y);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    this.cx = (x0 + x1) / 2;
+    this.cy = (y0 + y1) / 2;
+    const w = Math.max(1, this.container.clientWidth - 120);
+    const h = Math.max(1, this.container.clientHeight - 120);
+    const span = Math.max(x1 - x0, 1) / w > Math.max(y1 - y0, 1) / h ? Math.max(x1 - x0, 1) / w : Math.max(y1 - y0, 1) / h;
+    this.pxPerM = Math.min(2, Math.max(0.02, 1 / Math.max(span, 1e-6)));
   }
 
   panTo(pos: LatLng): void {

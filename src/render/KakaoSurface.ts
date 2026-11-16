@@ -74,7 +74,7 @@ export class KakaoSurface implements MapSurface {
       m.lng = s.pos.lng;
     }
     m.ov.setZIndex(s.selected ? 20 : 10);
-    updateRiderEl(m.el, s.color, s.label, s.heading, s.selected);
+    updateRiderEl(m.el, s.color, s.label, s.heading, s.selected, s.title);
   }
 
   removeRider(id: string): void {
@@ -90,7 +90,8 @@ export class KakaoSurface implements MapSurface {
       m = { ov, el, lat: s.pos.lat, lng: s.pos.lng };
       this.customers.set(id, m);
     }
-    updateCustomerEl(m.el, s.color, s.label);
+    updateCustomerEl(m.el, s.color, s.label, s.highlight);
+    m.ov.setZIndex(s.highlight ? 15 : 5);
   }
 
   removeCustomer(id: string): void {
@@ -128,6 +129,17 @@ export class KakaoSurface implements MapSurface {
   removeRoute(id: string): void {
     this.routes.get(id)?.line.setMap(null);
     this.routes.delete(id);
+  }
+
+  fitTo(points: LatLng[]): void {
+    if (!points.length) return;
+    if (points.length === 1) {
+      this.map.panTo(this.ll(points[0] as LatLng));
+      return;
+    }
+    const b = new this.k.LatLngBounds();
+    for (const p of points) b.extend(this.ll(p));
+    this.map.setBounds(b, 60, 60, 60, 60);
   }
 
   panTo(pos: LatLng): void {
