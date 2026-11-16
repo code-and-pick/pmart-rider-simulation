@@ -29,6 +29,8 @@ export const CONTRACT = {
   locationStaleSec: 180,
   /** 끊김 확인 간격 30초 [확정] 같은 문서 stale-check-interval */
   locationStaleCheckSec: 30,
+  /** 다시 배송: 잘못 둔 곳 ↔ 실제 집 직선 200m 미만이면 원래 기사 먼저·0원, 이상이면 9,000원 결제 대기 [확정] dispatch 0.4.2 */
+  redeliveryFreeRadiusM: 200,
   /** 증빙 사진 JPEG·PNG·WEBP, 10MB 이하 [확정] execution 0.5.0 */
   evidencePhotoMaxBytes: 10 * 1024 * 1024,
   /** 시험 라이더 ID 접두어 [확정] RR-01 회신 조건 3 */
@@ -69,7 +71,7 @@ export interface SimParams {
   locationOutageRate: number;
   /** 위치 끊김 길이(초) [시뮬] — 끊김 기준 3분 + 확인 간격 30초보다 길게 */
   locationOutageSec: number;
-  /** 가게에서 포장을 이만큼(초) 넘게 기다리면 도움요청 STORE_WAITING 한 번 [시뮬]. null = 안 함(실서버는 null — 실제 지원센터 사건이 열린다) */
+  /** 가게에서 포장을 이만큼(초) 넘게 기다리면 도움요청 STORE_WAITING 한 번 [시뮬]. null = 안 함. 실서버도 보낸다(실제 지원센터 사건이 열림 — 사용자 결정 2026-11-16) */
   storeWaitHelpSec: number | null;
   /** 제안을 보고 응답하기까지 걸리는 시간 범위(초) [시뮬] */
   offerResponseDelaySec: [number, number];
@@ -116,6 +118,18 @@ export interface MockParams {
   networkDropRate: number;
   /** 전달 실패 등록 → 운영자 확정까지 초 [시뮬] — MOCK 이 운영자 대신(실서버는 사람이 확정) */
   failureConfirmSec: number;
+  /** 오배송 확률 [시뮬] — 전달 완료된 배송이 나중에 오배송으로 확인될 확률(조절 바). MOCK 이 case-service 대신 MisdeliveryConfirmed */
+  misdeliveryRate: number;
+  /** 전달 완료 → 오배송 확인까지 초 [시뮬](고객 문의·상담원 확인) */
+  misdeliveryConfirmSec: number;
+  /** 오배송 중 고객 잘못(잘못 둔 곳 → 실제 집 다시 배송) 비율 [시뮬] — 나머지는 라이더·시스템 잘못(MFC 회수 + 재발송) */
+  customerFaultShare: number;
+  /** 고객 잘못일 때 잘못 둔 곳 ↔ 실제 집 직선 거리 범위(m) [시뮬] — 200m 미만이면 원래 기사 먼저(0원), 이상이면 결제 대기 [확정 기준값 200m — dispatch 0.4.2] */
+  redeliveryDistanceM: [number, number];
+  /** 결제 대기에서 고객이 결제할 확률 [시뮬] — 나머지는 회수 후 환불(다시 배송 취소 + MFC 회수 배송) */
+  redeliveryPayProbability: number;
+  /** 결제 대기 → 결제(또는 거절)까지 초 [시뮬](order-orchestration·고객 앱 대신) */
+  redeliveryPaySec: number;
 }
 
 export const DEFAULT_PARAMS: SimParams = {
@@ -154,6 +168,12 @@ export const DEFAULT_PARAMS: SimParams = {
     packTimeScale: 1,
     networkDropRate: 0,
     failureConfirmSec: 60,
+    misdeliveryRate: 0,
+    misdeliveryConfirmSec: 300,
+    customerFaultShare: 0.5,
+    redeliveryDistanceM: [60, 450],
+    redeliveryPayProbability: 0.7,
+    redeliveryPaySec: 180,
   },
   seed: 1,
 };

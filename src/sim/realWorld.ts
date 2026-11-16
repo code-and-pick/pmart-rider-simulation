@@ -152,9 +152,9 @@ export class RealWorld implements World {
         this.backend.asRider(r.id),
         this.backend.observer,
         this.clock,
-        // 실서버에는 장면을 일부러 만들지 않는다(조절 바는 MOCK 만): 가짜 전달 실패·배정 취소·위치 끊김 없음,
-        // 도움요청도 안 보냄(실제 지원센터 사건이 열린다 — 보내려면 사용자 결정)
-        { ...this.params, customerAbsentRate: 0, riderCancelRate: 0, locationOutageRate: 0, storeWaitHelpSec: null },
+        // 실서버에는 장면을 일부러 만들지 않는다(조절 바는 MOCK 만): 가짜 전달 실패·배정 취소·위치 끊김 없음.
+        // 포장 10분 넘으면 도움요청 STORE_WAITING 은 보낸다(실제 지원센터 사건이 열림 — 사용자 결정 2026-11-16 "진행해")
+        { ...this.params, customerAbsentRate: 0, riderCancelRate: 0, locationOutageRate: 0 },
         home,
         r.pos ?? home,
         {
@@ -180,6 +180,7 @@ export class RealWorld implements World {
       networkDropRate: 0,
       riderCancelRate: 0,
       locationOutageRate: 0,
+      misdeliveryRate: 0,
     };
   }
 
@@ -337,6 +338,8 @@ export class RealWorld implements World {
         riderIds: involvedRiders(r),
         radiusKm: d?.state === 'DISPATCHING' ? (at?.currentRadiusKm ?? null) : null,
         customer: null,
+        purpose: d?.purpose ?? null,
+        pickup: null,
         createdAt: s.createdAt ? (Date.parse(s.createdAt) - this.startWall) / 1000 : 0,
       };
     });

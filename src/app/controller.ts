@@ -8,7 +8,8 @@ import { KakaoSurface } from '../render/KakaoSurface';
 import { PlaneSurface } from '../render/PlaneSurface';
 import type { MapSurface } from '../render/surface';
 import { PHASE_LABEL } from '../sim/rider';
-import type { ScenarioKnobs, World } from '../sim/world';
+import type { DeliveryCard, ScenarioKnobs, World } from '../sim/world';
+import type { LatLng } from '../util/geo';
 
 /** useSyncExternalStore 로 구독하는 작은 변경 알림. */
 export class Emitter {
@@ -192,6 +193,7 @@ export class AppController {
     this.follow = false;
     const pts = [this.sim.mfcLocation];
     if (card?.customer) pts.push(card.customer);
+    if (card?.pickup) pts.push(card.pickup);
     const rider = card?.riderId ? this.sim.riders.find((r) => r.id === card.riderId) : undefined;
     if (rider?.pos) pts.push(rider.pos);
     this.surface?.fitTo(pts);
@@ -259,13 +261,18 @@ export class AppController {
         this.lastFollowAt = performance.now();
         s.panTo(r.pos);
       }
-      const kind = r.phase === 'TO_STORE' || r.phase === 'RETURNING' ? 'TO_STORE' : r.phase === 'TO_CUSTOMER' ? 'TO_CUSTOMER' : null;
+      const kind =
+        r.phase === 'TO_STORE' || r.phase === 'RETURNING' || r.phase === 'TO_PICKUP' ? 'TO_STORE' : r.phase === 'TO_CUSTOMER' ? 'TO_CUSTOMER' : null;
       if (kind && r.path) s.upsertRoute(r.id, r.path, kind, r.pathKind === 'ROAD');
       else s.removeRoute(r.id);
     }
     const now = this.sim.clock.now;
     for (const c of this.sim.deliveryCards()) {
-      if (!c.customer) continue; // 실서버: 고객 위치를 읽지 않는다(개인정보)
+      const pos = pinOf(c);
+      if (!pos) {
+        s.removeCustomer(c.deliveryId);
+        continue; // 실서버: 고객 위치를 읽지 않는다(개인정보). 회수품을 받은 회수는 MFC 로 가므로 핀 없음
+      }
       if (c.dispatchState && DONE_STATES.has(c.dispatchState)) {
         const at = this.doneAt.get(c.deliveryId) ?? now;
         this.doneAt.set(c.deliveryId, at);
@@ -276,7 +283,7 @@ export class AppController {
         }
       }
       s.upsertCustomer(c.deliveryId, {
-        pos: c.customer,
+        pos,
         color: customerColor(c),
         label: c.deliveryId.replace(/^DL-/, ''),
         highlight: c.deliveryId === this.selectedDelivery,
@@ -284,4 +291,14 @@ export class AppController {
     }
     s.frame();
   }
+}
+
+/** 배송 핀 자리 — 회수·다시 배송은 받기 전엔 잘못 둔 곳, 다시 배송은 받은 뒤 실제 집, 회수는 받은 뒤 없음(MFC 로) */
+function pinOf(c: DeliveryCard): LatLng | null {
+  if (c.pickup) {
+    const before = c.executionState === null || c.executionState === 'UNASSIGNED' || c.executionState === 'ASSIGNED' || c.executionState === 'CANCELLED';
+    if (before) return c.pickup;
+    return c.purpose === 'MISDELIVERY_RECOVERY' ? null : c.customer;
+  }
+  return c.customer;
 }

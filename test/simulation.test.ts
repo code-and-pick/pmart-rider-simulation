@@ -82,12 +82,13 @@ describe('가상 라이더 (MOCK, 화면 없이)', () => {
     expect(new Set(completedIds).size).toBe(completedIds.length);
   }, 60_000);
 
-  it('제안 판단: 일반 배송·재발송만 받고 회수·반품·다시 배송은 받지 않는다(§3-1)', () => {
-    expect(decideOffer({ purpose: 'MISDELIVERY_RECOVERY', deliveryType: 'RETURN' }, 0, 1)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
+  it('제안 판단: 일반·재발송·회수는 받고, 다시 배송은 주소 찾기 수단이 있을 때만, 반품은 거절(§3-1)', () => {
+    expect(decideOffer({ purpose: 'MISDELIVERY_RECOVERY', deliveryType: 'RETURN' }, 0.1, 0.9)).toEqual({ kind: 'ACCEPT' });
+    expect(decideOffer({ purpose: 'MISDELIVERY_REDELIVERY', deliveryType: 'RESHIPMENT' }, 0.1, 0.9, true)).toEqual({ kind: 'ACCEPT' }); // MOCK(주소록)
     expect(decideOffer({ purpose: 'DELIVERY', deliveryType: 'FORWARD' }, 0.1, 0.9)).toEqual({ kind: 'ACCEPT' });
     expect(decideOffer({ purpose: 'DELIVERY' }, 0.92, 0.9)).toEqual({ kind: 'REJECT', reason: 'TOO_FAR' });
     expect(decideOffer({ purpose: 'DELIVERY' }, 0.99, 0.9)).toEqual({ kind: 'IGNORE' });
-    // 재발송은 일반 흐름이라 받는다. 고객 잘못 다시 배송(가게 대신 잘못 둔 곳)·반품은 거절. 목적이 없으면 FORWARD 만
+    // 재발송은 일반 흐름이라 받는다. 다시 배송은 전달지 핀이 없어 주소 찾기 수단이 없으면(실서버) 거절. 반품 거절. 목적이 없으면 FORWARD 만
     expect(decideOffer({ purpose: 'MISDELIVERY_RESHIPMENT', deliveryType: 'RESHIPMENT' }, 0.1, 0.9)).toEqual({ kind: 'ACCEPT' });
     expect(decideOffer({ purpose: 'MISDELIVERY_REDELIVERY', deliveryType: 'RESHIPMENT' }, 0, 1)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
     expect(decideOffer({ purpose: 'CLAIM_RETURN', deliveryType: 'RETURN' }, 0, 1)).toEqual({ kind: 'REJECT', reason: 'OTHER' });

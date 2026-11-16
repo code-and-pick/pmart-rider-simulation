@@ -45,3 +45,20 @@ describe('라이더 메모 쉬운 말', () => {
     expect(friendlyNote('')).toBe('');
   });
 });
+
+describe('오배송 배송의 단계(화면용)', () => {
+  it('회수: 잘못 둔 곳 → 회수 → MFC 반납, 막대 이름도 회수용', () => {
+    const a = displayStage('ASSIGNED', 'ASSIGNED', null, 'MISDELIVERY_RECOVERY');
+    expect(a).toMatchObject({ index: 2, text: '배정 — 잘못 둔 곳으로 가는 중' });
+    expect(a.labels[3]).toBe('회수');
+    expect(displayStage('PICKED_UP', 'RETURN_PICKED_UP', null, 'MISDELIVERY_RECOVERY').index).toBe(4);
+    expect(displayStage('CLOSED', 'RETURNED_TO_STORE', null, 'MISDELIVERY_RECOVERY')).toMatchObject({ index: 5, tone: 'done' });
+  });
+  it('다시 배송: 결제 대기 → 잘못 둔 곳에서 받음 → 완료, 일반 배송은 그대로', () => {
+    expect(displayStage('CREATED', 'UNASSIGNED', null, 'MISDELIVERY_REDELIVERY')).toMatchObject({ index: 0, tone: 'warn' });
+    expect(displayStage('PICKED_UP', 'PICKED_UP', null, 'MISDELIVERY_REDELIVERY')).toMatchObject({ index: 3, text: '잘못 둔 곳에서 받음 — 실제 집으로' });
+    expect(displayStage('CLOSED', 'COMPLETED', null, 'MISDELIVERY_REDELIVERY')).toMatchObject({ index: 5, tone: 'done' });
+    expect(displayStage('ASSIGNED', 'ASSIGNED', null, 'MISDELIVERY_RESHIPMENT')).toMatchObject({ index: 1, text: '배정 — MFC 로 가는 중' });
+    expect(displayStage('ASSIGNED', 'ASSIGNED').labels[2]).toBe('가게 도착');
+  });
+});

@@ -13,7 +13,7 @@ describe('시나리오 조절 바', () => {
   it('조절해도 기본 설정(DEFAULT_PARAMS)은 그대로 — 시뮬레이션마다 사본', () => {
     const before = JSON.stringify(DEFAULT_PARAMS);
     const sim = new Simulation({ ...DEFAULT_PARAMS }, { startEpochMs: START });
-    const k = { ordersPerHour: 55, acceptProbability: 0.2, packTimeScale: 3, customerAbsentRate: 0.5, networkDropRate: 0.3, riderCancelRate: 0.4, locationOutageRate: 0.6 };
+    const k = { ordersPerHour: 55, acceptProbability: 0.2, packTimeScale: 3, customerAbsentRate: 0.5, networkDropRate: 0.3, riderCancelRate: 0.4, locationOutageRate: 0.6, misdeliveryRate: 0.7 };
     sim.setKnobs(k);
     expect(sim.getKnobs()).toEqual(k);
     expect(JSON.stringify(DEFAULT_PARAMS)).toBe(before);
@@ -142,4 +142,82 @@ describe('시나리오 조절 바', () => {
     expect(sim.eventLog.filter((e) => e.type === 'DeliveryIncidentRaised')).toHaveLength(1);
     expect(sim.metrics()).toMatchObject({ completed: 2, incidents: { helpRequests: 1 } });
   }, 60_000);
+
+  describe('오배송(MOCK 이 상담원·case 대신)', () => {
+    /** 일반 주문 하나를 완료시키고, 그 배송 하나만 오배송이 되게(완료 뒤 확률을 0 으로) */
+    async function oneMisdelivery(mock: Partial<(typeof DEFAULT_PARAMS)['mock']>, riders = 3) {
+      const sim = new Simulation(
+        { ...DEFAULT_PARAMS, acceptProbability: 1, mock: { ...DEFAULT_PARAMS.mock, misdeliveryRate: 1, misdeliveryConfirmSec: 60, ...mock } },
+        { startEpochMs: START },
+      );
+      sim.backend.autoOrders = false;
+      // API 기록(apiLog)은 최근 것만 남는 고리라 오래 돌리면 앞이 밀려난다 — 볼 호출은 따로 모은다
+      const calls: { path: string; status: number | 'ERR' }[] = [];
+      sim.backend.onApiCall((r) => {
+        if (r.path.includes('/returns/') || r.path.endsWith('/store-arrivals')) calls.push({ path: r.path, status: r.status });
+      });
+      sim.startRiders(riders, (i) => offsetM(MFC, 200 + i * 250, 0));
+      await sim.runFor(10);
+      sim.backend.createOrder({ pickSec: 1, packMinutes: 3, packages: 1, customer: offsetM(MFC, 1200, 0) });
+      for (let i = 0; i < 200 && sim.metrics().completed === 0; i++) await sim.runFor(10);
+      sim.setKnobs({ misdeliveryRate: 0 }); // 이 뒤 완료는 오배송 안 됨
+      const origin = [...sim.backend.deliveries.values()][0]!;
+      expect(origin.x.state).toBe('COMPLETED');
+      await sim.runFor(90 * 60);
+      const of = (p: string) => [...sim.backend.deliveries.values()].filter((x) => x.purpose === p);
+      return { sim, origin, of, calls };
+    }
+    const noStops = (sim: Simulation) => expect(sim.riders.filter((r) => r.phase === 'STOPPED').map((r) => r.id + ': ' + r.note)).toEqual([]);
+
+    it('라이더·시스템 잘못: 회수(원래 라이더 빼고, 잘못 둔 곳 → MFC 반납) + MFC 재발송(일반 흐름으로 완료)', async () => {
+      const { sim, origin, of } = await oneMisdelivery({ customerFaultShare: 0 });
+      expect(sim.eventLog.some((e) => e.type === 'MisdeliveryConfirmed' && e.deliveryId === origin.deliveryId)).toBe(true);
+      const [rec] = of('MISDELIVERY_RECOVERY');
+      expect(rec).toBeDefined();
+      expect(rec!).toMatchObject({ type: 'RETURN', originDeliveryId: origin.deliveryId, x: { state: 'RETURNED_TO_STORE' }, d: { state: 'CLOSED' } });
+      expect(rec!.pickup?.source).toBe('RIDER_COMPLETION_LOCATION');
+      expect(rec!.x.riderId).not.toBe(origin.x.riderId); // 원래 라이더 제외
+      expect(sim.eventLog.filter((e) => e.deliveryId === rec!.deliveryId).map((e) => e.type)).toEqual(
+        expect.arrayContaining(['ReturnPickedUp', 'ReturnDelivered']),
+      );
+      const [re] = of('MISDELIVERY_RESHIPMENT');
+      expect(re).toMatchObject({ type: 'RESHIPMENT', caseId: rec!.caseId, orderId: origin.orderId, x: { state: 'COMPLETED' } });
+      const card = sim.deliveryCards().find((c) => c.deliveryId === rec!.deliveryId)!;
+      expect(card).toMatchObject({ purpose: 'MISDELIVERY_RECOVERY', executionState: 'RETURNED_TO_STORE' });
+      noStops(sim);
+    }, 60_000);
+
+    it('고객 잘못·200m 미만: 원래 기사에게 먼저(0원) → 잘못 둔 곳에서 받음 → 주소로 실제 집 찾아 완료', async () => {
+      const { sim, origin, of, calls } = await oneMisdelivery({ customerFaultShare: 1, redeliveryDistanceM: [80, 150] });
+      const [rd] = of('MISDELIVERY_REDELIVERY');
+      expect(rd).toMatchObject({ type: 'RESHIPMENT', x: { state: 'COMPLETED' }, d: { state: 'CLOSED' } });
+      expect(rd!.x.riderId).toBe(origin.x.riderId); // 원래 기사
+      const first = [...sim.backend.offers.values()].find((o) => o.deliveryId === rd!.deliveryId)!;
+      expect(first.riderId).toBe(origin.x.riderId);
+      expect(calls.some((r) => r.path === '/deliveries/' + rd!.deliveryId + '/store-arrivals')).toBe(false); // 가게 안 감
+      expect(calls.some((r) => r.path === '/deliveries/' + rd!.deliveryId + '/returns/pickups' && typeof r.status === 'number' && r.status < 300)).toBe(true);
+      expect(sim.notes.some((n) => n.text === '전달지 핀 없음 — 주소로 위치 찾음')).toBe(true);
+      expect(of('MISDELIVERY_RECOVERY')).toHaveLength(0);
+      noStops(sim);
+    }, 60_000);
+
+    it('고객 잘못·200m 이상·결제함: 결제 대기(배차 안 함) → 결제되면 배차 → 완료', async () => {
+      const { sim, of } = await oneMisdelivery({ customerFaultShare: 1, redeliveryDistanceM: [300, 400], redeliveryPayProbability: 1 });
+      const [rd] = of('MISDELIVERY_REDELIVERY');
+      expect(sim.eventLog.some((e) => e.type === 'RedeliveryPaymentRequired' && e.deliveryId === rd!.deliveryId)).toBe(true);
+      expect(rd).toMatchObject({ x: { state: 'COMPLETED' }, paymentRequired: false });
+      noStops(sim);
+    }, 60_000);
+
+    it('고객 잘못·200m 이상·결제 안 함: 다시 배송 픽업 전 취소 → 회수(원래 라이더 빼고)로 MFC 반납', async () => {
+      const { sim, origin, of } = await oneMisdelivery({ customerFaultShare: 1, redeliveryDistanceM: [300, 400], redeliveryPayProbability: 0 });
+      const [rd] = of('MISDELIVERY_REDELIVERY');
+      expect(rd!.d.state).toBe('CANCELLED_BEFORE_PICKUP');
+      expect([...sim.backend.offers.values()].some((o) => o.deliveryId === rd!.deliveryId)).toBe(false); // 결제 전 제안 없음
+      const [rec] = of('MISDELIVERY_RECOVERY');
+      expect(rec).toMatchObject({ caseId: rd!.caseId, x: { state: 'RETURNED_TO_STORE' } });
+      expect(rec!.x.riderId).not.toBe(origin.x.riderId);
+      noStops(sim);
+    }, 60_000);
+  });
 });

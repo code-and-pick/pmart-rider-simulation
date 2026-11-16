@@ -7,11 +7,12 @@
 //  - 응답 없음(ResultUnknown)은 실패가 아니다 — 같은 Idempotency-Key 로 다시 보낸다.
 //  - 사건 반영 지연을 기다린다(수락 직후 execution UNASSIGNED 등 — "반영 대기").
 //  - 전달지(drop-info)는 좌표만 쓰고 나머지는 버린다(저장·로그·화면 금지).
-//  - 일반 배송·재발송(MISDELIVERY_RESHIPMENT)만 받고, 회수·반품·고객 잘못 다시 배송은 거절한다(docs/design.md §3-1 — 회수 흐름은 P4).
+//  - 일반 배송·재발송(MISDELIVERY_RESHIPMENT)·오배송 회수(MISDELIVERY_RECOVERY)를 받는다. 고객 잘못 다시 배송(MISDELIVERY_REDELIVERY)은
+//    전달지에 지도 핀이 없어 주소로 찾을 수단(locateAddress — MOCK 만)이 있을 때만 받는다. 고객 반품(CLAIM_RETURN)은 거절(docs/design.md §3-1).
 
 import type { ObserverApi, RiderApi, WriteOptions } from '../backend/port';
 import { CONTRACT, simRiderPhone, type SimParams } from '../config';
-import { ApiProblem, ResultUnknown, type Offer, type Shipment } from '../domain/contract';
+import { ApiProblem, ResultUnknown, type DeliveryPurpose, type Offer, type Shipment } from '../domain/contract';
 import { bearingDeg, distanceM, moveToward, type LatLng } from '../util/geo';
 import { IdGen, Rng } from '../util/rng';
 import { RiderRestrictedError, STOP_RESTRICTIONS, withAuthRecovery } from './authGuard';
@@ -39,6 +40,10 @@ export type RiderPhase =
   | 'TO_CUSTOMER'
   | 'AT_CUSTOMER'
   | 'STOPPED'
+  /** 회수지·잘못 둔 곳으로 이동(회수·다시 배송) */
+  | 'TO_PICKUP'
+  /** 잘못 둔 곳 — 상품 찾기·사진·받음 */
+  | 'AT_PICKUP'
   /** 전달 실패 처리(연락·실패 등록·확정 대기) */
   | 'FAILING'
   /** 실패한 상품 들고 MFC 로 */
@@ -58,6 +63,8 @@ export const PHASE_LABEL: Record<RiderPhase, string> = {
   TO_CUSTOMER: '고객으로 이동',
   AT_CUSTOMER: '고객 도착 — 전달',
   STOPPED: '멈춤',
+  TO_PICKUP: '잘못 둔 곳으로 이동',
+  AT_PICKUP: '잘못 둔 곳 — 상품 찾기',
   FAILING: '전달 실패 처리',
   RETURNING: '상품 들고 MFC 복귀',
   REMOTE: '실서버(읽기만)',
@@ -66,15 +73,17 @@ export const PHASE_LABEL: Record<RiderPhase, string> = {
 /** 제안을 어떻게 할지 — 순수 함수(시험용). */
 export type OfferDecision = { kind: 'ACCEPT' } | { kind: 'REJECT'; reason: 'OTHER' | 'TOO_FAR' } | { kind: 'IGNORE' };
 
-/** 가상 라이더가 받는 배송 목적 — 일반 흐름(가게 도착 → 인계 → 고객 → 완료)인 것만 */
-const ACCEPTED_PURPOSES: ReadonlySet<string> = new Set(['DELIVERY', 'MISDELIVERY_RESHIPMENT']);
+/** 가상 라이더가 받는 배송 목적 — 일반·재발송(가게 → 고객)과 오배송 회수(잘못 둔 곳 → MFC) */
+const ACCEPTED_PURPOSES: ReadonlySet<string> = new Set(['DELIVERY', 'MISDELIVERY_RESHIPMENT', 'MISDELIVERY_RECOVERY']);
 
-export function decideOffer(offer: Offer, roll: number, acceptProbability: number): OfferDecision {
+/** canRedeliver: 다시 배송 전달지(주소만, 핀 없음)를 좌표로 찾을 수 있나 — MOCK 만 true */
+export function decideOffer(offer: Offer, roll: number, acceptProbability: number, canRedeliver = false): OfferDecision {
   // 회수(MISDELIVERY_RECOVERY)·고객 반품·재발송(MISDELIVERY_RESHIPMENT — dispatch 0.4.1)·고객 잘못 다시 배송(MISDELIVERY_REDELIVERY — 0.4.2, 가게 대신 잘못 둔 곳에서 받음)은 받지 않는다(§3-1).
   // 재발송(MISDELIVERY_RESHIPMENT, type RESHIPMENT)은 받는다 — execution 0.5.1 "수행은 일반 배송과 같다", 서비스 코드도 다시 배송(purpose)·회수(type RETURN)만 따로 처리
   // (pmart-backend 6df1e842 ExecutionStore.redelivery·recovery, 2026-11-16 확인). 목적이 없으면 종류로만 본다(FORWARD 만).
   if (offer.purpose !== undefined) {
-    if (!ACCEPTED_PURPOSES.has(offer.purpose)) return { kind: 'REJECT', reason: 'OTHER' };
+    const ok = offer.purpose === 'MISDELIVERY_REDELIVERY' ? canRedeliver : ACCEPTED_PURPOSES.has(offer.purpose);
+    if (!ok) return { kind: 'REJECT', reason: 'OTHER' };
   } else if (offer.deliveryType !== undefined && offer.deliveryType !== 'FORWARD') return { kind: 'REJECT', reason: 'OTHER' };
   if (roll < acceptProbability) return { kind: 'ACCEPT' };
   // 나머지 절반은 거절, 절반은 무응답으로 만료 [시뮬]
@@ -84,6 +93,8 @@ export function decideOffer(offer: Offer, roll: number, acceptProbability: numbe
 /** 시뮬레이터가 지표·화면에 쓰는 한 배송의 엔진 기록. */
 export interface RiderTrip {
   deliveryId: string;
+  /** 배송 목적(제안의 purpose) — 없으면 일반 */
+  purpose?: DeliveryPurpose;
   offeredAt: number;
   acceptedAt?: number;
   storeArrivedAt?: number;
@@ -155,7 +166,12 @@ export class VirtualRider {
      * allowSignup: 미가입이면 가입할지(가입은 백엔드에 지울 수 없는 데이터를 남긴다 — RR-07).
      * routes: MFC·고객으로 갈 때 경로(기본 직선 — 시험). 화면은 개발 서버 도로 경로(DevServerRoutes).
      */
-    private readonly options: { allowSignup: boolean; routes?: RouteProvider } = { allowSignup: true },
+    private readonly options: {
+      allowSignup: boolean;
+      routes?: RouteProvider;
+      /** 주소 → 좌표(다시 배송 전달지는 핀이 없다). MOCK 만 — 실서버는 없음(주소를 밖으로 보내는 일은 사용자 결정) */
+      locateAddress?: (roadAddress: string) => LatLng | null;
+    } = { allowSignup: true },
   ) {
     this.id = api.riderId;
     // 401 → 계정 제한 확인 → 정지면 멈춤(RR-01 조건 7)
@@ -409,10 +425,10 @@ export class VirtualRider {
     const offerId = offer.offerId as string;
     this.phase = 'DECIDING';
     const detail = await this.api.getOffer(offerId);
-    const decision = decideOffer(detail, this.rng.next(), this.params.acceptProbability);
+    const decision = decideOffer(detail, this.rng.next(), this.params.acceptProbability, this.options.locateAddress !== undefined);
     const [lo, hi] = this.params.offerResponseDelaySec;
     const delay = Math.min(this.rng.range(lo, hi), Math.max(0, (detail.remainingSec ?? CONTRACT.offerResponseWindowSec) - 2));
-    this.trip = { deliveryId: detail.deliveryId ?? '', offeredAt: this.clock.now };
+    this.trip = { deliveryId: detail.deliveryId ?? '', purpose: detail.purpose, offeredAt: this.clock.now };
     if (decision.kind === 'IGNORE') {
       this.say(`제안 ${detail.deliveryId} 무응답(만료되게 둠)`);
       return null;
@@ -445,8 +461,12 @@ export class VirtualRider {
   private async deliver(offer: Offer) {
     const deliveryId = offer.deliveryId as string;
     this.deliveryId = deliveryId;
-    const trip = this.trip ?? { deliveryId, offeredAt: this.clock.now };
+    const trip = this.trip ?? { deliveryId, purpose: offer.purpose, offeredAt: this.clock.now };
     this.trip = trip;
+    if (offer.purpose === 'MISDELIVERY_RECOVERY' || offer.purpose === 'MISDELIVERY_REDELIVERY') {
+      await this.fromWrongPlace(deliveryId, trip, offer.purpose);
+      return;
+    }
 
     // 4. MFC 로
     this.phase = 'TO_STORE';
@@ -494,12 +514,28 @@ export class VirtualRider {
       await this.write(this.opts('pickup'), (o) => this.api.reportPickup(deliveryId, { handoverIds: exec.handoverIds ?? [] }, o));
     }
 
-    // 7. 고객으로 — drop-info 는 좌표만
+    await this.toCustomerAndHandOff(deliveryId, trip);
+  }
+
+  /**
+   * 7~8. 고객으로 → 도착 → 사진 → 완료(또는 고객 부재면 실패). drop-info 는 좌표만 쓴다(주소·전화는 저장·기록하지 않음).
+   * 다시 배송은 핀이 없어 주소로 찾는다(locateAddress — MOCK). 못 찾으면 도움요청 ADDRESS_ISSUE → 전달 실패(ADDRESS_ERROR)로 상품을 들고 돌아간다.
+   */
+  private async toCustomerAndHandOff(deliveryId: string, trip: RiderTrip) {
     const drop = await this.api.getDropInfo(deliveryId);
-    if (drop.lat === null || drop.lat === undefined || drop.lng === null || drop.lng === undefined) {
-      throw new Error(`전달지에 지도 핀 없음 (${deliveryId})`);
+    const pin = drop.lat !== null && drop.lat !== undefined && drop.lng !== null && drop.lng !== undefined ? { lat: drop.lat, lng: drop.lng } : null;
+    const point = pin ?? this.options.locateAddress?.(drop.roadAddress) ?? null;
+    if (!point) {
+      this.say('전달지 위치를 못 찾음 — 도움요청(주소)');
+      await this.write(this.opts('help'), (o) =>
+        this.api.createHelpRequest(deliveryId, { category: 'ADDRESS_ISSUE', detail: '전달지 지도 핀 없음·주소로 못 찾음(시뮬레이터)' }, o),
+      );
+      const photo = await this.write(this.opts('photo'), (o) => this.api.uploadEvidencePhoto(deliveryId, testPhoto(), o));
+      await this.failDelivery(deliveryId, trip, photo.photoRef, 'ADDRESS_ERROR');
+      return;
     }
-    this.dropPoint = { lat: drop.lat, lng: drop.lng };
+    if (!pin) this.say('전달지 핀 없음 — 주소로 위치 찾음');
+    this.dropPoint = point;
     this.phase = 'TO_CUSTOMER';
     this.say('고객으로 이동');
     // 위치 끊김(조절 바 locationOutageRate) — 배송 상태는 그대로, tracking 이 3분 뒤 RiderLocationStale 만 낸다
@@ -538,6 +574,65 @@ export class VirtualRider {
   }
 
   /**
+   * 회수(MISDELIVERY_RECOVERY)·다시 배송(MISDELIVERY_REDELIVERY): 잘못 둔 곳으로 → 상품 찾아 사진 → 받음(returns/pickups).
+   *  - 회수: RETURN_PICKED_UP → MFC 로 → 반납(returns/store-deliveries → RETURNED_TO_STORE).
+   *  - 다시 배송: PICKED_UP → 실제 집(주소로 찾음) → 고객 도착 → 사진 → 완료(일반 배송과 같음).
+   * 가게 도착·MFC 인계는 없다(execution 409). 잘못 둔 곳 좌표는 배정 라이더에게만 보이는 배차 조회 recovery.pickup.
+   */
+  private async fromWrongPlace(deliveryId: string, trip: RiderTrip, purpose: 'MISDELIVERY_RECOVERY' | 'MISDELIVERY_REDELIVERY') {
+    const recovery = purpose === 'MISDELIVERY_RECOVERY';
+    const disp = await this.api.getDispatch(deliveryId);
+    const p = disp.recovery?.pickup;
+    if (p?.lat === undefined || p.lng === undefined) {
+      // 좌표가 없으면 찾아갈 수 없다 — 배정을 놓는다(재배차). 운영자 확인은 도움요청으로
+      this.say('잘못 둔 곳 좌표 없음 — 배정 취소(재배차)');
+      await this.write(this.opts('cancel', disp.version), (o) =>
+        this.api.cancelAssignment(deliveryId, { requestedBy: 'RIDER', reason: 'RIDER_UNABLE', reasonDetail: '회수지 좌표 없음(시뮬레이터)', reassign: true }, o),
+      );
+      trip.cancelledAt = this.clock.now;
+      this.hooks.onTripDone(trip);
+      return;
+    }
+    const wrong = { lat: p.lat, lng: p.lng };
+    this.phase = 'TO_PICKUP';
+    this.say(recovery ? '회수 — 잘못 둔 곳으로 이동' : '다시 배송 — 잘못 둔 곳으로 이동');
+    await this.moveTo(wrong, this.params.riderSpeedMps, true);
+
+    this.phase = 'WAIT_ASSIGN_REFLECT';
+    let version = await this.waitExecution(deliveryId, (s) => s === 'ASSIGNED', this.params.assignmentReflectWaitSec);
+    if (version === null) {
+      this.say('배정이 execution 에 보이지 않음 — 이 배송을 놓고 대기로');
+      this.hooks.onTripDone(trip);
+      return;
+    }
+    this.phase = 'AT_PICKUP';
+    this.say('잘못 둔 곳 도착 — 상품 찾아 사진');
+    await this.wait(30); // 상품 찾기 [시뮬]
+    const photo = await this.write(this.opts('photo'), (o) => this.api.uploadEvidencePhoto(deliveryId, testPhoto(), o));
+    version = (await this.api.getExecution(deliveryId)).version ?? version;
+    const pickBody = { items: [], evidenceRefs: [photo.photoRef], occurredAt: this.clock.iso(), location: { ...this.pos } }; // 한 번만 — 재전송 때 같은 본문
+    await this.write(this.opts('ret-pickup', version), (o) => this.api.reportReturnPickup(deliveryId, pickBody, o));
+    trip.pickedUpAt = this.clock.now;
+
+    if (!recovery) {
+      this.say('잘못 둔 곳에서 받음 — 실제 집으로');
+      await this.toCustomerAndHandOff(deliveryId, trip);
+      return;
+    }
+    this.say('회수품 받음 — MFC 로');
+    this.phase = 'RETURNING';
+    await this.moveTo(this.home, this.params.riderSpeedMps, true);
+    const back = await this.waitExecution(deliveryId, (s) => s === 'RETURN_PICKED_UP', 60);
+    if (back === null) throw new Error(`회수 뒤 RETURN_PICKED_UP 이 보이지 않음 (${deliveryId})`);
+    const storeBody = { evidenceRefs: [photo.photoRef], occurredAt: this.clock.iso(), location: { ...this.pos } };
+    await this.write(this.opts('ret-store', back), (o) => this.api.reportReturnStoreDelivery(deliveryId, storeBody, o));
+    trip.completedAt = this.clock.now;
+    this.say(`회수품 MFC 반납 ${deliveryId}`);
+    this.hooks.onTripDone(trip);
+    this.target = null;
+  }
+
+  /**
    * 배정 취소(픽업 전): 가게로 가다가 사정이 생겨 취소 → dispatch 가 이 라이더를 빼고 재배차(reassign 기본 true).
    * 인계 전이라 상품은 가게에 남는다(dispatch 계약). 취소가 거절되면(409 등 — 이미 픽업·상태 바뀜) 그대로 배송한다.
    * 돌려주는 값: 취소됐으면 true.
@@ -572,9 +667,9 @@ export class VirtualRider {
    * 전달 실패(고객 부재): 연락 2번(계약 — 고객 사유는 2회 이상 필수) → 문 앞 사진을 근거로 실패 등록(FAILURE_REPORTED, 아직 진행 중)
    * → 운영자 확정(FAILED) 기다림 → 상품을 들고 MFC 로 복귀. 실패 확정은 라이더가 하지 않는다(execution 계약 — 운영자).
    */
-  private async failDelivery(deliveryId: string, trip: RiderTrip, photoRef: string) {
+  private async failDelivery(deliveryId: string, trip: RiderTrip, photoRef: string, reason: 'CUSTOMER_ABSENT' | 'ADDRESS_ERROR' = 'CUSTOMER_ABSENT') {
     this.phase = 'FAILING';
-    this.say('고객 부재 — 연락 2번 시도');
+    this.say(reason === 'CUSTOMER_ABSENT' ? '고객 부재 — 연락 2번 시도' : '주소 확인 — 고객에게 연락 2번 시도');
     const first = this.clock.iso();
     await this.wait(30); // 전화·메시지 [시뮬]
     const second = this.clock.iso();
@@ -583,8 +678,8 @@ export class VirtualRider {
       this.api.reportFailure(
         deliveryId,
         {
-          reason: 'CUSTOMER_ABSENT',
-          detail: '고객 부재(시뮬레이터)',
+          reason,
+          detail: reason === 'CUSTOMER_ABSENT' ? '고객 부재(시뮬레이터)' : '주소로 위치를 못 찾음(시뮬레이터)',
           evidenceRefs: [photoRef],
           goodsLocation: 'WITH_RIDER',
           contactAttempts: [

@@ -11,6 +11,7 @@ const NORMAL: ScenarioKnobs = {
   networkDropRate: DEFAULT_PARAMS.mock.networkDropRate,
   riderCancelRate: DEFAULT_PARAMS.riderCancelRate,
   locationOutageRate: DEFAULT_PARAMS.locationOutageRate,
+  misdeliveryRate: DEFAULT_PARAMS.mock.misdeliveryRate,
 };
 
 const PRESETS: { label: string; hint: string; knobs: Partial<ScenarioKnobs> }[] = [
@@ -22,6 +23,11 @@ const PRESETS: { label: string; hint: string; knobs: Partial<ScenarioKnobs> }[] 
   { label: '네트워크 불안', hint: '쓰기 응답 25% 끊김 — 같은 키로 다시 보내 중복 없이 이어지는지', knobs: { networkDropRate: 0.25 } },
   { label: '라이더 취소', hint: '수락한 라이더 30%가 가게 가는 길에 배정 취소 — 그 라이더를 빼고 다른 라이더에게 재배차', knobs: { riderCancelRate: 0.3 } },
   { label: '위치 끊김', hint: '고객에게 가는 라이더 50%가 4분 동안 위치를 못 올림 — 3분 지나면 위치 끊김 사건(배송 상태는 그대로)', knobs: { locationOutageRate: 0.5 } },
+  {
+    label: '오배송',
+    hint: '전달 완료 30%가 5분 뒤 오배송으로 확인 — 반은 MFC 회수 + 재발송, 반은 고객 잘못 다시 배송(200m 미만 원래 기사 먼저 0원, 이상 결제 대기)',
+    knobs: { misdeliveryRate: 0.3 },
+  },
 ];
 
 interface Slider {
@@ -42,6 +48,7 @@ const SLIDERS: Slider[] = [
   { key: 'customerAbsentRate', label: '고객 부재', min: 0, max: 1, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '고객 도착 뒤 부재일 확률 — 연락 2번·사진 → 전달 실패 등록(운영자 확정은 MOCK 이 1분 뒤 대신)' },
   { key: 'riderCancelRate', label: '라이더 취소', min: 0, max: 1, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '수락한 라이더가 가게 가는 길에 배정을 취소할 확률(픽업 전, RIDER_UNABLE) — 취소한 라이더를 빼고 재배차' },
   { key: 'locationOutageRate', label: '위치 끊김', min: 0, max: 1, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '고객에게 가는 중 위치 전송이 4분 멈출 확률 — 3분 지나면 tracking 이 위치 끊김(RiderLocationStale)을 낸다. 배송 상태는 바뀌지 않는다' },
+  { key: 'misdeliveryRate', label: '오배송', min: 0, max: 1, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '전달 완료가 5분 뒤 오배송으로 확인될 확률(MOCK 이 상담원 대신) — 라이더·시스템 잘못이면 회수 + 재발송, 고객 잘못이면 다시 배송' },
   { key: 'networkDropRate', label: '응답 끊김', min: 0, max: 0.5, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '쓰기 요청 응답이 사라질 확률 — 절반은 처리 전, 절반은 처리 뒤 끊김. 라이더는 같은 키로 다시 보낸다' },
 ];
 

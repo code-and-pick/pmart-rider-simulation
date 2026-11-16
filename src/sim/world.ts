@@ -2,7 +2,7 @@
 
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
 import type { SimParams } from '../config';
-import type { DispatchState, ExecutionState } from '../domain/contract';
+import type { DeliveryPurpose, DispatchState, ExecutionState } from '../domain/contract';
 import type { LatLng } from '../util/geo';
 import type { SimClock } from './clock';
 import type { RiderPhase } from './rider';
@@ -38,8 +38,12 @@ export interface DeliveryCard {
   /** 이 배송에 관여한 라이더(제안을 받았거나 배정된) — 라이더별 거르기 */
   riderIds: string[];
   radiusKm: number | null;
-  /** null = 고객 위치를 모름(실서버 관찰 계정은 전달지를 읽지 않는다 — 개인정보) */
+  /** null = 고객 위치를 모름(실서버 관찰 계정은 전달지를 읽지 않는다 — 개인정보). 회수는 MFC */
   customer: LatLng | null;
+  /** 배송 목적 — null 이면 모름(일반으로 본다) */
+  purpose: DeliveryPurpose | null;
+  /** 회수·다시 배송의 잘못 둔 곳(MOCK 만 — 실서버는 배정 라이더에게만 보임) */
+  pickup: LatLng | null;
   createdAt: number;
 }
 
@@ -68,6 +72,8 @@ export interface ScenarioKnobs {
   riderCancelRate: number;
   /** 고객에게 가는 중 위치 전송이 4분 끊길 확률(0~1) → RiderLocationStale */
   locationOutageRate: number;
+  /** 전달 완료가 나중에 오배송으로 확인될 확률(0~1) → 회수·재발송·다시 배송 */
+  misdeliveryRate: number;
 }
 
 /** 지금까지 일어난 사건 수(MOCK — 실서버는 사건을 구독하지 못해 없음) */

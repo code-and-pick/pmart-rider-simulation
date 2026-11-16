@@ -9,7 +9,9 @@
 // 흉내의 단순화 [시뮬]:
 //  - AI 추천 제안은 그 반경 단계 안 적격 라이더 모두에게 한 번에 보낸다(실서버는 OR-Tools·AI 서버가 고른다).
 //  - 전달지(drop-info)는 가짜 값 — 실제 개인정보가 아니다. 좌표만 의미가 있다.
-//  - 회수 배송(DD-2)·운영자 결정·고객 반품은 만들지 않는다(P4 후보).
+//  - 오배송(조절 바 misdeliveryRate): 전달 완료 뒤 case-service 대신 MisdeliveryConfirmed → 라이더·시스템 잘못이면 MFC 회수(DD-2) + 재발송,
+//    고객 잘못이면 다시 배송(ADR-0065 — 200m 미만 원래 기사 먼저 0원, 이상 결제 대기 → order-orchestration 대신 결제·거절).
+//  - 운영자 상태 정정·고객 반품 회수(CLAIM_RETURN)는 만들지 않는다.
 
 import { CONTRACT, isSimRiderId, type MockParams } from '../../config';
 import {
@@ -24,6 +26,8 @@ import {
   type DeliveryExecution,
   type DeliveryListItem,
   type DeliveryListResponse,
+  type DeliveryPurpose,
+  type DeliveryType,
   type DispatchAttempt,
   type DispatchSettings,
   type DispatchState,
@@ -133,6 +137,9 @@ interface MShipment {
   dispatchRequestedAt: number | null;
   estimatedPackMinutes: number;
   readyAt: number | null;
+  /** 재발송 출고(MISDELIVERY_RESHIPMENT)면 목적·사건 */
+  purpose: DeliveryPurpose;
+  caseId?: string;
 }
 
 interface MAttempt {
@@ -172,9 +179,23 @@ export interface MDelivery {
   orderId: string;
   shipmentId: string;
   mfcId: string;
-  /** MOCK 고객 위치 — 실서버에는 없는 정보(실서버는 배정 라이더가 drop-info 로만 안다) */
+  /** MOCK 도착지 — 일반·재발송·다시 배송은 고객(다시 배송은 실제 집), 회수는 MFC. 실서버는 배정 라이더가 drop-info 로만 안다 */
   customer: LatLng;
   createdAt: number;
+  type: DeliveryType;
+  purpose: DeliveryPurpose;
+  caseId?: string;
+  originDeliveryId?: string;
+  /** 회수·다시 배송의 픽업지(잘못 둔 곳) — 배차 반경의 중심. 없으면 MFC */
+  pickup?: { at: LatLng; source: 'RIDER_COMPLETION_LOCATION' | 'DROP_ADDRESS' };
+  /** 다시 배송 실제 집 주소(MOCK 가짜 문자열) — 좌표는 MockBackend.locateAddress 로만 */
+  homeAddress?: string;
+  /** 다시 배송 결제 대기(200m 이상) — 결제되면 배차를 푼다 */
+  paymentRequired?: boolean;
+  /** 다시 배송 200m 미만 — 원래 기사에게 먼저(반경 무관, 0원). 그 제안이 끝나면 지운다 */
+  preferRiderId?: string;
+  /** 제안 예상 배달료(원) — 다시 배송 원래 기사 0원, 나머지는 표시 안 함 */
+  feeZero?: boolean;
   d: {
     state: DispatchState;
     version: number;
@@ -196,6 +217,8 @@ export interface MDelivery {
     helps: MHelp[];
     assignedAt?: number;
     completedAt?: number;
+    /** 전달 완료를 누른 곳(MOCK tracking 위치) — 오배송 회수지 */
+    completedAtPos?: LatLng;
   };
 }
 
@@ -238,6 +261,10 @@ export interface MockOrderOptions {
   /** 배차 요청 → 포장 끝까지 분 */
   packMinutes?: number;
   packages?: number;
+  /** 재발송 출고: 원래 주문·목적·사건 */
+  orderId?: string;
+  purpose?: DeliveryPurpose;
+  caseId?: string;
 }
 
 export class MockBackend implements RiderPort {
@@ -296,6 +323,147 @@ export class MockBackend implements RiderPort {
   onEvent(listener: EventListener): () => void {
     this.eventListeners.add(listener);
     return () => this.eventListeners.delete(listener);
+  }
+
+  // ───────────── 배송 종류 (execution 규칙 — ExecutionService.mfcPickupOnly·forwardOnly·photoAllowed) ─────────────
+
+  /** 가게 도착·MFC 인계 픽업은 다시 배송·회수에 없다 */
+  private mfcPickupOnly(del: MDelivery) {
+    if (del.purpose === 'MISDELIVERY_REDELIVERY') fail(409, 'INVALID_STATE', '오배송 다시 배송 — 잘못 둔 곳에서 받음(returns/pickups)');
+    this.forwardOnly(del);
+  }
+
+  /** 일반 단계(가게 도착·픽업·고객 도착·전달 완료·실패 등록)는 회수 배송에 쓰지 않는다 */
+  private forwardOnly(del: MDelivery) {
+    if (del.type === 'RETURN') fail(409, 'INVALID_STATE', '회수 배송 — returns/pickups·store-deliveries');
+  }
+
+  /** 사진을 올릴 수 있는 상태 — 다시 배송은 잘못 둔 곳(배정)부터, 회수는 배정·회수 뒤, 그 밖은 픽업 뒤 */
+  private photoStates(del: MDelivery): ExecutionState[] {
+    if (del.purpose === 'MISDELIVERY_REDELIVERY') return ['ASSIGNED', 'PICKED_UP', 'ARRIVED_AT_CUSTOMER'];
+    if (del.type === 'RETURN') return ['ASSIGNED', 'RETURN_PICKED_UP'];
+    return ['PICKED_UP', 'ARRIVED_AT_CUSTOMER'];
+  }
+
+  // ───────────── 오배송 (MOCK 이 case-service·order-orchestration 대신) ─────────────
+
+  private readonly addressBook = new Map<string, LatLng>();
+
+  /**
+   * MOCK 주소 → 좌표. 다시 배송 전달지에는 지도 핀이 없어(execution) 라이더는 주소로 찾아간다 — MOCK 라이더는 이것으로.
+   * 실서버에는 이 길이 없다(주소 검색은 사용자 결정 — docs/design.md §3-1).
+   */
+  locateAddress(roadAddress: string): LatLng | null {
+    const p = this.addressBook.get(roadAddress);
+    return p ? { ...p } : null;
+  }
+
+  /** 전달 완료 뒤 조절 바 확률로 오배송 확인을 건다(일반·재발송만 — 다시 배송·회수는 아님) */
+  private maybeMisdelivery(del: MDelivery) {
+    const p = this.params;
+    if (p.misdeliveryRate <= 0 || del.pickup) return;
+    if (this.rng.next() >= p.misdeliveryRate) return;
+    this.schedule(p.misdeliveryConfirmSec, () => this.confirmMisdelivery(del));
+  }
+
+  /** case-service 대신: 오배송 확인 → 귀책에 따라 회수 + 재발송, 또는 다시 배송 */
+  private confirmMisdelivery(origin: MDelivery) {
+    const caseId = this.ids.next('CS');
+    const wrong = origin.x.completedAtPos ?? origin.customer;
+    const source = origin.x.completedAtPos ? 'RIDER_COMPLETION_LOCATION' : 'DROP_ADDRESS';
+    const originRider = origin.x.riderId ?? undefined;
+    const customerFault = this.rng.next() < this.params.customerFaultShare;
+    this.emit('MisdeliveryConfirmed', `${origin.deliveryId} 오배송 확인(${customerFault ? '고객 잘못 → 다시 배송' : '라이더·시스템 잘못 → 회수 + 재발송'}) 사건 ${caseId}`, {
+      deliveryId: origin.deliveryId,
+      riderId: originRider,
+    });
+    if (customerFault) {
+      this.createRedelivery(origin, caseId, wrong, source);
+    } else {
+      this.createRecovery(origin, caseId, wrong, source, originRider);
+      // MFC 재발송: 점원이 새로 피킹·포장 → 재발송 출고(DispatchRequested purpose MISDELIVERY_RESHIPMENT)
+      this.createOrder({ orderId: origin.orderId, purpose: 'MISDELIVERY_RESHIPMENT', caseId, customer: origin.customer });
+    }
+  }
+
+  private newPickupDelivery(
+    origin: MDelivery,
+    caseId: string,
+    kind: 'RECOVERY' | 'REDELIVERY',
+    wrong: LatLng,
+    source: 'RIDER_COMPLETION_LOCATION' | 'DROP_ADDRESS',
+    to: LatLng,
+  ): MDelivery {
+    const now = this.clock.now;
+    const deliveryId = this.ids.next('DL');
+    const del: MDelivery = {
+      deliveryId,
+      orderId: origin.orderId,
+      shipmentId: `${kind === 'RECOVERY' ? 'RCV' : 'RDL'}-${caseId}`,
+      mfcId: this.mfcId,
+      customer: to,
+      createdAt: now,
+      type: kind === 'RECOVERY' ? 'RETURN' : 'RESHIPMENT',
+      purpose: kind === 'RECOVERY' ? 'MISDELIVERY_RECOVERY' : 'MISDELIVERY_REDELIVERY',
+      caseId,
+      originDeliveryId: origin.deliveryId,
+      pickup: { at: { ...wrong }, source },
+      d: { state: 'CREATED', version: 1, attempts: [], assignment: null, updatedAt: now },
+      x: { exists: false, state: 'UNASSIGNED', version: 0, riderId: null, handoverIds: [], packageIds: [], history: [], photos: [], helps: [] },
+    };
+    this.deliveries.set(deliveryId, del);
+    this.schedule(this.lag(), () => {
+      if (!del.x.exists) {
+        del.x.exists = true;
+        this.xHistory(del, 'UNASSIGNED', 'SYSTEM_EVENT', 'DeliveryCreated');
+      }
+    });
+    return del;
+  }
+
+  /** 회수(DD-2): 잘못 둔 곳 → MFC, 원래 라이더 빼고 회수지 중심 반경으로 바로 배차 */
+  private createRecovery(origin: MDelivery, caseId: string, wrong: LatLng, source: 'RIDER_COMPLETION_LOCATION' | 'DROP_ADDRESS', originRider?: string) {
+    const del = this.newPickupDelivery(origin, caseId, 'RECOVERY', wrong, source, this.mfcLocation);
+    this.emit('DeliveryCreated', `${del.deliveryId} 회수(${caseId}, 원래 ${origin.deliveryId})`, { deliveryId: del.deliveryId });
+    this.setDispatchState(del, 'DISPATCHING');
+    this.startAttempt(del, 'AUTO', 0, new Set(originRider ? [originRider] : []));
+  }
+
+  /** 다시 배송(ADR-0065): 잘못 둔 곳 → 실제 집. 200m 미만 원래 기사 먼저(0원), 이상 결제 대기 */
+  private createRedelivery(origin: MDelivery, caseId: string, wrong: LatLng, source: 'RIDER_COMPLETION_LOCATION' | 'DROP_ADDRESS') {
+    const [lo, hi] = this.params.redeliveryDistanceM;
+    const home = destination(wrong, this.rng.range(0, 360), this.rng.range(lo, hi));
+    const del = this.newPickupDelivery(origin, caseId, 'REDELIVERY', wrong, source, home);
+    del.homeAddress = `(MOCK 실제 집 ${caseId})`;
+    this.addressBook.set(del.homeAddress, home);
+    const meters = Math.round(distanceM(wrong, home));
+    this.emit('DeliveryCreated', `${del.deliveryId} 다시 배송(${caseId}, 잘못 둔 곳 ↔ 실제 집 ${meters}m)`, { deliveryId: del.deliveryId });
+    if (meters < CONTRACT.redeliveryFreeRadiusM) {
+      del.preferRiderId = origin.x.riderId ?? undefined;
+      del.feeZero = true;
+      this.setDispatchState(del, 'DISPATCHING');
+      this.startAttempt(del, 'AUTO', 0, new Set());
+      return;
+    }
+    // 결제 대기 — 배차하지 않는다(배달리스트에도 없음). order-orchestration·고객 앱 대신 redeliveryPaySec 뒤 결제 또는 거절
+    del.paymentRequired = true;
+    this.emit('RedeliveryPaymentRequired', `${del.deliveryId} 다시 배송비 9,000원 결제 대기(${meters}m)`, { deliveryId: del.deliveryId });
+    this.schedule(this.params.redeliveryPaySec, () => {
+      if (del.d.state !== 'CREATED') return;
+      if (this.rng.next() < this.params.redeliveryPayProbability) {
+        // redelivery-releases — 결제됨 → 배차 풀기
+        del.paymentRequired = false;
+        this.setDispatchState(del, 'DISPATCHING');
+        this.startAttempt(del, 'AUTO', 0, new Set());
+      } else {
+        // redelivery-cancellations — 결제 안 함 → 픽업 전 취소 + MFC 회수(원래 라이더 제외)
+        del.paymentRequired = false;
+        this.setDispatchState(del, 'CANCELLED_BEFORE_PICKUP');
+        this.schedule(this.lag(), () => this.xHistory(del, 'CANCELLED', 'SYSTEM_EVENT', 'DeliveryCancelledBeforePickup'));
+        this.emit('DeliveryCancelledBeforePickup', `${del.deliveryId} 결제 안 함 → 다시 배송 취소, 회수 후 환불`, { deliveryId: del.deliveryId });
+        this.createRecovery(origin, caseId, wrong, source, origin.x.riderId ?? undefined);
+      }
+    });
   }
 
   // ───────────── 세계 진행 (MOCK 이 다른 서비스 대신) ─────────────
@@ -361,7 +529,7 @@ export class MockBackend implements RiderPort {
   /** 주문 하나 → (pickSec 뒤) 점원 배차 요청 → (packMinutes 뒤) 출하 대기. 시험에서도 부른다. */
   createOrder(opts: MockOrderOptions = {}): { orderId: string; shipmentId: string } {
     const p = this.params;
-    const orderId = this.ids.next('OR');
+    const orderId = opts.orderId ?? this.ids.next('OR');
     const shipmentId = this.ids.next('SH');
     const n = opts.packages ?? this.rng.int(p.packagesPerShipment[0], p.packagesPerShipment[1]);
     const packages: MPackage[] = [];
@@ -390,6 +558,8 @@ export class MockBackend implements RiderPort {
       dispatchRequestedAt: null,
       estimatedPackMinutes: Math.round(packMinutes),
       readyAt: null,
+      purpose: opts.purpose ?? 'DELIVERY',
+      caseId: opts.caseId,
     };
     this.shipments.set(shipmentId, ship);
     const customer =
@@ -405,7 +575,8 @@ export class MockBackend implements RiderPort {
     ship.dispatchRequestedAt = now;
     ship.version++;
     const deliveryId = this.ids.next('DL');
-    this.emit('DispatchRequested', `${ship.shipmentId} 배차 요청(예상 포장 ${Math.round(packMinutes)}분)`, { deliveryId });
+    const reship = ship.purpose === 'MISDELIVERY_RESHIPMENT';
+    this.emit('DispatchRequested', `${ship.shipmentId} ${reship ? '재발송 ' : ''}배차 요청(예상 포장 ${Math.round(packMinutes)}분)`, { deliveryId });
     ship.deliveryId = deliveryId;
     const del: MDelivery = {
       deliveryId,
@@ -414,6 +585,9 @@ export class MockBackend implements RiderPort {
       mfcId: this.mfcId,
       customer,
       createdAt: now,
+      type: reship ? 'RESHIPMENT' : 'FORWARD',
+      purpose: ship.purpose,
+      caseId: ship.caseId,
       d: { state: 'DISPATCHING', version: 1, attempts: [], assignment: null, updatedAt: now },
       x: {
         exists: false,
@@ -428,7 +602,7 @@ export class MockBackend implements RiderPort {
       },
     };
     this.deliveries.set(deliveryId, del);
-    this.emit('DeliveryCreated', `${deliveryId} (출고 ${ship.shipmentId})`, { deliveryId });
+    this.emit('DeliveryCreated', `${deliveryId} (출고 ${ship.shipmentId}${reship ? ` · 재발송 ${ship.caseId}` : ''})`, { deliveryId });
     this.startAttempt(del, 'STORE_STAFF', 0, new Set());
     this.schedule(this.lag(), () => {
       if (!del.x.exists) {
@@ -490,11 +664,23 @@ export class MockBackend implements RiderPort {
     const steps = CONTRACT.radiusStepsKm;
     const idx = Math.min(Math.floor((now - at.startedAt) / this.params.radiusStepSec), steps.length - 1);
     at.radiusKm = steps[idx] as number;
+    // 다시 배송 200m 미만: 원래 기사에게 먼저(반경 무관) — 그 제안이 거절·만료되면 근처 다른 라이더(dispatch 0.4.2)
+    if (del.preferRiderId) {
+      const first = [...this.offers.values()].find((o) => o.deliveryId === del.deliveryId && o.riderId === del.preferRiderId);
+      if (first && first.state !== 'SENT') {
+        del.preferRiderId = undefined;
+        del.feeZero = false;
+      }
+    }
+    // 반경 중심 = 픽업지(회수·다시 배송은 잘못 둔 곳, 그 밖은 MFC)
+    const center = del.pickup?.at ?? this.mfcLocation;
     for (const r of this.riders.values()) {
       if (at.excluded.has(r.riderId)) continue;
+      if (del.preferRiderId && r.riderId !== del.preferRiderId) continue;
       if (!this.offerEligible(r)) continue;
       if (r.settings.dispatchMode !== 'AI_RECOMMENDED') continue;
-      if (!r.location || distanceM(r.location, this.mfcLocation) > at.radiusKm * 1000) continue;
+      if (!r.location) continue;
+      if (!del.preferRiderId && distanceM(r.location, center) > at.radiusKm * 1000) continue;
       let already = false;
       for (const o of this.offers.values()) {
         if (o.attemptId === at.attemptId && o.riderId === r.riderId) {
@@ -812,6 +998,7 @@ export class MockBackend implements RiderPort {
     const items: { item: DeliveryListItem; d: number }[] = [];
     for (const del of this.deliveries.values()) {
       if (del.d.state !== 'DISPATCHING') continue;
+      if (del.pickup) continue; // 회수·다시 배송은 배달리스트에 안 나온다(dispatch DD-2·0.4.2)
       const at = this.currentAttempt(del);
       if (!at || at.excluded.has(r.riderId)) continue;
       const straight = distanceM(r.location, this.mfcLocation);
@@ -994,14 +1181,15 @@ export class MockBackend implements RiderPort {
       bundleId: null,
       bundleSize: 1,
       stopSequence: 1,
-      deliveryType: 'FORWARD',
-      purpose: 'DELIVERY',
+      deliveryType: del?.type ?? 'FORWARD',
+      purpose: del?.purpose ?? 'DELIVERY',
       summary: {
         mfcId: this.mfcId,
-        dropAreaLabel: '(MOCK 동)',
-        distanceKm: del ? round2(distanceM(this.mfcLocation, del.customer) / 1000) : undefined,
-        // 도로 거리 대신 직선 [시뮬] — MOCK 에는 길찾기가 없다
-        pickupDistanceKm: r?.location ? round2(distanceM(r.location, this.mfcLocation) / 1000) : undefined,
+        dropAreaLabel: del?.purpose === 'MISDELIVERY_RECOVERY' ? '(MFC 반납)' : '(MOCK 동)',
+        // 픽업지(회수·다시 배송은 잘못 둔 곳) → 도착지. 도로 거리 대신 직선 [시뮬] — MOCK 에는 길찾기가 없다
+        distanceKm: del ? round2(distanceM(del.pickup?.at ?? this.mfcLocation, del.customer) / 1000) : undefined,
+        pickupDistanceKm: r?.location ? round2(distanceM(r.location, del?.pickup?.at ?? this.mfcLocation) / 1000) : undefined,
+        estimatedFee: del?.feeZero ? 0 : undefined,
         bagCount: ship?.packages.length,
         containsAlcohol: false,
         deliveryMode: 'SINGLE',
@@ -1009,17 +1197,26 @@ export class MockBackend implements RiderPort {
     };
   }
 
-  private dispatchView(del: MDelivery): Delivery {
+  /** showPickup: 회수지 좌표는 배정 라이더·직원만(제안만 받은 라이더에게는 비움 — dispatch DispatchViews.recovery) */
+  private dispatchView(del: MDelivery, showPickup = true): Delivery {
     const a = del.d.assignment;
     return {
       deliveryId: del.deliveryId,
       version: del.d.version,
-      type: 'FORWARD',
+      type: del.type,
       orderId: del.orderId,
       shipmentId: del.shipmentId,
       mfcId: del.mfcId,
       state: del.d.state,
-      purpose: 'DELIVERY',
+      purpose: del.purpose,
+      caseId: del.purpose === 'MISDELIVERY_RESHIPMENT' ? del.caseId : undefined,
+      recovery: del.pickup
+        ? {
+            caseId: del.caseId,
+            originDeliveryId: del.originDeliveryId,
+            pickup: showPickup ? { lat: del.pickup.at.lat, lng: del.pickup.at.lng, source: del.pickup.source } : undefined,
+          }
+        : undefined,
       assignment: a
         ? {
             assignmentId: a.assignmentId,
@@ -1055,10 +1252,11 @@ export class MockBackend implements RiderPort {
 
   private execView(del: MDelivery): DeliveryExecution {
     const x = del.x;
+    const origin = del.originDeliveryId ? this.deliveries.get(del.originDeliveryId) : undefined;
     return {
       deliveryId: del.deliveryId,
       version: x.version,
-      type: 'FORWARD',
+      type: del.type,
       orderId: del.orderId,
       riderId: x.riderId ?? undefined,
       mfcId: del.mfcId,
@@ -1071,7 +1269,19 @@ export class MockBackend implements RiderPort {
       history: x.history.map((h) => ({ ...h })),
       assignedAt: x.assignedAt !== undefined ? this.clock.iso(x.assignedAt) : undefined,
       completedAt: x.completedAt !== undefined ? this.clock.iso(x.completedAt) : undefined,
-      purpose: 'DELIVERY',
+      purpose: del.purpose,
+      caseId: del.caseId,
+      originDeliveryId: del.originDeliveryId,
+      // 원래 배송의 완료 증빙(놓은 곳·사진 참조) — 회수·다시 배송 라이더가 찾아갈 때
+      recoveryOrigin:
+        del.pickup && origin?.x.evidence
+          ? {
+              placement: origin.x.evidence.placement,
+              photoRefs: [...origin.x.evidence.photoRefs],
+              takenAt: origin.x.evidence.takenAt,
+              completedAt: origin.x.completedAt !== undefined ? this.clock.iso(origin.x.completedAt) : undefined,
+            }
+          : undefined,
     };
   }
 
@@ -1334,7 +1544,7 @@ export class MockBackend implements RiderPort {
           const mine = del.d.assignment?.riderId === me;
           const offered = [...b.offers.values()].some((o) => o.deliveryId === deliveryId && o.riderId === me);
           if (!mine && !offered) fail(403, 'FORBIDDEN');
-          return b.dispatchView(del);
+          return b.dispatchView(del, mine);
         }),
       cancelAssignment: (deliveryId: string, body: AssignmentCancellationRequest, o: WriteOptions) =>
         b.call(
@@ -1393,6 +1603,7 @@ export class MockBackend implements RiderPort {
           'POST',
           `/deliveries/${deliveryId}/store-arrivals`,
           () => {
+            b.mfcPickupOnly(b.myExec(me, deliveryId));
             const del = b.xTransition(me, deliveryId, ['ASSIGNED'], 'ARRIVED_AT_STORE', o.expectedVersion);
             return b.cmd(o.idempotencyKey, { version: del.x.version });
           },
@@ -1406,6 +1617,7 @@ export class MockBackend implements RiderPort {
           () => {
             // 상태는 PackageHandedOver 로 바뀐다 — 여기서는 인계 ID 가 모든 포장을 덮는지 확인만(docs/design.md §5-6)
             const del = b.myExec(me, deliveryId);
+            b.mfcPickupOnly(del);
             if (!['ARRIVED_AT_STORE', 'ASSIGNED', 'PICKED_UP'].includes(del.x.state)) fail(409, 'INVALID_STATE');
             const ship = b.shipments.get(del.shipmentId);
             const need = (ship?.packages ?? []).map((p) => p.handoverId);
@@ -1419,7 +1631,24 @@ export class MockBackend implements RiderPort {
       getDropInfo: (deliveryId: string) =>
         b.call(me, 'GET', `/deliveries/${deliveryId}/drop-info`, (): DropInfo => {
           const del = b.myExec(me, deliveryId);
+          if (del.type === 'RETURN') fail(409, 'NO_CUSTOMER_DROP'); // 회수는 원래 고객 정보를 열지 않는다
           if (!['PICKED_UP', 'ARRIVED_AT_CUSTOMER', 'FAILURE_REPORTED'].includes(del.x.state)) fail(409, 'DROP_INFO_CLOSED');
+          if (del.purpose === 'MISDELIVERY_REDELIVERY') {
+            // 다시 배송: 주소 = 상담원이 기록한 실제 집, 지도 핀 없음(execution DropInfoService — 6df1e842)
+            return {
+              deliveryId,
+              roadAddress: del.homeAddress ?? '(MOCK 실제 집)',
+              detailAddress: '(MOCK)',
+              postalCode: null,
+              receiverName: '(MOCK 고객)',
+              receiverPhone: '01000000000',
+              entranceMethod: 'FREE',
+              entranceNote: null,
+              deliveryNote: null,
+              lat: null,
+              lng: null,
+            };
+          }
           // MOCK 가짜 값 — 실제 개인정보가 아니다. 좌표만 의미가 있다.
           return {
             deliveryId,
@@ -1441,6 +1670,7 @@ export class MockBackend implements RiderPort {
           'POST',
           `/deliveries/${deliveryId}/customer-arrivals`,
           () => {
+            b.forwardOnly(b.myExec(me, deliveryId));
             const del = b.xTransition(me, deliveryId, ['PICKED_UP'], 'ARRIVED_AT_CUSTOMER', o.expectedVersion);
             return b.cmd(o.idempotencyKey, { version: del.x.version });
           },
@@ -1453,7 +1683,7 @@ export class MockBackend implements RiderPort {
           `/deliveries/${deliveryId}/evidence-photos`,
           (): EvidencePhoto => {
             const del = b.myExec(me, deliveryId);
-            if (del.x.state !== 'PICKED_UP' && del.x.state !== 'ARRIVED_AT_CUSTOMER') fail(409, 'INVALID_STATE', '픽업 전·완료 뒤에는 사진을 올릴 수 없음');
+            if (!b.photoStates(del).includes(del.x.state)) fail(409, 'INVALID_STATE', '이 단계에서는 사진을 올릴 수 없음');
             const type = file.type as EvidencePhoto['contentType'];
             if (!ALLOWED_PHOTO_TYPES.includes(type) || file.size <= 0 || file.size > CONTRACT.evidencePhotoMaxBytes) fail(422, 'PHOTO_INVALID');
             const photoRef = b.ids.next('PH');
@@ -1471,6 +1701,7 @@ export class MockBackend implements RiderPort {
           `/deliveries/${deliveryId}/completions`,
           () => {
             const del = b.myExec(me, deliveryId);
+            b.forwardOnly(del);
             b.checkVersion(del.x.version, o.expectedVersion);
             if (del.x.state !== 'ARRIVED_AT_CUSTOMER') fail(409, 'INVALID_STATE');
             const refs = body.evidence?.photoRefs ?? [];
@@ -1479,7 +1710,10 @@ export class MockBackend implements RiderPort {
             }
             del.x.evidence = { method: body.method, photoRefs: [...refs], takenAt: body.evidence.takenAt, placement: body.evidence.placement };
             del.x.completedAt = now();
+            const loc = b.riders.get(me)?.location;
+            del.x.completedAtPos = loc ? { lat: loc.lat, lng: loc.lng } : undefined;
             b.xHistory(del, 'COMPLETED', 'RIDER');
+            b.maybeMisdelivery(del);
             b.emit('DeliveryCompleted', `${deliveryId} 전달 완료(${body.method})`, { deliveryId, riderId: me });
             // dispatch 는 DeliveryCompleted 로 CLOSED
             b.schedule(b.lag(), () => {
@@ -1497,6 +1731,7 @@ export class MockBackend implements RiderPort {
           `/deliveries/${deliveryId}/failures`,
           () => {
             const del = b.myExec(me, deliveryId);
+            b.forwardOnly(del);
             b.checkVersion(del.x.version, o.expectedVersion);
             if (del.x.state !== 'PICKED_UP' && del.x.state !== 'ARRIVED_AT_CUSTOMER') fail(409, 'INVALID_STATE');
             const refs = body.evidenceRefs ?? [];
@@ -1567,15 +1802,32 @@ export class MockBackend implements RiderPort {
             resolutionNote: null,
           };
         }),
-      // MOCK 에는 회수 배송이 없다 — 일반 배송에 회수 단계를 부르면 계약처럼 409
+      // 회수(RETURN)·다시 배송(MISDELIVERY_REDELIVERY)만 — 잘못 둔 곳에서 사진 → 받음. 회수는 RETURN_PICKED_UP, 다시 배송은 PICKED_UP
       reportReturnPickup: (deliveryId: string, body, o: WriteOptions) =>
         b.call(
           me,
           'POST',
           `/deliveries/${deliveryId}/returns/pickups`,
           () => {
-            b.myExec(me, deliveryId);
-            return fail(409, 'INVALID_STATE', '회수 배송이 아님');
+            const del = b.myExec(me, deliveryId);
+            const redelivery = del.purpose === 'MISDELIVERY_REDELIVERY';
+            if (!redelivery && del.type !== 'RETURN') fail(409, 'INVALID_STATE', '회수 배송이 아님');
+            b.checkVersion(del.x.version, o.expectedVersion);
+            if (del.x.state !== 'ASSIGNED') fail(409, 'INVALID_STATE', `배정된 회수·다시 배송만 받을 수 있음(지금 ${del.x.state})`);
+            const refs = body.evidenceRefs ?? [];
+            if (!refs.length || refs.some((r) => b.photos.get(r)?.deliveryId !== deliveryId || b.photos.get(r)?.riderId !== me)) {
+              fail(422, 'EVIDENCE_REQUIRED');
+            }
+            b.xHistory(del, redelivery ? 'PICKED_UP' : 'RETURN_PICKED_UP', 'RIDER');
+            b.emit('ReturnPickedUp', `${deliveryId} ${redelivery ? '잘못 둔 곳에서 받음 → 실제 집으로' : '회수품 받음 → MFC 로'}`, { deliveryId, riderId: me });
+            b.schedule(b.lag(), () => {
+              if (del.d.assignment) {
+                del.d.assignment.state = 'PICKED_UP';
+                del.d.assignment.pickedUpAt = b.clock.now;
+              }
+              if (del.d.state === 'ASSIGNED') b.setDispatchState(del, 'PICKED_UP');
+            });
+            return b.cmd(o.idempotencyKey, { version: del.x.version });
           },
           { key: o.idempotencyKey, body },
         ),
@@ -1585,8 +1837,18 @@ export class MockBackend implements RiderPort {
           'POST',
           `/deliveries/${deliveryId}/returns/store-deliveries`,
           () => {
-            b.myExec(me, deliveryId);
-            return fail(409, 'INVALID_STATE', '회수 배송이 아님');
+            const del = b.myExec(me, deliveryId);
+            if (del.type !== 'RETURN') fail(409, 'INVALID_STATE', '회수 배송이 아님');
+            b.checkVersion(del.x.version, o.expectedVersion);
+            if (del.x.state !== 'RETURN_PICKED_UP') fail(409, 'INVALID_STATE');
+            del.x.completedAt = now();
+            b.xHistory(del, 'RETURNED_TO_STORE', 'RIDER');
+            b.emit('ReturnDelivered', `${deliveryId} 회수품 MFC 반납`, { deliveryId, riderId: me });
+            b.schedule(b.lag(), () => {
+              if (del.d.assignment) del.d.assignment.state = 'COMPLETED';
+              b.setDispatchState(del, 'CLOSED');
+            });
+            return b.cmd(o.idempotencyKey, { version: del.x.version });
           },
           { key: o.idempotencyKey, body },
         ),

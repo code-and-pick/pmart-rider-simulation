@@ -18,7 +18,7 @@ export function LeftPanel() {
       <ul className="riders">
         {app.sim.riders.map((r) => {
           const card = r.deliveryId ? byId.get(r.deliveryId) : undefined;
-          const stage = card ? displayStage(card.dispatchState, card.executionState, card.radiusKm) : null;
+          const stage = card ? displayStage(card.dispatchState, card.executionState, card.radiusKm, card.purpose) : null;
           const done = cards.filter((c) => c.riderId === r.id && c.executionState === 'COMPLETED').length;
           const sel = app.selected === r.id;
           return (

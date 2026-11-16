@@ -81,7 +81,8 @@ export class Simulation implements World {
           onTripDone: (t) => push(this.trips, t),
           onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }, NOTE_RING),
         },
-        { allowSignup: true, routes: this.routes },
+        // 다시 배송 전달지(핀 없음)는 MOCK 주소록으로 찾는다 — 실서버에는 이 길이 없다
+        { allowSignup: true, routes: this.routes, locateAddress: (a) => this.backend.locateAddress(a) },
       );
       this.riders.push(r);
       made.push(r);
@@ -160,6 +161,7 @@ export class Simulation implements World {
       networkDropRate: p.mock.networkDropRate,
       riderCancelRate: p.riderCancelRate,
       locationOutageRate: p.locationOutageRate,
+      misdeliveryRate: p.mock.misdeliveryRate,
     };
   }
 
@@ -177,6 +179,7 @@ export class Simulation implements World {
     if (k.networkDropRate !== undefined) p.mock.networkDropRate = clamp(k.networkDropRate, 0, 0.9);
     if (k.riderCancelRate !== undefined) p.riderCancelRate = clamp(k.riderCancelRate, 0, 1);
     if (k.locationOutageRate !== undefined) p.locationOutageRate = clamp(k.locationOutageRate, 0, 1);
+    if (k.misdeliveryRate !== undefined) p.mock.misdeliveryRate = clamp(k.misdeliveryRate, 0, 1);
   }
 
   /**
@@ -230,6 +233,8 @@ function card(d: MDelivery, riderIds: string[]): DeliveryCard {
     riderIds,
     radiusKm: d.d.state === 'DISPATCHING' && at ? at.radiusKm : null,
     customer: d.customer,
+    purpose: d.purpose,
+    pickup: d.pickup ? { ...d.pickup.at } : null,
     createdAt: d.createdAt,
   };
 }

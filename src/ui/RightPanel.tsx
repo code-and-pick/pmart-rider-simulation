@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../app/App';
 import { seoulTime } from './format';
 import { Metrics } from './Metrics';
-import { displayStage } from '../domain/displayStage';
+import { displayStage, purposeLabel } from '../domain/displayStage';
 import { Progress } from './Progress';
 import { apiFor, cardsFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
@@ -64,7 +64,8 @@ export function RightPanel() {
         {tab === 'deliveries' && (
           <ul className="cards">
             {cards.slice(0, 60).map((c) => {
-              const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm);
+              const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
+              const tag = purposeLabel(c.purpose);
               const picked = app.selectedDelivery === c.deliveryId;
               return (
                 <li key={c.deliveryId}>
@@ -76,6 +77,11 @@ export function RightPanel() {
                   >
                     <div className="card-head">
                       <b>{c.deliveryId}</b>
+                      {tag && (
+                        <span className="purpose-tag" title={`배송 목적 ${c.purpose} — 오배송 확인(case)에서 생긴 배송`}>
+                          {tag}
+                        </span>
+                      )}
                       {sel ? (
                         <span className={`role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
                       ) : (

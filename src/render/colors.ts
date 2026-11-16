@@ -15,6 +15,8 @@ export const PHASE_COLOR: Record<RiderPhase, string> = {
   TO_CUSTOMER: '#ff8a3d',
   AT_CUSTOMER: '#2fbf71',
   STOPPED: '#e5484d',
+  TO_PICKUP: '#8f7cff',
+  AT_PICKUP: '#d35cff',
   FAILING: '#e5484d',
   RETURNING: '#c47a3a',
   REMOTE: '#5b6b86',
@@ -26,7 +28,7 @@ export const PHASE_COLOR: Record<RiderPhase, string> = {
  * (예전에는 배차 상태만 봐서 전달 실패로 끝난 배송도 배차 CLOSED 라 초록이었다)
  */
 export function customerColor(c: DeliveryCard): string {
-  const s = displayStage(c.dispatchState, c.executionState, c.radiusKm);
+  const s = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
   if (s.tone === 'done') return '#2fbf71';
   if (s.tone === 'fail') return '#e5484d';
   if (s.tone === 'warn') return '#e09b1a';

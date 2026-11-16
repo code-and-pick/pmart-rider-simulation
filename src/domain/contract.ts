@@ -836,6 +836,10 @@ export type DomainEventType =
   | 'ReturnDelivered'
   // delivery.tracking.v1
   | 'RiderLocationStale'
+  // platform.case.v1 — 오배송 확인(case-service, 상담원·지원센터가 기록). 회수·재발송·다시 배송의 시작
+  | 'MisdeliveryConfirmed'
+  // 다시 배송 결제 필요(dispatch 발행, 200m 이상 — 9,000원)
+  | 'RedeliveryPaymentRequired'
   // delivery.rider.v1
   | 'RiderStateChanged'
   | 'RiderRestricted';

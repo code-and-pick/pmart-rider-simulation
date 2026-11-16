@@ -890,3 +890,14 @@ code {
   opacity: 0.55;
   filter: grayscale(0.6);
 }
+
+/* 배송 목적 꼬리표(회수·재발송·다시 배송) */
+.purpose-tag {
+  font-size: 11px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #8f7cff 18%, transparent);
+  color: #6b55e0;
+  font-weight: 600;
+}
