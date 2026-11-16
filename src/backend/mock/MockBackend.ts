@@ -16,6 +16,7 @@ import {
   ApiProblem,
   type AccountRestriction,
   type AssignmentCancellationRequest,
+  type Center,
   type CommandResponse,
   type CompletionRequest,
   type Delivery,
@@ -1608,6 +1609,11 @@ export class MockBackend implements RiderPort {
           const s = b.shipments.get(shipmentId);
           if (!s) fail(404, 'NOT_FOUND');
           return b.shipmentView(s);
+        }),
+      getCenter: (centerId: string) =>
+        b.call(who, 'GET', `/centers/${centerId}`, (): Center => {
+          if (centerId !== b.mfcId) fail(404, 'NOT_FOUND');
+          return { centerId, version: 1, type: 'MFC', name: `(MOCK) ${centerId}`, state: 'ACTIVE', coordinates: { ...b.mfcLocation }, accessPoints: null };
         }),
     };
   }

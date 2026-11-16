@@ -1,5 +1,6 @@
 import type {
   AssignmentCancellationRequest,
+  Center,
   CommandResponse,
   CompletionRequest,
   Delivery,
@@ -149,6 +150,8 @@ export interface ObserverApi {
   getDispatch(deliveryId: string): Promise<Delivery>;
   /** 포장 qrCode 를 얻는 길(RR-03) */
   getShipment(shipmentId: string): Promise<Shipment>;
+  /** center-master 센터 조회 — MFC 위치의 정본(배차 반경 기준) */
+  getCenter(centerId: string): Promise<Center>;
 }
 
 /** API 호출 기록 — 화면 "API 로그". 토큰·주소·전화번호는 넣지 않는다(RR-01 조건 6: 라이더 ID·경로·상태 코드만). */

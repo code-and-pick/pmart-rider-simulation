@@ -69,7 +69,7 @@ export class AppController {
   async attachMap(container: HTMLElement): Promise<void> {
     // React StrictMode 는 개발 중 붙이기 → 떼기 → 붙이기를 한다. SDK 를 기다리는 사이 떼어졌으면 그 붙이기는 버린다.
     const gen = ++this.mapGen;
-    const center = this.sim.params.mfcLocation;
+    const center = this.sim.mfcLocation;
     // 지도에서 라이더를 누르면 선택(오른쪽 탭이 그 라이더로 걸러짐), 다시 누르면 풀림
     const onClick = (id: string) => this.select(this.selected === id ? null : id);
     let surface: MapSurface;
@@ -85,6 +85,7 @@ export class AppController {
       this.mapStatus = { kind: 'plane', reason: e instanceof Error ? e.message : String(e) };
     }
     surface.setMfc(center, this.sim.params.mfcId, CONTRACT.radiusStepsKm);
+    this.drawnMfc = { ...center };
     this.surface = surface;
     this.ticker.emit();
   }
@@ -146,6 +147,7 @@ export class AppController {
   }
 
   private stopTicker: (() => void) | null = null;
+  private drawnMfc: { lat: number; lng: number } | null = null;
   private lastStep = 0;
 
   select(id: string | null) {
@@ -175,6 +177,13 @@ export class AppController {
   private syncMap() {
     const s = this.surface;
     if (!s) return;
+    // MFC 위치가 바뀌면(실서버: center-master 를 읽은 뒤) 지도도 옮긴다
+    const mfc = this.sim.mfcLocation;
+    if (!this.drawnMfc || this.drawnMfc.lat !== mfc.lat || this.drawnMfc.lng !== mfc.lng) {
+      s.setMfc(mfc, this.sim.params.mfcId, CONTRACT.radiusStepsKm);
+      s.panTo(mfc);
+      this.drawnMfc = { ...mfc };
+    }
     for (const r of this.sim.riders) {
       if (!r.pos) {
         s.removeRider(r.id);

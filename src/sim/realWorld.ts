@@ -15,6 +15,7 @@ import { ApiProblem, type Delivery, type DomainEventType, type StaffDeliverySumm
 import { SimClock } from './clock';
 import { VirtualRider } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
+import type { LatLng } from '../util/geo';
 import type { DeliveryCard, MetricsSummary, NoteRecord, RiderView, World } from './world';
 
 const RING = 300;
@@ -64,6 +65,10 @@ export class RealWorld implements World {
   private status = '실서버 조회 준비';
   private authStatus = '개발 서버 토큰 상태 확인 전';
   private readonly startWall = Date.now();
+  /** center-master 에서 읽은 MFC 위치(정본 — 배차 반경 기준). 읽기 전·실패면 null */
+  private center: { location: LatLng; label: string } | null = null;
+  private centerError: string | null = null;
+  private readonly doFetch: typeof fetch;
 
   constructor(
     readonly params: SimParams = DEFAULT_PARAMS,
@@ -71,9 +76,17 @@ export class RealWorld implements World {
     private readonly gate: typeof REAL_RIDER_GATE = REAL_RIDER_GATE,
     /** MFC·고객 이동 경로(기본 직선 — 시험, 화면은 DevServerRoutes) */
     private readonly routes: RouteProvider = straightRoutes,
+    /** 시험용 fetch */
+    opts: { fetch?: typeof fetch } = {},
   ) {
+    this.doFetch = opts.fetch ?? ((...a) => fetch(...a));
     this.clock = new SimClock(this.startWall);
-    this.backend = new HttpBackend({ apiBase: params.apiBase, sourceSystem: params.sourceSystem, now: () => this.clock.now });
+    this.backend = new HttpBackend({
+      apiBase: params.apiBase,
+      sourceSystem: params.sourceSystem,
+      now: () => this.clock.now,
+      fetch: this.doFetch,
+    });
     this.backend.onApiCall((r) => {
       push(this.apiLog, r);
       if (r.status === 'ERR' || (typeof r.status === 'number' && r.status >= 500)) this.apiErrors++;
@@ -81,6 +94,29 @@ export class RealWorld implements World {
     // 실서버 시뮬레이터 라이더 수는 사용자가 정한 값(REAL_RIDER_GATE.riderCount) — MOCK 의 riderCount 와 따로
     for (let i = 0; i < this.gate.riderCount; i++) this.remote.push(new RemoteRider(simRiderId(i)));
     void this.checkAuth();
+    void this.loadCenter();
+  }
+
+  /** MFC 위치 — center-master 에서 읽은 값(인계 위치가 있으면 그것). 읽기 전엔 설정값([가정])으로 지도만 그린다. */
+  get mfcLocation(): LatLng {
+    return this.center?.location ?? this.params.mfcLocation;
+  }
+
+  /** center-master 센터 조회 → MFC 위치. 배차 반경이 이 좌표 기준이라 시뮬레이터도 같아야 한다(docs/design.md §6-2). */
+  async loadCenter(): Promise<void> {
+    try {
+      const c = await this.backend.observer.getCenter(this.params.mfcId);
+      const hp = (c.accessPoints ?? []).find((a) => a.kind === 'HANDOVER_POINT' && a.coordinates?.lat !== undefined && a.coordinates?.lng !== undefined);
+      const p = hp?.coordinates ?? c.coordinates;
+      if (p?.lat === undefined || p?.lng === undefined) throw new Error('센터 좌표 없음');
+      this.center = {
+        location: { lat: p.lat, lng: p.lng },
+        label: `${c.name ?? c.centerId ?? this.params.mfcId} v${c.version ?? '?'}${hp ? ' — 인계 위치' : ''}`,
+      };
+      this.centerError = null;
+    } catch (e) {
+      this.centerError = describe(e);
+    }
   }
 
   get riders(): RiderView[] {
@@ -89,6 +125,7 @@ export class RealWorld implements World {
 
   get operationLock(): string | null {
     if (!this.gate.operationAllowed) return '실서버 가상 라이더 운행 잠김 — 가입·운행 여부 사용자 결정 대기(RR-02·RR-07)';
+    if (!this.center) return 'MFC 위치를 center-master 에서 아직 못 읽음 — 배차 반경이 어긋나므로 운행 막음';
     return null;
   }
 
@@ -99,7 +136,8 @@ export class RealWorld implements World {
 
   /** 가상 라이더를 실서버에서 움직인다(쓰기). 잠겨 있거나 이미 운행 중이면 아무것도 안 한다. */
   startOperation(): void {
-    if (!this.gate.operationAllowed || this.operating) return;
+    if (this.operationLock !== null || this.operating) return;
+    const home = this.mfcLocation;
     this.driven.clear();
     this.remote.forEach((r, i) => {
       const v = new VirtualRider(
@@ -108,8 +146,8 @@ export class RealWorld implements World {
         this.backend.observer,
         this.clock,
         this.params,
-        this.params.mfcLocation,
-        r.pos ?? this.params.mfcLocation,
+        home,
+        r.pos ?? home,
         {
           onTripDone: () => undefined,
           onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }, 1500),
@@ -158,7 +196,7 @@ export class RealWorld implements World {
 
   private async checkAuth() {
     try {
-      const res = await fetch('/sim-auth/status', { cache: 'no-store' });
+      const res = await this.doFetch('/sim-auth/status', { cache: 'no-store' });
       if (res.status === 403) {
         this.authStatus = '다른 기기 — 이 PC 의 개발 서버가 붙이는 토큰으로 조회만';
         return;
@@ -171,6 +209,7 @@ export class RealWorld implements World {
   }
 
   private async poll() {
+    if (!this.center) await this.loadCenter(); // 못 읽었으면 다시
     // 1. 배송 목록(관찰 계정)
     let items: StaffDeliverySummary[] = [];
     try {
@@ -298,6 +337,12 @@ export class RealWorld implements World {
     const filled = withD.filter((r) => r.dispatch?.shipmentId).length;
     const errs = [...this.rows.values()].filter((r) => r.dispatchError).map((r) => r.dispatchError);
     const lines = [this.authStatus, this.status];
+    const m = this.mfcLocation;
+    lines.push(
+      this.center
+        ? `MFC 위치: center-master ${this.center.label} (${m.lat.toFixed(5)}, ${m.lng.toFixed(5)})`
+        : `MFC 위치: center-master 못 읽음(${this.centerError ?? '읽는 중'}) — 지도는 설정값 [가정]`,
+    );
     if (withD.length) lines.push(`dispatch shipmentId 실측(§5): 채워짐 ${filled} / 읽은 배송 ${withD.length}`);
     if (errs.length) lines.push(`배차 조회 실패 ${errs.length}건 — 예: ${errs[0]}`);
     lines.push(this.operationLock ?? '실서버 가상 라이더 운행 가능(잠금 풀림)');

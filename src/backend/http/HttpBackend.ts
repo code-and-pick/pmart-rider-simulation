@@ -9,6 +9,7 @@ import { isSimRiderId } from '../../config';
 import {
   ApiProblem,
   ResultUnknown,
+  type Center,
   type CommandResponse,
   type Delivery,
   type DeliveryExecution,
@@ -222,6 +223,7 @@ export class HttpBackend implements RiderPort {
       getExecution: (id) => r<DeliveryExecution>(`/deliveries/${enc(id)}`),
       getDispatch: (id) => r<Delivery>(`/deliveries/${enc(id)}/dispatch`),
       getShipment: (id) => r<Shipment>(`/shipments/${enc(id)}`),
+      getCenter: (id) => r<Center>(`/centers/${enc(id)}`),
     };
   }
 }

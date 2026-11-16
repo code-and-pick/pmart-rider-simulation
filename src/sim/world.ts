@@ -68,6 +68,8 @@ export interface World {
   readonly apiLog: readonly ApiCallRecord[];
   readonly eventLog: readonly DomainEventRecord[];
   readonly notes: readonly NoteRecord[];
+  /** 지도·라이더가 쓰는 MFC 위치 — 실서버는 center-master 에서 읽은 값(인계 위치가 있으면 그것) */
+  readonly mfcLocation: LatLng;
   speed: number;
   paused: boolean;
   /** 배속을 바꿀 수 있나(실서버는 늘 1×) */

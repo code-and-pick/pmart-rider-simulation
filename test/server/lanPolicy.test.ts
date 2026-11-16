@@ -36,6 +36,8 @@ describe('LAN 다른 기기 가드 (docs/design.md §6-4)', () => {
     });
     expect(decideLanRequest('GET', '/api/v1/deliveries/DL-1/dispatch', LAN)).toMatchObject({ allow: true, token: 'OBSERVER' });
     expect(decideLanRequest('HEAD', '/api/v1/shipments/SH-1', LAN)).toMatchObject({ allow: true, token: 'OBSERVER' });
+    expect(decideLanRequest('GET', '/api/v1/centers/MFC-SEED-01', LAN)).toMatchObject({ allow: true, token: 'OBSERVER' });
+    expect(decideLanRequest('GET', '/api/v1/centers/MFC-SEED-01/calendar', LAN)).toMatchObject({ allow: false });
     expect(decideLanRequest('GET', '/api/v1/riders/me/locations/latest', LAN)).toMatchObject({ allow: true, token: 'SIM_RIDER' });
     expect(decideLanRequest('GET', '/api/v1/offers', LAN)).toMatchObject({ allow: true, token: 'SIM_RIDER' });
   });

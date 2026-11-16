@@ -29,6 +29,7 @@ export const LAN_READ_ROUTES: readonly LanRoute[] = [
   { pattern: new RegExp(`^/deliveries/${SEG}$`), token: 'OBSERVER' }, // execution 수행 조회
   { pattern: new RegExp(`^/deliveries/${SEG}/dispatch$`), token: 'OBSERVER' }, // dispatch 배차 조회
   { pattern: new RegExp(`^/shipments/${SEG}$`), token: 'OBSERVER' }, // mfc-fulfillment 출고 조회
+  { pattern: new RegExp(`^/centers/${SEG}$`), token: 'OBSERVER' }, // center-master 센터 조회(MFC 위치)
   // 라이더 본인 조회 — X-Sim-Rider 가 시뮬레이터 라이더 목록에 있을 때만 그 라이더 토큰 (RR-01 조건 5)
   { pattern: /^\/riders\/me$/, token: 'SIM_RIDER' },
   { pattern: /^\/riders\/me\/state$/, token: 'SIM_RIDER' },

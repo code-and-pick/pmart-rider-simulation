@@ -7,6 +7,7 @@
 //   contracts/openapi/delivery-tracking-service.yaml   0.4.0
 //   contracts/openapi/rider-service.yaml               0.4.0
 //   contracts/openapi/mfc-fulfillment-service.yaml     0.5.0 (출고 조회·포장 인계 부분만 — 0.5.0 변경은 ConfirmOrder·사건 필드라 여기 영향 없음)
+//   contracts/openapi/center-master-service.yaml       0.1.1 (센터 조회 GET /centers/{centerId} 만 — MFC 위치 정본)
 //   contracts/openapi/_common.yaml                     0.1.0
 // 모든 경로는 게이트웨이 /api/v1 아래. POST·PUT 은 Idempotency-Key·X-Source-System 필수, 상태 전이는 X-Expected-Version(선택).
 // 이름이 서비스 사이에서 겹치는 스키마만 이름을 바꿨다(주석에 계약 이름).
@@ -791,6 +792,24 @@ export interface HandoverResolution {
   riderId?: string | null;
   lastCheck?: { result?: 'AT_STATION' | 'TAKEN_BY_RIDER'; checkedBy?: string; checkedAt?: string } | null;
   asOf?: AsOf;
+}
+
+// ───────────────────────── center-master 0.1.1 (센터 조회만) ─────────────────────────
+
+export type CenterAccessKind = 'VEHICLE_ENTRY' | 'UNLOADING_BAY' | 'HANDOVER_POINT' | 'STAFF_ENTRY';
+
+/** GET /centers/{centerId} — MFC 위치의 정본. 배차 반경(1→2→3km)도 이 좌표 기준. 필요한 필드만. */
+export interface Center {
+  centerId?: string;
+  version?: number;
+  type?: 'CDC' | 'MFC' | string;
+  name?: string;
+  state?: string;
+  address?: string;
+  coordinates?: { lat?: number; lng?: number };
+  /** 진입·하차·인계 위치 — HANDOVER_POINT 가 있으면 라이더는 그리로 간다 */
+  accessPoints?: { kind?: CenterAccessKind; label?: string; coordinates?: { lat?: number; lng?: number }; note?: string }[] | null;
+  floors?: number;
 }
 
 // ───────────────────────── 사건 이름 (contracts/events/*.v1.json) ─────────────────────────

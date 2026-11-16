@@ -41,9 +41,13 @@ export interface SimParams {
   apiBase: string;
   /** X-Source-System [시뮬] (docs/backend-requests.md 연결 방식) */
   sourceSystem: string;
-  /** 대상 MFC [가정] rider_e2e.py 기본값 — 실서버는 center-master 로 확인(P2) */
+  /** 대상 MFC — 백엔드 LAN 시험 센터(deploy/lan/seed/seed-data.json "[시험] 부산진구 MFC") */
   mfcId: string;
-  /** MFC 좌표 [가정] rider_e2e.py 기본값(부산). 정본은 center-master GET /centers/{id} coordinates */
+  /**
+   * MOCK MFC 좌표 = 부산진구지점 실제 주소 "부산 부산진구 동천로 109 삼한골든게이트"(지번 부전동 112-3)
+   * [확정 — 사용자 지점 목록 2026-11-16, 좌표는 카카오 주소 검색]. 실서버는 이 값을 쓰지 않고 center-master 에서 읽는다(RealWorld).
+   * 백엔드 시험 좌표(35.1578, 129.0597 — "서면역 부근 시험 좌표")와 약 220m 차이 — 백엔드 seed 를 이 주소로 바꾸는 것은 사용자 백엔드 작업.
+   */
   mfcLocation: { lat: number; lng: number };
   /** 가상 라이더 수 [시뮬] — 실서버 인원·전화번호 대역은 RR-02 회신 대기 */
   riderCount: number;
@@ -101,7 +105,7 @@ export const DEFAULT_PARAMS: SimParams = {
   apiBase: '/api/v1',
   sourceSystem: 'rider-simulator',
   mfcId: 'MFC-SEED-01',
-  mfcLocation: { lat: 35.1578, lng: 129.0597 },
+  mfcLocation: { lat: 35.158501, lng: 129.062021 },
   riderCount: 5,
   riderSpeedMps: 7,
   locationUploadIntervalSec: 5,

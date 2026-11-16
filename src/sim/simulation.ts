@@ -125,6 +125,10 @@ export class Simulation implements World {
 
   readonly operationLock = null;
 
+  get mfcLocation(): LatLng {
+    return this.params.mfcLocation;
+  }
+
   startOperation(): void {
     /* MOCK 은 시작할 때 이미 운행 */
   }
