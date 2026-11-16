@@ -237,5 +237,5 @@ PMart-Delivery-Test 는 **배송 기능(배차·인계·위치 추적·경로 �
 | 2026-11-16 | 작업 PC = PC 5. 서명키는 PC 5 의 같은 경로에 사용자가 복사해 읽기만(RR-01 조건 ② 예외) | 사용자(RR-06) |
 | 2026-11-16 | **최종: 카카오 지도(웹 JS SDK) + 꾸민 마커**(지도는 평면, 라이더는 입체처럼 그린 커스텀 오버레이). OSM 3D 도시안은 채택 안 함. 지도 화면에 r3f 미사용 | 사용자 "1번으로 하자" |
 | 2026-11-16 | P0: `host: true` 를 켜는 순간부터 다른 기기 가드를 둔다 — 다른 기기는 GET·HEAD 허용 목록만(아니면 403 `LAN_READ_ONLY`/`LAN_PATH_BLOCKED`), Authorization 지움, `/sim-auth` 루프백만. 토큰 붙이기는 P2 | 설계(§6-4 를 앞당김) |
-| 2026-11-16 | 의존성 범위는 MFC 시뮬레이터와 같게 두되 **Vite 는 6.4.6 이상**(`^6.4.6`) — MFC 시뮬레이터 lock 의 6.3.5 는 Windows `server.fs.deny` 우회 등 high 권고 대상이고 이쪽은 LAN 에 연다. Vitest 3.x(tinypool) 권고는 남음 — 고치려면 Vitest 5(주 버전) | 설계(보안 권고), Vitest 는 사용자 결정 대기 |
+| 2026-11-16 | 의존성 범위는 MFC 시뮬레이터와 같게 두되 **Vite 는 6.4.6 이상**(`^6.4.6`) — MFC 시뮬레이터 lock 의 6.3.5 는 Windows `server.fs.deny` 우회 등 high 권고 대상이고 이쪽은 LAN 에 연다. **Vitest 는 3.x 유지** — `npm audit` 권고(tinypool·@vitest/mocker)는 남지만 `npm test` 때만 잠깐 도는 시험 도구라 LAN 에 열리지 않고, 고치려면 Vitest 5(주 버전)로 MFC 시뮬레이터와 스택이 달라진다 | 설계(보안 권고) / Vitest 유지는 사용자 2026-11-16 "응" |
 | 2026-11-16 | 게이트웨이 기본값 `http://192.168.0.40:8080`(`rider_e2e.py` 37행과 같은 곳). MFC 시뮬레이터는 `http://D603-16:8080` — `PMART_GATEWAY` 로 바꾼다 | 설계 |
