@@ -37,7 +37,9 @@
 | LAN 시험 계정("라이더: 고정 시험 계정 없음") | `docs/operations/lan-test-accounts.md` |
 | 비밀 파일(Git 아님) | `deploy/lan/.secrets/` — `rider-auth-signing-key.pem`, `rider-auth-signing-kid`, 직원 계정 비밀번호 파일 |
 | 시뮬레이터 범위·MFC 시뮬레이터 연결 결정(SIM-1~11) | `docs/simulator/scope.md`, `docs/simulator/mfc/mfc-simulator-integration.md` |
-| 백엔드 → 시뮬레이터 공지 | `docs/handoff/simulator/` |
+| **백엔드 → 이 시뮬레이터 회신·공지** (RR 번호) | `docs/handoff/simulator/rider/` (2026-11-16 mfc·rider 폴더로 나뉨, 목록은 그 폴더 README) |
+| 백엔드 쪽 라이더 시뮬레이터 결정 | `docs/simulator/rider/README.md` |
+| 영역·PC 담당(이 시뮬레이터 = delivery 영역 PC 5, 토큰·인증 = platform PC 1) | `docs/operations/pc-split.md` 11·83행 |
 
 ## 짝 저장소 (읽기만)
 

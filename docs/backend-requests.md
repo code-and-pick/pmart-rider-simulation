@@ -4,7 +4,8 @@
 > 기준: 2026-11-16 최초 작성, 백엔드 `main` `aa46ce11`. 계약 버전: delivery-dispatch 0.3.3, delivery-execution 0.4.0, delivery-tracking 0.3.0, rider-service 0.4.0, rider-auth 0.1.0, mfc-fulfillment 0.4.11.
 > 원칙(MFC 시뮬레이터와 같음): **백엔드 계약이 정본, 시뮬레이터와 안 맞는 부분은 시뮬레이터가 맞춘다.**
 > 번호: **RR-xx**(rider 시뮬레이터 요청). MFC 시뮬레이터 요청(R-xx, `../pmart-mfc-simulation/docs/backend-requests.md`)과 번호가 겹치지 않게 2026-11-16 R → RR 로 바꿨다.
-> 전달: 백엔드는 시뮬레이터 저장소를 읽기만 하고 회신은 백엔드 `docs/handoff/` 에 번호를 그대로 써서 남긴다(백엔드 `docs/handoff/simulator/README.md` 방식). **RR-01·RR-02 는 2026-11-16 사용자 경유로 백엔드에 전달 요청**(이 문서를 `origin/main` 에 푸시). 나머지는 아직 전달 전. 회신이 오면 위치·날짜를 적고 "해소"로 옮긴다.
+> 전달: 백엔드는 이 저장소를 읽기만 하고 회신은 백엔드 `docs/handoff/simulator/rider/` 에 RR 번호로 남긴다(목록 = 그 폴더 README). 백엔드 담당 = delivery 영역(PC 5), 토큰·인증 = platform(PC 1). 회신이 오면 위치·날짜를 적고 "해소"로 옮긴다.
+> 기준 갱신: 백엔드 `cb2bf317` — delivery-dispatch 0.4.0, delivery-execution 0.5.0, delivery-tracking 0.4.0(DD-2 오배송 회수).
 
 ## 연결 방식 (백엔드가 알아야 할 전제)
 
@@ -13,12 +14,6 @@
 - **원칙**: 계약에 있는 API 만. 응답이 없으면 결과 불명으로 보고 같은 `Idempotency-Key` 로 재전송. `X-Source-System: rider-simulator`.
 
 ## 열린 요청
-
-### RR-01 시뮬레이터 라이더 토큰 — 높음 (전달 2026-11-16, 회신 대기)
-라이더 로그인은 Google ID 토큰뿐이고 고정 시험 계정이 없다(`docs/operations/lan-test-accounts.md`). `deploy/lan/checks/rider_e2e.py` 는 LAN rider-auth 서명키로 시험 라이더 토큰(typ=RIDER, 15분)을 직접 만든다(kickoff §6 — LAN 전용).
-- 계획: 같은 방식을 Vite 개발 서버(이 PC 루프백만)에서 하고 브라우저에는 토큰만 준다. 서명키는 `deploy/lan/.secrets/` 에서 읽기만.
-- 질문: 시뮬레이터가 이 서명키로 토큰을 만들어도 되는지. 안 되면 시뮬레이터용 대안(시험 라이더 토큰 발급 경로 등)을 정해 달라.
-- 용도 두 가지(2026-11-16 추가): (1) 이 PC 브라우저의 가상 라이더 운행(읽기·쓰기), (2) **LAN 다른 기기의 조회** — 개발 서버가 시뮬레이터 라이더 ID 에 한해 GET 요청(`/riders/me/locations/latest`·`/riders/me/state`·`/riders/me/deliveries`·`/offers` 등)에만 토큰을 붙여 넘긴다. 다른 기기에는 토큰을 주지 않고, 쓰기·전달지(개인정보)는 넘기지 않는다(`docs/design.md` §6-4). 공개 API 로 라이더 위치를 직원이 읽을 길이 없어서 필요하다 — 대안으로 직원(운영자)용 라이더 위치 조회 API 가 생기면 (2)는 그것으로 바꾼다.
 
 ### RR-02 시뮬레이터 라이더 ID·가입 데이터 — 중간 (전달 2026-11-16, 회신 대기)
 가상 라이더는 실제로 `POST /riders/signups` 로 가입한다(전화번호 고유). `rider_e2e.py` 는 `RD-claude-…` 를 쓴다.
@@ -37,10 +32,20 @@
 ### RR-05 ETA·실시간 stream — 낮음, 지금은 요청 아님
 tracking `GET /deliveries/{id}/eta`·`/stream` 은 501(TR-1, 사용자 "필요 없음/선택"). 고객 화면 ETA 는 그리지 않는다. 기록만 남긴다.
 
+### RR-06 PC 5 에 시험 라이더 서명키 두기 — 높음 (2026-11-16 추가, 받는 쪽 delivery 영역 PC 5 · 인증 platform PC 1)
+이 시뮬레이터 작업 PC 는 **PC 5**(사용자 2026-11-16 — 백엔드 delivery 영역·라이더 앱과 같은 PC)다. 그런데 서명키(`rider-auth-signing-key.pem`·`rider-auth-signing-kid`)는 PC 1 `deploy/lan/.secrets/` 에만 있다.
+- 충돌: RR-01 회신 조건 ② "다른 PC·다른 폴더로 복사하지 않는다(시뮬레이터는 비밀 파일이 있는 PC 에서만 실서버 모드)" ↔ `docs/operations/dev-on-other-pcs.md` §2 "다른 PC 에서 LAN 시험을 하려면 필요한 파일만 같은 경로(`deploy/lan/.secrets/`)로 사용자가 복사".
+- 요청(사용자 "어쩔 수 없어" — 복사가 필요): 위 두 파일을 **PC 5 의 같은 경로**(`../pmart-backend/deploy/lan/.secrets/`, 사용자가 복사)에 두고 이 시뮬레이터가 그 PC 에서 읽기만 하도록 허락해 달라. 나머지 조건(①③~⑦)은 그대로 지킨다. 저장소·다른 폴더로는 옮기지 않는다.
+- 허락이 안 되면: PC 5 에서는 MOCK 만, 실서버 모드는 PC 1 에서만 돌린다.
+
 ## 시뮬레이터가 정한 값 (MOCK 흉내 — 서버 값이 아님)
 
 아직 없음. MOCK 구현 때 `src/config.ts` 와 함께 적는다(예: MOCK 제안 만료 60초는 계약 값, 라이더 응답 지연 분포는 [시뮬]).
 
 ## 해소된 요청
 
-없음.
+### RR-01 시뮬레이터 라이더 토큰 — 해소 2026-11-16
+- 회신: 백엔드 `docs/handoff/simulator/rider/2026-11-16-simulator-reply-rider-token-rr01.md`(커밋 `1f3653ed`, 보낸 영역 platform, 사용자 "A번"). 결정 기록 백엔드 `docs/simulator/rider/README.md`.
+- 결정: rider-auth 에 발급 경로는 만들지 않고, **시뮬레이터 Vite 개발 서버가 LAN 서명키로 직접 서명**. 다른 기기 조회(용도 2)도 승인.
+- 조건 7개(요약 — 정본은 회신 문서, 구현 대응은 `docs/design.md` §6-5): ① 개발 서버에서만 서명·브라우저엔 토큰만 ② 키는 `PMART_SECRETS_DIR` 읽기만·다른 PC/폴더 복사 금지·운영 키 금지 ③ 주체는 `RD-sim-` 만(서명 함수에서 거절) ④ RS256·`rider_e2e.py` 와 같은 클레임·`sid` = `sim-…`·15분·재사용/연장 없음 ⑤ 다른 기기는 토큰 없이 GET·HEAD 허용 목록만·시뮬레이터 라이더 한정·쓰기/drop-info 금지 ⑥ 토큰·키·주소·전화는 로그 금지(라이더 ID·경로·상태 코드만) ⑦ 401 이면 새 토큰, 정지 라이더는 운행 안 함.
+- 이어지는 질문: PC 5 에서 쓰려면 서명키 복사가 필요 → **RR-06**.

@@ -1,6 +1,6 @@
 # 배송·라이더 가상 현장 설계
 
-> 기준: 2026-11-16, 백엔드 `pmart-backend` `main` `aa46ce11`. 계약 버전은 §3 표.
+> 기준: 2026-11-16, 백엔드 `pmart-backend` `main` `cb2bf317`(처음 `aa46ce11` → DD-2 계약 반영). 계약 버전은 §3 표.
 > 이 문서는 **설계와 결정의 정본**이다. 결정이 바뀌면 §10 이력에 날짜와 함께 남기고 본문을 고친다.
 
 ## 1. 목표와 범위
@@ -9,7 +9,7 @@
 - MFC 쪽(실제 PDA 앱 점원 또는 `pmart-mfc-simulation` 가상 작업자)이 **배차 요청**을 하면 그때부터 이 시뮬레이터가 일한다(사용자 2026-11-16).
 - 화면은 **카카오 지도(웹 JS SDK) + 꾸민 마커**(사용자 2026-11-16 — 2D → 3D 검토 → 최종 "1번" 카카오 지도): MFC·고객 배송지·라이더 위치·이동 경로·배송 상태. 지도 자체는 평면(2D)이고 라이더 마커만 입체처럼 그린 그림이다. 자세히 §6.
 - 모드 두 가지(사용자 2026-11-16): **MOCK**(백엔드 없이 브라우저 안에서 계약 의미를 흉내) / **실서버**(LAN 게이트웨이 `/api/v1`).
-- 범위 밖(지금): 회수·재배송(execution 501), 운영자 상태 정정(501), 고객 화면 ETA(tracking ETA·stream 501), 수행료 정산, 실제 Google 로그인.
+- 범위 밖(지금): 오배송 회수 배송(DD-2 — 백엔드 구현됨, §3-1, P4 시나리오 후보), 고객 반품 회수·재배송(백엔드 아직 없음), 운영자 상태 정정(501), 고객 화면 ETA(tracking ETA·stream 501), 수행료 정산, 실제 Google 로그인.
 
 ## 2. 연결 구조 — 두 시뮬레이터는 백엔드 사건으로만 이어진다
 
@@ -56,7 +56,7 @@
 
 - 실제 흐름 전례: `pmart-backend/deploy/lan/checks/rider_e2e.py` 가 2026-11-16 LAN 에서 가입 → 운행 → 제안 수락 → 가게 도착 → QR 인계 → 픽업 → 전달지 → 고객 도착 → 사진 → 완료를 끝까지 돌렸다. 실서버 호출 순서는 이 스크립트를 기준으로 맞춘다.
 
-## 3. 백엔드 계약 요약 (읽은 날 2026-11-16, `aa46ce11`)
+## 3. 백엔드 계약 요약 (읽은 날 2026-11-16, `cb2bf317`)
 
 모든 경로는 게이트웨이 `/api/v1` 아래. POST 는 `Idempotency-Key`·`X-Source-System` 필수, 상태 전이는 `X-Expected-Version`(낙관적 잠금) 사용.
 
@@ -64,9 +64,9 @@
 |---|---|---|
 | **rider-service** 0.4.0 | 가입 `POST /riders/signups`, 내 정보 `GET /riders/me`(404 = 미가입), 운행 상태 `PUT·GET /riders/me/state`(OFF_DUTY / 운행 중·신규배차 ON / 운행 중·신규배차 OFF), 배차 설정 `PUT·GET /riders/me/settings`(하나씩 배달하기, 배차 모드 일반/AI 추천) | 구현(탈퇴만 501). 변경마다 `RiderStateChanged` |
 | **rider-auth-service** 0.1.0 | — (Google ID 토큰 로그인만. 시험 라이더 토큰은 RR-01) | 구현 |
-| **delivery-dispatch** 0.3.3 | 내 제안 `GET /offers`(SENT·미만료, `pollAfterSec` 잠정 5초, null 이면 조회 멈춤), 제안 조회 `GET /offers/{id}`(viewedAt 기록), 응답 `POST /offers/{id}/responses`(ACCEPT/REJECT, 결과 ASSIGNED/REJECTED/LATE), 배달리스트 `GET /delivery-list` + 수락 `POST /delivery-list/{deliveryId}/acceptances`, 배차 조회 `GET /deliveries/{id}/dispatch`(shipmentId 포함), 배차 취소 `POST /deliveries/{id}/assignment-cancellations`(픽업 전만) | 구현(DD-1, 2026-11-13). `POST /dispatch-requests`·`POST /internal/deliveries` 는 501 — 배송 생성·배차 시작은 MFC 사건으로만 |
-| **delivery-execution** 0.4.0 | 수행 조회 `GET /deliveries/{id}`, 가게 도착 `…/store-arrivals`, 픽업 확인 `…/pickups`(handoverIds — 상태는 안 바꾸고 확인만), 전달지 `…/drop-info`(PICKED_UP 뒤, 개인정보 — 저장·로그 금지), 고객 도착 `…/customer-arrivals`, 증빙 사진 `…/evidence-photos`(multipart, JPEG·PNG·WEBP ≤10MB), 전달 완료 `…/completions`(FACE/CONTACTLESS + photoRefs), 전달 실패 `…/failures`, 도움요청 `…/help-requests`, 내 배송 `GET /riders/me/deliveries` | 구현. 회수·운영자 정정 501 |
-| **delivery-tracking** 0.3.0 | 위치 올리기 `POST /riders/me/locations`(1~200점, `lat·lng·recordedAt` 필수, `deliveryId` 선택), 내 마지막 위치 `GET /riders/me/locations/latest` | 위치 수신·마지막 위치·거리 행렬 구현. **ETA·실시간 stream 501**. 배달 중 3분 끊기면 `RiderLocationStale`(알림만) |
+| **delivery-dispatch** 0.4.0 | 내 제안 `GET /offers`(SENT·미만료, `pollAfterSec` 잠정 5초, null 이면 조회 멈춤), 제안 조회 `GET /offers/{id}`(viewedAt 기록), 응답 `POST /offers/{id}/responses`(ACCEPT/REJECT, 결과 ASSIGNED/REJECTED/LATE), 배달리스트 `GET /delivery-list` + 수락 `POST /delivery-list/{deliveryId}/acceptances`, 배차 조회 `GET /deliveries/{id}/dispatch`(shipmentId·`purpose`·회수면 `recovery` 포함), 배차 취소 `POST /deliveries/{id}/assignment-cancellations`(픽업 전만) | 구현(DD-1 2026-11-13, DD-2 오배송 회수 2026-11-16). `POST /dispatch-requests`·`POST /internal/deliveries` 는 501 — 배송 생성·배차 시작은 MFC 사건(회수는 case `MisdeliveryConfirmed`)으로만. 0.4.0: `Offer.deliveryType`·`purpose`, `Delivery.purpose`·`recovery` |
+| **delivery-execution** 0.5.0 | 수행 조회 `GET /deliveries/{id}`, 가게 도착 `…/store-arrivals`, 픽업 확인 `…/pickups`(handoverIds — 상태는 안 바꾸고 확인만), 전달지 `…/drop-info`(PICKED_UP 뒤, 개인정보 — 저장·로그 금지), 고객 도착 `…/customer-arrivals`, 증빙 사진 `…/evidence-photos`(multipart, JPEG·PNG·WEBP ≤10MB), 전달 완료 `…/completions`(FACE/CONTACTLESS + photoRefs), 전달 실패 `…/failures`, 도움요청 `…/help-requests`, 내 배송 `GET /riders/me/deliveries`. 회수 배송이면 `…/returns/pickups`·`…/returns/store-deliveries`(§3-1) | 구현. 0.5.0: 오배송 회수 수행 구현, 고객 반품 회수 422 RETURN_NOT_SUPPORTED, 운영자 정정 501 |
+| **delivery-tracking** 0.4.0 | 위치 올리기 `POST /riders/me/locations`(1~200점, `lat·lng·recordedAt` 필수, `deliveryId` 선택), 내 마지막 위치 `GET /riders/me/locations/latest` | 위치 수신·마지막 위치·거리 행렬 구현. **ETA·실시간 stream 501**. 배달 중 3분 끊기면 `RiderLocationStale`(알림만). 0.4.0: 내부 `GET /internal/riders/{id}/location-at`(회수지 계산용 — 시뮬레이터는 안 부름) |
 | **mfc-fulfillment** 0.4.11 (인계만) | 인계 허가 `POST /packages/{id}/handover-authorizations`(scannedCode = 포장 qrCode `PKG:<id>:<버전>`, fence), 인계 확정 `POST /packages/{id}/handover-commits` → `PackageHandedOver` | 구현. 라이더 토큰 주체 = riderId 여야 함 |
 
 배차 규칙(dispatch 계약 머리): 배차 방식 AI 추천(서버 제안) / 일반(배달리스트에서 골라 수락). 반경은 **MFC 중심 직선거리** 1→2→3km, 응답 대기 1분, 동시 수락 1명, 재시도 최대 2회·10분(외부 참고값), 배차 가능 08~24시(Asia/Seoul). 알뜰배달(BUNDLED) 1~3건은 같은 `bundleId` 로 묶여 한꺼번에 수락·거절. 하나씩 배달하기면 진행 중 배송이 있을 때 INELIGIBLE. 배달리스트 수락 최대 3건.
@@ -74,6 +74,15 @@
 수행 규칙(execution 계약 머리): 시간 경과 자동완료 없음, GPS·버튼만으로 픽업 확정 금지(`PackageHandedOver` 근거), 완료는 사진 업로드 성공 후에만, 전달 실패는 운영자 확정 전까지 진행 중(FAILURE_REPORTED).
 
 사건(토픽): MFC → `DispatchRequested`·`ShipmentReady`·`PackingFinished`·`PackageHandedOver`(mfc.fulfillment.v1) / dispatch → `DeliveryCreated`·`DispatchOfferSent`·`DeliveryAssigned`·`DeliveryAssignmentChanged`·`DeliveryCancelledBeforePickup`(delivery.delivery.v1) / execution → `PickupCompleted`·`DeliveryCompleted`·`DeliveryFailed`·`DeliveryIncidentRaised` / tracking → `RiderLocationStale`(delivery.tracking.v1) / rider → `RiderStateChanged`·`RiderRestricted`(delivery.rider.v1). 시뮬레이터는 사건을 직접 구독하지 못한다 — **REST 조회로 결과를 본다**.
+
+### 3-1. 오배송 회수 배송 (DD-2, 2026-11-16 — dispatch 0.4.0·execution 0.5.0)
+
+- 시작: case 가 오배송을 확인(`MisdeliveryConfirmed`)하면 dispatch 가 **새 배송**(type `RETURN`, purpose `MISDELIVERY_RECOVERY`)을 만들고 곧바로 배차. 회수지 = 원래 라이더가 전달 완료를 누른 곳(tracking 위치 기록, 없으면 원래 배송지), 도착지 = MFC.
+- 후보: 원래 라이더를 뺀 **AI 추천 모드** 라이더, **회수지 중심** 직선 반경(같은 1→2→3km), 회수지까지 도로 시간이 가장 짧은 사람. 묶지 않고 배달리스트에 나오지 않는다. 제안의 `distanceKm` = 회수지 → MFC, `pickupDistanceKm`·`pickupEtaSeconds` = 라이더 → 회수지.
+- 회수지 좌표는 `GET /deliveries/{id}/dispatch` 의 `recovery.pickup`(배정된 라이더·운영자만, 제안만 받은 라이더에게는 비움). 원래 배송의 완료 증빙(놓은 곳·사진 참조)은 execution `GET /deliveries/{id}` 의 `recoveryOrigin`.
+- 수행: `ASSIGNED` → 회수지에서 사진(`…/evidence-photos`, RETURN 은 ASSIGNED·RETURN_PICKED_UP 에서) → `POST …/returns/pickups`(evidenceRefs 1장 이상, items 빈 배열) → `RETURN_PICKED_UP` + `ReturnPickedUp` → MFC 도착 = `POST …/returns/store-deliveries` → `RETURNED_TO_STORE` + `ReturnDelivered`(mfc-inbound 점원 수령 확인이 생기기 전까지 MFC 도착을 반납으로 봄).
+- 회수 배송에는 일반 단계(가게 도착·픽업·고객 도착·완료·실패 등록)가 409, 전달지(`drop-info`)는 409 `NO_CUSTOMER_DROP`. 회수 실패(부재·거부)는 도움요청 → 운영자 배차 취소(reassign=false).
+- 이 시뮬레이터: 가상 라이더 상태기계에 **회수 분기**가 필요하다(배송 `purpose` 로 분기). 시작 사건(오배송 확인)은 case 쪽이라 실서버에서 만들려면 운영자 화면이 필요 — P4 시나리오 후보로 둔다. 다만 실서버에서 회수 제안이 가상 라이더에게 올 수 있으므로 **P3 부터 `purpose` 가 DELIVERY 가 아닌 제안은 수락하지 않거나 회수 흐름으로 처리**해야 한다.
 
 ## 4. 같은 배송, 두 서비스의 두 상태
 
@@ -93,6 +102,7 @@
 | 픽업 전 취소(재배차 없음·주문 취소) | CANCELLED_BEFORE_PICKUP | CANCELLED |
 | 라이더 못 찾음 | DISPATCH_FAILED | UNASSIGNED |
 | 주문 취소로 차단 | BLOCKED | — |
+| (회수 배송) 회수품 수거 → MFC 반납 | ASSIGNED → CLOSED | ASSIGNED → RETURN_PICKED_UP → RETURNED_TO_STORE (§3-1) |
 
 - dispatch 는 **누가 맡았나**(배정 권리)만 알아서 가게 도착·고객 도착은 모른다. execution 은 **어디까지 했나**를 알지만 제안·반경·재시도는 모른다.
 - **버전도 따로 오른다**(events.md §7 — 발행 서비스마다). 서비스 사이 순서는 `assignmentVersion`·상태로 판단한다.
@@ -165,9 +175,23 @@ MFC 시뮬레이터 실행 구조(그쪽 커밋 `d0dd0b2`, `vite.config.ts` `ser
 - **라이더 본인 경로**(`GET /riders/me`, `/riders/me/state`, `/riders/me/locations/latest`, `/riders/me/deliveries`, `/offers`) → 요청 헤더 `X-Sim-Rider: <라이더 ID>` 가 **시뮬레이터 라이더 목록(RR-02)** 에 있을 때만 그 라이더의 시험 토큰을 개발 서버가 서명해 붙인다(RR-01). 목록 밖 ID·헤더 없음은 403. 라이더 위치·제안은 공개 API 로는 본인 토큰으로만 읽을 수 있어서 필요하다(tracking `/internal/rider-locations` 는 내부 전용).
 - **허용 목록 밖 경로는 다른 기기에서 막는다.** 특히 `GET /deliveries/{id}/drop-info`(고객 주소·전화 — 개인정보)는 다른 기기로 넘기지 않는다.
 - 다른 기기 화면은 MFC 시뮬레이터 실서버 관찰처럼 **백엔드에서 읽은 것만** 그린다: 시뮬레이터 라이더 목록을 돌며 마지막 위치·운행 상태·진행 중 배송을 주기 조회(간격은 `src/config.ts` `[시뮬]`, 게이트웨이 처리율 제한은 JWT 주체 단위라 라이더마다 따로 셈). 이 PC 브라우저 안 엔진 상태(다음 행동·대기 사유 등)는 다른 기기에 보이지 않는다.
-- **RR-01 회신 전**에는 라이더 본인 경로를 넘기지 않는다 → 다른 기기에서는 배송 목록·상태만 보이고 지도 위 라이더 위치는 비어 있다("이 PC 에서만 라이더 위치 표시" 안내).
+- RR-01 은 2026-11-16 승인(§6-5 조건 5). 서명키가 없는 PC 에서는 라이더 본인 경로를 넘길 수 없다 → 다른 기기에서는 배송 목록·상태만 보이고 지도 위 라이더 위치는 비어 있다("서명키 있는 PC 에서만 라이더 위치 표시" 안내).
 - 카카오 콘솔 [플랫폼 → Web] 등록 주소: `http://localhost:5181` + 다른 기기에서 여는 `http://<이 PC IP 또는 호스트 이름>:5181`. PC 마다 IP 가 다르면 그 PC 주소를 추가한다.
 - Windows 방화벽: 이 PC 의 Node.js 들어오는 연결 허용이 필요할 수 있다(사용자 승인 — MFC 시뮬레이터는 규칙 있음).
+
+### 6-5. 시험 라이더 토큰 — RR-01 회신 조건 (백엔드 `docs/handoff/simulator/rider/2026-11-16-simulator-reply-rider-token-rr01.md`, 사용자 "A번")
+
+rider-auth 에 시험 토큰 발급 경로는 없다. **Vite 개발 서버가 LAN rider-auth 서명키로 직접 서명**하되 아래를 지킨다.
+
+| # | 조건 | 구현에서 |
+|---|---|---|
+| 1 | Vite 개발 서버(Node)에서만 서명. 서명키는 브라우저·번들·localStorage·sessionStorage 에 두지 않고 브라우저에는 토큰만 | `server/` 플러그인에서만 키를 읽는다. `src/` 는 키를 모른다 |
+| 2 | 키는 `PMART_SECRETS_DIR`(기본 `../pmart-backend/deploy/lan/.secrets`)의 `rider-auth-signing-key.pem`·`rider-auth-signing-kid` 를 **읽기만**. 다른 PC·다른 폴더로 복사하지 않음(실서버 모드는 비밀 파일이 있는 PC 에서만). 운영 키에 쓰지 않음 — LAN 전용 | 파일이 없으면 실서버 모드를 끄고 MOCK 만(오류 안내). PC 5 에 두는 것은 RR-06 회신 대기 |
+| 3 | 주체(`sub`)는 **`RD-sim-` 접두어 라이더만**. 서명 함수 안에서 접두어가 아니면 거절 | 서명 함수 첫 줄 검사 + vitest |
+| 4 | `rider_e2e.py` 와 같은 모양: RS256, `kid` = 서명키 ID, `iss` = LAN rider-auth 발급자, `aud: ["pmart-api"]`, `typ: "RIDER"`, `roles`·`centers` 빈 배열, `sid` = `sim-…` 새 값, **유효 15분**(`exp = iat + 900`), `jti` 새 값. 만료되면 새로 만듦(재사용·연장 없음) | 만료 직전이면 새 토큰. 같은 토큰 연장 금지 |
+| 5 | LAN 다른 기기에는 토큰을 주지 않음. 개발 서버가 GET·HEAD 허용 목록(라이더 본인 조회)만, 시뮬레이터 라이더 ID 에 한해 붙여 넘김. 쓰기·`drop-info` 는 넘기지 않음. 직원용 라이더 위치 조회 API 가 생기면 그것으로 바꿈 | §6-4 그대로 |
+| 6 | 토큰·서명키·고객 주소·전화번호를 로그·일지·화면에 남기지 않음. 요청 로그에는 라이더 ID·경로·상태 코드만 | API 로그 형식 고정 |
+| 7 | 세션 차단(라이더 정지 등)으로 401 이면 새 토큰을 만들되, 같은 라이더가 정지 상태면 운행하지 않음 | 401 → 새 토큰 1회 → `GET /riders/me` 로 제한 확인 → 정지면 그 라이더 멈춤 |
 
 ## 7. PMart-Delivery-Test 에서 참고만 하는 것 (사용자 2026-11-16 "참고만")
 
@@ -209,4 +233,5 @@ PMart-Delivery-Test 는 **배송 기능(배차·인계·위치 추적·경로 �
 | 2026-11-16 | 역할 = 배차는 백엔드, 라이더 API 는 rider 시뮬레이터만, MFC 시뮬레이터는 실서버에서 배차·수행 상태를 읽어 앞마당 인계만 그림(§2-1) | 사용자 "그 방향으로" |
 | 2026-11-16 | 화면 2D → 3D 검토(권장안 = OSM 데이터로 3D 도시) | 사용자(3D), 권장안은 설계 |
 | 2026-11-16 | 접속 = MFC 시뮬레이터 방식(`host: true`, 토큰은 이 PC 만, 다른 기기는 GET 만) + 다른 기기 라이더 위치는 개발 서버가 시뮬레이터 라이더 토큰을 붙여 조회만 넘김(§6-4, RR-01 회신 전에는 배송 상태만) | 사용자 "1번으로" |
+| 2026-11-16 | 시험 라이더 토큰 = 개발 서버가 LAN 서명키로 직접, 조건 7개(§6-5) | 백엔드 회신 RR-01(사용자 "A번") |
 | 2026-11-16 | **최종: 카카오 지도(웹 JS SDK) + 꾸민 마커**(지도는 평면, 라이더는 입체처럼 그린 커스텀 오버레이). OSM 3D 도시안은 채택 안 함. 지도 화면에 r3f 미사용 | 사용자 "1번으로 하자" |

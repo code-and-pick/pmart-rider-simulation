@@ -18,8 +18,8 @@ MFC 쪽 시뮬레이터(`../pmart-mfc-simulation`)의 짝이다. MFC 에서 점�
 - **배송 상태를 시뮬레이터가 만들지 않는다.** 픽업 완료는 MFC 인계 확정(`PackageHandedOver`)으로만, 전달 완료는 사진 + 완료 요청으로만 된다. 경로 끝 도착·시간 경과·위치만으로 상태를 넘기지 않는다(execution 계약 머리).
 - 배차 쪽 상태(`DispatchState`)와 수행 쪽 상태(`ExecutionState`)는 **다른 서비스의 다른 값**이다. 하나로 합치지 말고 화면에는 둘 다 출처를 붙여 보인다(`docs/design.md` §4).
 - 업무 문서에 없는 수치는 `src/config.ts` 에 근거 태그(`[확정]`/`[가정]`/`[시뮬]`)와 함께 둔다. 다른 파일에 흩어 놓지 않는다.
-- 토큰·서명키·비밀번호는 브라우저 저장소(localStorage·sessionStorage)에 두지 않는다. 라이더 토큰 서명은 Vite 개발 서버에서만 하고 브라우저에는 토큰만 준다(RR-01). 비밀 파일은 `PMART_SECRETS_DIR`(기본 `../pmart-backend/deploy/lan/.secrets`)에서 읽기만 한다. 로그·일지·화면에 토큰·주소·전화번호를 남기지 않는다.
-- 실서버 모드의 가상 라이더는 **시뮬레이터 전용 라이더 ID**(접두어는 RR-02 회신 전까지 `RD-sim-`)만 쓴다. 실제 라이더 앱 사용자를 조종하지 않는다.
+- 토큰·서명키·비밀번호는 브라우저 저장소(localStorage·sessionStorage)에 두지 않는다. **시험 라이더 토큰은 RR-01 회신 조건(`docs/design.md` §6-5)을 지킨다**: Vite 개발 서버에서만 서명, 서명키는 `PMART_SECRETS_DIR` 에서 읽기만·다른 PC 로 복사 금지·LAN 전용, 주체는 `RD-sim-` 접두어만(서명 함수에서 거절), RS256·15분·재사용/연장 없음, 다른 기기에는 토큰 안 줌, 401 이면 새 토큰 + 정지 라이더는 운행 중지. 비밀 파일은 `PMART_SECRETS_DIR`(기본 `../pmart-backend/deploy/lan/.secrets`)에서 읽기만 한다. 로그·일지·화면에 토큰·주소·전화번호를 남기지 않는다.
+- 실서버 모드의 가상 라이더는 **시뮬레이터 전용 라이더 ID**(`RD-sim-` 접두어 — RR-01 회신으로 확정, 인원·전화 대역은 RR-02 회신 대기)만 쓴다. 실제 라이더 앱 사용자를 조종하지 않는다.
 - LAN 다른 기기에는 토큰을 주지 않는다. 다른 기기 요청은 개발 서버가 GET·HEAD 허용 목록만 넘기고(직원 조회 = 관찰 계정, 라이더 본인 조회 = 시뮬레이터 라이더 ID 에 한해 서명), 쓰기·전달지(개인정보)는 막는다(`docs/design.md` §6-4).
 - 실행하지 않은 테스트·빌드를 통과했다고 보고하지 않는다.
 - 작업 일지를 `docs/worklog/YYYY-MM-DD.md` 에 남긴다(형식·규칙 `docs/worklog/README.md`, 백엔드 일지 형식을 따름). 일지 없이 커밋하지 않고, 백엔드에서 읽어 확인한 사실은 근거(파일·커밋)와 함께 적는다.
@@ -43,6 +43,6 @@ npm run build
 - 서비스 책임: `../pmart-backend/docs/architecture/service-map.md` §7, MFC 와의 약속 `docs/architecture/service-requests/delivery-kickoff-from-mfc.md`
 - 구현 상태: `../pmart-backend/services/{delivery-dispatch,delivery-execution,delivery-tracking,rider,rider-auth}-service/CLAUDE.md` "상태" 절
 - 실제 흐름 전례: `../pmart-backend/deploy/lan/checks/rider_e2e.py`(LAN 라이더 처음부터 끝까지, 2026-11-16 첫 실행)
-- 백엔드 → 시뮬레이터 공지: `../pmart-backend/docs/handoff/simulator/`, 시뮬레이터 범위 `docs/simulator/scope.md`
+- 백엔드 → 이 시뮬레이터 회신·공지: `../pmart-backend/docs/handoff/simulator/rider/`(2026-11-16 mfc·rider 폴더로 나뉨), 백엔드 쪽 결정 `docs/simulator/rider/README.md`, 시뮬레이터 범위 `docs/simulator/scope.md`. 백엔드에서 이 시뮬레이터 담당은 delivery 영역(PC 5), 토큰·인증 회신은 platform(PC 1) — `docs/operations/pc-split.md`
 - 짝 시뮬레이터: `../pmart-mfc-simulation/CLAUDE.md`, `docs/backend-requests.md`(SIM-7: 라이더는 배송 구현 뒤)
 - 어디를 읽나 전체 목록: `docs/backend-handoff.md`
