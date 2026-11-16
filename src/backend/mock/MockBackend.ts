@@ -243,6 +243,7 @@ export class MockBackend implements RiderPort {
   readonly shipments = new Map<string, MShipment>();
   readonly offers = new Map<string, MOffer>();
   private readonly photos = new Map<string, MPhoto>();
+  private readonly involved = new Map<string, Set<string>>();
   private readonly withdrawals = new Map<string, { riderId: string; state: 'PENDING' | 'COMPLETED' | 'REJECTED' }>();
   private readonly idem = new Map<string, { fp: string; outcome: IdemOutcome }>();
   private readonly later: { at: number; fn: () => void }[] = [];
@@ -366,8 +367,8 @@ export class MockBackend implements RiderPort {
     const now = this.clock.now;
     ship.dispatchRequestedAt = now;
     ship.version++;
-    this.emit('DispatchRequested', `${ship.shipmentId} 배차 요청(예상 포장 ${Math.round(packMinutes)}분)`);
     const deliveryId = this.ids.next('DL');
+    this.emit('DispatchRequested', `${ship.shipmentId} 배차 요청(예상 포장 ${Math.round(packMinutes)}분)`, { deliveryId });
     ship.deliveryId = deliveryId;
     const del: MDelivery = {
       deliveryId,
@@ -390,7 +391,7 @@ export class MockBackend implements RiderPort {
       },
     };
     this.deliveries.set(deliveryId, del);
-    this.emit('DeliveryCreated', `${deliveryId} (출고 ${ship.shipmentId})`);
+    this.emit('DeliveryCreated', `${deliveryId} (출고 ${ship.shipmentId})`, { deliveryId });
     this.startAttempt(del, 'STORE_STAFF', 0, new Set());
     this.schedule(this.lag(), () => {
       if (!del.x.exists) {
@@ -409,11 +410,11 @@ export class MockBackend implements RiderPort {
       pk.sealedAt = now;
       pk.version++;
     }
-    this.emit('PackingFinished', `${ship.shipmentId} 포장 ${ship.packages.length}개`);
+    this.emit('PackingFinished', `${ship.shipmentId} 포장 ${ship.packages.length}개`, { deliveryId: ship.deliveryId ?? undefined });
     ship.state = 'READY';
     ship.readyAt = now;
     ship.version++;
-    this.emit('ShipmentReady', `${ship.shipmentId} 출하 대기`);
+    this.emit('ShipmentReady', `${ship.shipmentId} 출하 대기`, { deliveryId: ship.deliveryId ?? undefined });
   }
 
   private startAttempt(del: MDelivery, trigger: MAttempt['trigger'], retryCount: number, excluded: Set<string>) {
@@ -445,7 +446,7 @@ export class MockBackend implements RiderPort {
         this.startAttempt(del, 'RETRY', at.retryCount + 1, at.excluded);
       } else {
         this.setDispatchState(del, 'DISPATCH_FAILED');
-        this.emit('DispatchFailed', `${del.deliveryId} 라이더 없음(재시도 ${at.retryCount}회)`);
+        this.emit('DispatchFailed', `${del.deliveryId} 라이더 없음(재시도 ${at.retryCount}회)`, { deliveryId: del.deliveryId });
       }
       return;
     }
@@ -478,8 +479,9 @@ export class MockBackend implements RiderPort {
         source: 'AI_RECOMMENDED',
       };
       this.offers.set(offer.offerId, offer);
+      this.involve(del.deliveryId, r.riderId);
       at.state = 'OFFERING';
-      this.emit('DispatchOfferSent', `${del.deliveryId} → ${r.riderId} (반경 ${at.radiusKm}km)`);
+      this.emit('DispatchOfferSent', `${del.deliveryId} → ${r.riderId} (반경 ${at.radiusKm}km)`, { deliveryId: del.deliveryId, riderId: r.riderId });
     }
   }
 
@@ -520,9 +522,24 @@ export class MockBackend implements RiderPort {
     return this.rng.range(this.params.eventLagSec[0], this.params.eventLagSec[1]);
   }
 
-  private emit(type: DomainEventType, summary: string) {
-    const rec: DomainEventRecord = { at: this.clock.now, type, summary };
+  /** 사건 기록. ids 는 화면에서 라이더·배송별로 거르는 데 쓴다(계약 사건 본문이 아니다). */
+  private emit(type: DomainEventType, summary: string, ids: { riderId?: string; deliveryId?: string } = {}) {
+    const rec: DomainEventRecord = { at: this.clock.now, type, summary, ...ids };
     for (const l of this.eventListeners) l(rec);
+  }
+
+  /** 이 배송에 관여한 라이더(제안을 받았거나 배정된) — 화면에서 라이더별로 배송을 거를 때. 매 프레임 불리므로 모아 둔 값 */
+  ridersOf(deliveryId: string): string[] {
+    return [...(this.involved.get(deliveryId) ?? [])];
+  }
+
+  private involve(deliveryId: string, riderId: string) {
+    let s = this.involved.get(deliveryId);
+    if (!s) {
+      s = new Set();
+      this.involved.set(deliveryId, s);
+    }
+    s.add(riderId);
   }
 
   private log(actor: string, method: ApiCallRecord['method'], path: string, status: number | 'ERR', code?: string) {
@@ -676,11 +693,12 @@ export class MockBackend implements RiderPort {
       version: 1,
     };
     del.d.assignment = assignment;
+    this.involve(del.deliveryId, riderId);
     this.setDispatchState(del, 'ASSIGNED');
     for (const o of this.offers.values()) {
       if (o.deliveryId === del.deliveryId && o.state === 'SENT' && o.riderId !== riderId) o.state = 'SUPERSEDED';
     }
-    this.emit('DeliveryAssigned', `${del.deliveryId} → ${riderId}`);
+    this.emit('DeliveryAssigned', `${del.deliveryId} → ${riderId}`, { deliveryId: del.deliveryId, riderId });
     // execution 사본은 사건으로 조금 늦게(docs/design.md §4)
     this.schedule(this.lag(), () => {
       if (del.d.assignment?.assignmentId !== assignment.assignmentId) return; // 그 사이 배정이 바뀜
@@ -872,7 +890,7 @@ export class MockBackend implements RiderPort {
     const all = ship.packages.every((p) => p.state === 'HANDED_OVER');
     ship.state = all ? 'HANDED_OVER' : 'PARTIALLY_HANDED_OVER';
     ship.version++;
-    this.emit('PackageHandedOver', `${pk.packageId} → ${riderId}`);
+    this.emit('PackageHandedOver', `${pk.packageId} → ${riderId}`, { deliveryId: f.deliveryId ?? undefined, riderId });
     const del = this.delivery(f.deliveryId ?? '');
     // dispatch 는 PackageHandedOver 로 PICKED_UP 판정(모든 포장)
     const asg = del.d.assignment;
@@ -891,7 +909,7 @@ export class MockBackend implements RiderPort {
       const allX = ship.packages.every((p) => p.handoverId !== null && del.x.handoverIds.includes(p.handoverId));
       if (allX && (del.x.state === 'ASSIGNED' || del.x.state === 'ARRIVED_AT_STORE')) {
         this.xHistory(del, 'PICKED_UP', 'SYSTEM_EVENT', handoverId);
-        this.emit('PickupCompleted', `${del.deliveryId} 픽업 완료`);
+        this.emit('PickupCompleted', `${del.deliveryId} 픽업 완료`, { deliveryId: del.deliveryId, riderId: del.x.riderId ?? undefined });
       }
     });
     return {
@@ -1134,7 +1152,7 @@ export class MockBackend implements RiderPort {
               changedAt: now(),
               version: r.operating.version + 1,
             };
-            b.emit('RiderStateChanged', `${me} ${body.status}${enable ? '·신규배차 ON' : ''}`);
+            b.emit('RiderStateChanged', `${me} ${body.status}${enable ? '·신규배차 ON' : ''}`, { riderId: me });
             return b.operatingView(r);
           },
           { key: o.idempotencyKey, body },
@@ -1153,7 +1171,7 @@ export class MockBackend implements RiderPort {
             r.signedUp = false;
             r.withdrawn = true;
             r.operating = { ...r.operating, status: 'OFF_DUTY', newDispatchEnabled: false, version: r.operating.version + 1 };
-            b.emit('RiderStateChanged', `${me} 탈퇴`);
+            b.emit('RiderStateChanged', `${me} 탈퇴`, { riderId: me });
             return b.cmd(requestId, { status: 'ACCEPTED', resultId: requestId });
           },
           { key: o.idempotencyKey, body: body ?? {} },
@@ -1291,10 +1309,10 @@ export class MockBackend implements RiderPort {
               excluded.add(me);
               b.setDispatchState(del, 'DISPATCHING');
               b.startAttempt(del, 'REASSIGN', 0, excluded);
-              b.emit('DeliveryAssignmentChanged', `${deliveryId} ${me} 배차 취소 → 재배차`);
+              b.emit('DeliveryAssignmentChanged', `${deliveryId} ${me} 배차 취소 → 재배차`, { deliveryId, riderId: me });
             } else {
               b.setDispatchState(del, 'CANCELLED_BEFORE_PICKUP');
-              b.emit('DeliveryCancelledBeforePickup', `${deliveryId} 픽업 전 취소`);
+              b.emit('DeliveryCancelledBeforePickup', `${deliveryId} 픽업 전 취소`, { deliveryId, riderId: me });
             }
             b.schedule(b.lag(), () => {
               del.x.riderId = null;
@@ -1411,7 +1429,7 @@ export class MockBackend implements RiderPort {
             del.x.evidence = { method: body.method, photoRefs: [...refs], takenAt: body.evidence.takenAt, placement: body.evidence.placement };
             del.x.completedAt = now();
             b.xHistory(del, 'COMPLETED', 'RIDER');
-            b.emit('DeliveryCompleted', `${deliveryId} 전달 완료(${body.method})`);
+            b.emit('DeliveryCompleted', `${deliveryId} 전달 완료(${body.method})`, { deliveryId, riderId: me });
             // dispatch 는 DeliveryCompleted 로 CLOSED
             b.schedule(b.lag(), () => {
               if (del.d.assignment) del.d.assignment.state = 'COMPLETED';
@@ -1464,7 +1482,7 @@ export class MockBackend implements RiderPort {
               evidenceRefs: [...(body.evidenceRefs ?? [])],
               createdAt: now(),
             });
-            b.emit('DeliveryIncidentRaised', `${deliveryId} 도움요청 ${body.category}`);
+            b.emit('DeliveryIncidentRaised', `${deliveryId} 도움요청 ${body.category}`, { deliveryId, riderId: me });
             return b.cmd(requestId, { status: 'ACCEPTED', resultId: requestId });
           },
           { key: o.idempotencyKey, body },

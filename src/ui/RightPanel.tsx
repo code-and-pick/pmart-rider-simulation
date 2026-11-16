@@ -1,16 +1,30 @@
 import { useState } from 'react';
 import { useApp } from '../app/App';
 import { dur, seoulTime } from './format';
+import { apiFor, cardsFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
-type Tab = 'deliveries' | 'events' | 'api';
+type Tab = 'deliveries' | 'events' | 'api' | 'notes';
+
+const TABS: readonly (readonly [Tab, string])[] = [
+  ['deliveries', '배송'],
+  ['events', '사건'],
+  ['api', 'API'],
+  ['notes', '기록'],
+];
+
+/** 한 번에 그리는 줄 수 [시뮬] — 4Hz 로 다시 그리므로 넉넉하지 않게 */
+const MAX_ROWS = 120;
 
 export function RightPanel() {
   const app = useApp();
   const { sim } = app;
+  const sel = app.selected;
   const [tab, setTab] = useState<Tab>('deliveries');
   const m = sim.metrics();
   const t = (at: number) => seoulTime(sim.clock.epochMs(at));
   const diag = sim.diagnostics();
+  const allCards = sim.deliveryCards();
+  const cards = cardsFor(allCards, sel);
   return (
     <aside className="panel right" aria-label="배송·로그">
       {diag.length > 0 && (
@@ -29,14 +43,18 @@ export function RightPanel() {
         <Stat label="가게 대기" value={dur(m.storeWait)} />
         <Stat label="픽업→완료" value={dur(m.pickupToComplete)} />
       </section>
+      {sel && (
+        <div className="filter-chip" role="status">
+          <span>
+            <b>{sel}</b> 만 보는 중
+          </span>
+          <button className="chip-x" aria-label="전체 보기" title="전체 보기" onClick={() => app.select(null)}>
+            ✕
+          </button>
+        </div>
+      )}
       <div className="tabs" role="tablist">
-        {(
-          [
-            ['deliveries', '배송'],
-            ['events', '사건'],
-            ['api', 'API'],
-          ] as const
-        ).map(([k, label]) => (
+        {TABS.map(([k, label]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
             {label}
           </button>
@@ -45,11 +63,15 @@ export function RightPanel() {
       <div className="tab-body">
         {tab === 'deliveries' && (
           <ul className="cards">
-            {sim.deliveryCards().slice(0, 60).map((c) => (
+            {cards.slice(0, 60).map((c) => (
               <li key={c.deliveryId} className="card">
                 <div className="card-head">
                   <b>{c.deliveryId}</b>
-                  <span className="muted">{c.riderId ?? (c.radiusKm ? `반경 ${c.radiusKm}km 탐색` : '')}</span>
+                  {sel ? (
+                    <span className={`role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
+                  ) : (
+                    <span className="muted">{c.riderId ?? (c.radiusKm ? `반경 ${c.radiusKm}km 탐색` : '')}</span>
+                  )}
                 </div>
                 {/* 두 서비스의 두 상태를 출처와 함께(docs/design.md §4) */}
                 <div className="states">
@@ -62,31 +84,54 @@ export function RightPanel() {
                 </div>
               </li>
             ))}
-            {sim.deliveryCards().length === 0 && (
+            {cards.length === 0 && (
               <li className="empty">
-                {sim.mode === 'mock' ? '아직 배송이 없다 — MOCK 주문이 들어오면 생긴다.' : '아직 배송이 없다 — 점원 배차 요청 뒤 생긴다.'}
+                {sel
+                  ? `${sel} 에게 온 배송이 아직 없다.`
+                  : sim.mode === 'mock'
+                    ? '아직 배송이 없다 — MOCK 주문이 들어오면 생긴다.'
+                    : '아직 배송이 없다 — 점원 배차 요청 뒤 생긴다.'}
               </li>
             )}
           </ul>
         )}
         {tab === 'events' && (
           <ul className="log">
-            {[...sim.eventLog].reverse().slice(0, 120).map((e, i) => (
-              <li key={i}>
-                <span className="time">{t(e.at)}</span> <code>{e.type}</code> {e.summary}
-              </li>
-            ))}
+            {eventsFor(sim.eventLog, allCards, sel)
+              .reverse()
+              .slice(0, MAX_ROWS)
+              .map((e, i) => (
+                <li key={i}>
+                  <span className="time">{t(e.at)}</span> <code>{e.type}</code> {e.summary}
+                </li>
+              ))}
+            {sim.mode === 'http' && <li className="empty">실서버는 사건을 받지 못한다 — 조회 결과로 추정한 것만 보인다.</li>}
           </ul>
         )}
         {tab === 'api' && (
           <ul className="log">
-            {[...sim.apiLog].reverse().slice(0, 120).map((r, i) => (
-              <li key={i} className={typeof r.status === 'number' && r.status >= 400 ? 'warn' : ''}>
-                <span className="time">{t(r.at)}</span> <span className="actor">{r.actor}</span> {r.method} {r.path}{' '}
-                <b>{r.status}</b>
-                {r.code ? ` ${r.code}` : ''}
-              </li>
-            ))}
+            {apiFor(sim.apiLog, sel)
+              .reverse()
+              .slice(0, MAX_ROWS)
+              .map((r, i) => (
+                <li key={i} className={typeof r.status === 'number' && r.status >= 400 ? 'warn' : ''}>
+                  <span className="time">{t(r.at)}</span> <span className="actor">{r.actor}</span> {r.method} {r.path} <b>{r.status}</b>
+                  {r.code ? ` ${r.code}` : ''}
+                </li>
+              ))}
+          </ul>
+        )}
+        {tab === 'notes' && (
+          <ul className="log">
+            {notesFor(sim.notes, sel)
+              .reverse()
+              .slice(0, MAX_ROWS)
+              .map((n, i) => (
+                <li key={i}>
+                  <span className="time">{t(n.at)}</span> {!sel && <span className="actor">{n.riderId}</span>} {n.text}
+                </li>
+              ))}
+            {sim.notes.length === 0 && <li className="empty">가상 라이더 진행 기록(엔진 기준 — 백엔드 상태 아님). 라이더가 움직이면 쌓인다.</li>}
           </ul>
         )}
       </div>

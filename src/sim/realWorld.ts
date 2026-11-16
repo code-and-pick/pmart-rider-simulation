@@ -15,7 +15,7 @@ import { ApiProblem, type Delivery, type DomainEventType, type StaffDeliverySumm
 import { SimClock } from './clock';
 import { VirtualRider } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
-import type { DeliveryCard, MetricsSummary, RiderView, World } from './world';
+import type { DeliveryCard, MetricsSummary, NoteRecord, RiderView, World } from './world';
 
 const RING = 300;
 const SUBSTEP = 0.25;
@@ -52,6 +52,8 @@ export class RealWorld implements World {
   private readonly driven = new Map<string, VirtualRider>();
   readonly apiLog: ApiCallRecord[] = [];
   readonly eventLog: DomainEventRecord[] = [];
+  /** 이 브라우저가 움직이는 가상 라이더의 진행 기록 */
+  readonly notes: NoteRecord[] = [];
   speed = 1;
   paused = false;
   readonly canChangeSpeed = false;
@@ -110,7 +112,7 @@ export class RealWorld implements World {
         r.pos ?? this.params.mfcLocation,
         {
           onTripDone: () => undefined,
-          onNote: () => undefined,
+          onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }, 1500),
         },
         { allowSignup: this.gate.signupAllowed, routes: this.routes },
       );
@@ -183,7 +185,7 @@ export class RealWorld implements World {
       if (!s.deliveryId) continue;
       seen.add(s.deliveryId);
       const prev = this.rows.get(s.deliveryId);
-      if (!prev) this.infer('DeliveryCreated', `${s.deliveryId} 목록에 나타남`);
+      if (!prev) this.infer('DeliveryCreated', `${s.deliveryId} 목록에 나타남`, s.deliveryId);
       else if (prev.summary.state !== s.state) this.inferExec(s.deliveryId, s.state);
       this.rows.set(s.deliveryId, { summary: s, dispatch: prev?.dispatch ?? null, dispatchError: prev?.dispatchError ?? null });
     }
@@ -220,20 +222,34 @@ export class RealWorld implements World {
     }
   }
 
-  private infer(type: DomainEventType, summary: string) {
-    push(this.eventLog, { at: this.clock.now, type, summary: `${summary} (조회로 추정)`, inferred: true });
+  private infer(type: DomainEventType, summary: string, deliveryId?: string, riderId?: string) {
+    push(this.eventLog, {
+      at: this.clock.now,
+      type,
+      summary: `${summary} (조회로 추정)`,
+      inferred: true,
+      deliveryId,
+      riderId: riderId ?? this.rowRider(deliveryId),
+    });
+  }
+
+  /** 그 배송의 지금 배정 라이더(목록·배차 조회에서 읽은 값) */
+  private rowRider(deliveryId: string | undefined): string | undefined {
+    if (!deliveryId) return undefined;
+    const r = this.rows.get(deliveryId);
+    return r?.dispatch?.assignment?.riderId ?? r?.summary.riderId ?? undefined;
   }
 
   private inferExec(id: string, state: string | undefined) {
-    if (state === 'PICKED_UP') this.infer('PickupCompleted', `${id} 수행 PICKED_UP`);
-    else if (state === 'COMPLETED') this.infer('DeliveryCompleted', `${id} 수행 COMPLETED`);
-    else if (state === 'FAILED') this.infer('DeliveryFailed', `${id} 수행 FAILED`);
+    if (state === 'PICKED_UP') this.infer('PickupCompleted', `${id} 수행 PICKED_UP`, id);
+    else if (state === 'COMPLETED') this.infer('DeliveryCompleted', `${id} 수행 COMPLETED`, id);
+    else if (state === 'FAILED') this.infer('DeliveryFailed', `${id} 수행 FAILED`, id);
   }
 
   private inferDispatch(id: string, state: string | undefined, riderId: string | undefined) {
-    if (state === 'ASSIGNED') this.infer('DeliveryAssigned', `${id} → ${riderId ?? '?'}`);
-    else if (state === 'DISPATCH_FAILED') this.infer('DispatchFailed', `${id} 배차 실패`);
-    else if (state === 'CANCELLED_BEFORE_PICKUP') this.infer('DeliveryCancelledBeforePickup', `${id} 픽업 전 취소`);
+    if (state === 'ASSIGNED') this.infer('DeliveryAssigned', `${id} → ${riderId ?? '?'}`, id, riderId);
+    else if (state === 'DISPATCH_FAILED') this.infer('DispatchFailed', `${id} 배차 실패`, id);
+    else if (state === 'CANCELLED_BEFORE_PICKUP') this.infer('DeliveryCancelledBeforePickup', `${id} 픽업 전 취소`, id);
   }
 
   deliveryCards(): DeliveryCard[] {
@@ -248,6 +264,7 @@ export class RealWorld implements World {
         dispatchState: d?.state ?? null,
         executionState: s.state ?? null,
         riderId: d?.assignment?.riderId ?? s.riderId ?? null,
+        riderIds: involvedRiders(r),
         radiusKm: d?.state === 'DISPATCHING' ? (at?.currentRadiusKm ?? null) : null,
         customer: null,
         createdAt: s.createdAt ? (Date.parse(s.createdAt) - this.startWall) / 1000 : 0,
@@ -288,12 +305,21 @@ export class RealWorld implements World {
   }
 }
 
+/** 배송에 관여한 라이더 — 배정 라이더 + 배차 시도의 제안 대상(관찰 계정이 볼 수 있는 만큼) */
+function involvedRiders(r: Row): string[] {
+  const set = new Set<string>();
+  for (const at of r.dispatch?.attempts ?? []) for (const o of at.offers ?? []) if (o.riderId) set.add(o.riderId);
+  const a = r.dispatch?.assignment?.riderId ?? r.summary.riderId;
+  if (a) set.add(a);
+  return [...set];
+}
+
 function describe(e: unknown): string {
   if (e instanceof ApiProblem) return `${e.status} ${e.code ?? ''}`.trim();
   return e instanceof Error ? e.message : String(e);
 }
 
-function push<T>(ring: T[], v: T) {
+function push<T>(ring: T[], v: T, max = RING) {
   ring.push(v);
-  if (ring.length > RING) ring.splice(0, ring.length - RING);
+  if (ring.length > max) ring.splice(0, ring.length - max);
 }

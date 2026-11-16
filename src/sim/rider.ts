@@ -261,7 +261,9 @@ export class VirtualRider {
     }
   }
 
+  /** 화면 메모 + 기록. 같은 문장이 연달아 오면(예: 5초마다 "포장 대기") 기록에는 한 번만 남긴다. */
   private say(text: string) {
+    if (text === this.note) return;
     this.note = text;
     this.hooks.onNote(this.id, text);
   }

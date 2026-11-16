@@ -172,6 +172,9 @@ export interface DomainEventRecord {
   summary: string;
   /** true = 사건을 받은 것이 아니라 REST 조회 결과로 추정 */
   inferred?: boolean;
+  /** 화면에서 라이더·배송별로 거르려고(계약 사건 본문이 아니다) */
+  riderId?: string;
+  deliveryId?: string;
 }
 
 export type ApiListener = (rec: ApiCallRecord) => void;

@@ -13,16 +13,12 @@ import { Rng } from '../util/rng';
 import { mockStartEpochMs, SimClock } from './clock';
 import { VirtualRider, type RiderTrip } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
-import type { DeliveryCard, MetricsSummary, World } from './world';
+import type { DeliveryCard, MetricsSummary, NoteRecord, World } from './world';
 
 const SUBSTEP = 0.25;
 const RING = 300;
-
-export interface NoteRecord {
-  at: number;
-  riderId: string;
-  text: string;
-}
+/** 라이더 기록은 라이더별로 보므로 더 길게 [시뮬] */
+const NOTE_RING = 1500;
 
 export class Simulation implements World {
   readonly mode = 'mock' as const;
@@ -74,7 +70,7 @@ export class Simulation implements World {
         start,
         {
           onTripDone: (t) => push(this.trips, t),
-          onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }),
+          onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }, NOTE_RING),
         },
         { allowSignup: true, routes: this.routes },
       );
@@ -116,7 +112,7 @@ export class Simulation implements World {
 
   /** MOCK 세계의 배송 카드. 실서버(P2)는 관찰 계정 조회로 같은 모양을 만든다. */
   deliveryCards(): DeliveryCard[] {
-    return [...this.backend.deliveries.values()].map((d) => card(d)).sort((a, b) => b.createdAt - a.createdAt);
+    return [...this.backend.deliveries.values()].map((d) => card(d, this.backend.ridersOf(d.deliveryId))).sort((a, b) => b.createdAt - a.createdAt);
   }
 
   diagnostics(): string[] {
@@ -165,7 +161,7 @@ export class Simulation implements World {
   }
 }
 
-function card(d: MDelivery): DeliveryCard {
+function card(d: MDelivery, riderIds: string[]): DeliveryCard {
   const at = d.d.attempts[d.d.attempts.length - 1];
   return {
     deliveryId: d.deliveryId,
@@ -174,13 +170,14 @@ function card(d: MDelivery): DeliveryCard {
     dispatchState: d.d.state,
     executionState: d.x.exists ? d.x.state : null,
     riderId: d.d.assignment?.riderId ?? null,
+    riderIds,
     radiusKm: d.d.state === 'DISPATCHING' && at ? at.radiusKm : null,
     customer: d.customer,
     createdAt: d.createdAt,
   };
 }
 
-function push<T>(ring: T[], v: T) {
+function push<T>(ring: T[], v: T, max = RING) {
   ring.push(v);
-  if (ring.length > RING) ring.splice(0, ring.length - RING);
+  if (ring.length > max) ring.splice(0, ring.length - max);
 }

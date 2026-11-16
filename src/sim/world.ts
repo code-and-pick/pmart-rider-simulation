@@ -33,6 +33,8 @@ export interface DeliveryCard {
   /** null = execution 사본이 아직 없음(DeliveryCreated 반영 전) */
   executionState: ExecutionState | null;
   riderId: string | null;
+  /** 이 배송에 관여한 라이더(제안을 받았거나 배정된) — 라이더별 거르기 */
+  riderIds: string[];
   radiusKm: number | null;
   /** null = 고객 위치를 모름(실서버 관찰 계정은 전달지를 읽지 않는다 — 개인정보) */
   customer: LatLng | null;
@@ -51,6 +53,13 @@ export interface MetricsSummary {
   apiErrors: number;
 }
 
+/** 가상 라이더 엔진의 진행 기록(제안 검토·수락·이동·인계 …) — 백엔드 상태가 아니다 */
+export interface NoteRecord {
+  at: number;
+  riderId: string;
+  text: string;
+}
+
 export interface World {
   readonly mode: 'mock' | 'http';
   readonly clock: SimClock;
@@ -58,6 +67,7 @@ export interface World {
   readonly riders: readonly RiderView[];
   readonly apiLog: readonly ApiCallRecord[];
   readonly eventLog: readonly DomainEventRecord[];
+  readonly notes: readonly NoteRecord[];
   speed: number;
   paused: boolean;
   /** 배속을 바꿀 수 있나(실서버는 늘 1×) */

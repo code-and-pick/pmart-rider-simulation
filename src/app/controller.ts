@@ -70,7 +70,8 @@ export class AppController {
     // React StrictMode 는 개발 중 붙이기 → 떼기 → 붙이기를 한다. SDK 를 기다리는 사이 떼어졌으면 그 붙이기는 버린다.
     const gen = ++this.mapGen;
     const center = this.sim.params.mfcLocation;
-    const onClick = (id: string) => this.select(id);
+    // 지도에서 라이더를 누르면 선택(오른쪽 탭이 그 라이더로 걸러짐), 다시 누르면 풀림
+    const onClick = (id: string) => this.select(this.selected === id ? null : id);
     let surface: MapSurface;
     try {
       const k = await loadKakaoMaps(import.meta.env.VITE_KAKAO_JS_KEY);
