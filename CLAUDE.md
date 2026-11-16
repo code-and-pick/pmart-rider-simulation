@@ -1,0 +1,48 @@
+# CLAUDE.md — PMart 배송·라이더 가상 현장 (rider simulation)
+
+PMart 라스트마일(MFC → 고객) 배송을 **카카오 지도 위에서** 돌리는 가상 현장이다(지도는 평면, 라이더 마커만 입체처럼 그림 — 2026-11-16 결정). 백엔드(`../pmart-backend`)에 대해 **라이더 앱처럼** 계약 API 를 부른다.
+MFC 쪽 시뮬레이터(`../pmart-mfc-simulation`)의 짝이다. MFC 에서 점원이 **배차 요청**을 하면(실제 PDA 또는 MFC 시뮬레이터 가상 작업자) 백엔드 delivery-dispatch 가 배송을 열고, 이 시뮬레이터의 가상 라이더가 제안을 받아 수락 → MFC 이동 → QR 인계 → 고객 이동 → 전달 완료까지 수행한다.
+두 시뮬레이터는 서로 직접 부르지 않는다 — **백엔드 사건으로만 이어진다**(설계 `docs/design.md` §2).
+
+스택: `../pmart-mfc-simulation` 과 같다(사용자 결정 2026-11-16) — Vite 6 + TypeScript 5 + React 19 + Vitest(react-three-fiber 는 지도 화면에 쓰지 않음 — 필요할 때만). 지도는 카카오맵 웹 JS SDK(JavaScript 키 `VITE_KAKAO_JS_KEY`, `.env.local` — Git 제외)로 띄우고, 라이더는 커스텀 오버레이로 그린다. 키가 없으면 좌표 평면 대체 화면으로 돈다(`docs/design.md` §6). 카카오 REST 키는 브라우저에 두지 않는다.
+- **역할**: 배차는 백엔드가 한다. 실서버에서 라이더 API 를 부르는 것은 이 시뮬레이터뿐이고, MFC 시뮬레이터는 배차·수행 상태를 읽어 앞마당 인계만 그린다(`docs/design.md` §2-1, MFC 쪽에 넘길 내용 `docs/mfc-simulator-requests.md`).
+- 시뮬레이션 엔진(`src/sim`)·백엔드 어댑터(`src/backend`)·도메인(`src/domain`)은 React 에 의존하지 않는다(테스트가 화면 없이 돈다).
+- 매 프레임 바뀌는 값(라이더 위치)은 React 상태로 올리지 않고 지도 오버레이 객체를 직접 옮긴다. 패널은 약 4Hz 박자·선택 변경 때만 다시 그린다.
+
+## 절대 규칙
+- `../pmart-backend`, `../pmart-clients`, `../pmart-mfc-simulation`, `../PMart-Delivery-Test` 는 **읽기만** 한다. 백엔드에 필요한 변경·결정은 `docs/backend-requests.md` 에 R 번호로 적고 사용자에게 보고한다.
+- **계약이 정본이다.** `src/domain/contract.ts` 의 이름·상태값·필드는 `pmart-backend/contracts/openapi/` 의 `delivery-dispatch-service.yaml`·`delivery-execution-service.yaml`·`delivery-tracking-service.yaml`·`rider-service.yaml`·`mfc-fulfillment-service.yaml`(인계 부분)과 `contracts/events/*.v1.json` 을 그대로 따른다. 계약에 없는 엔드포인트를 HttpBackend 에서 추측해 부르지 않는다. 계약 머리에 버전을 적는다.
+- **`../PMart-Delivery-Test` 는 참고만 한다**(사용자 결정 2026-11-16). 배송 기능이 가능한지 시험한 프로젝트이고, 실제 구현은 pmart-backend 서비스다. 그쪽은 독자 계약(`com.baropick`, `/api/rider/...`)이라 API 이름·상태값·필드를 가져오지 않는다. 가져올 수 있는 것은 아이디어(경로 재생·장애 주입·위치 판정·시험 시나리오)뿐이고, 가져오면 `docs/design.md` §7 표에 적는다.
+- MockBackend 는 계약 의미를 흉내 낼 뿐 실서버 동작을 대신하지 않는다. 흉내 내면서 정한 값(제안 만료·반경 단계 시간 등)은 `src/config.ts` 와 `docs/backend-requests.md` "시뮬레이터가 정한 값"에 적는다.
+- **서버가 확정한 결과만 확정으로 그린다.** 응답이 없으면 결과 불명으로 보고 같은 `Idempotency-Key` 로 재전송하거나 조회로 확인한다. 실패로 단정하지 않는다.
+- **배송 상태를 시뮬레이터가 만들지 않는다.** 픽업 완료는 MFC 인계 확정(`PackageHandedOver`)으로만, 전달 완료는 사진 + 완료 요청으로만 된다. 경로 끝 도착·시간 경과·위치만으로 상태를 넘기지 않는다(execution 계약 머리).
+- 배차 쪽 상태(`DispatchState`)와 수행 쪽 상태(`ExecutionState`)는 **다른 서비스의 다른 값**이다. 하나로 합치지 말고 화면에는 둘 다 출처를 붙여 보인다(`docs/design.md` §4).
+- 업무 문서에 없는 수치는 `src/config.ts` 에 근거 태그(`[확정]`/`[가정]`/`[시뮬]`)와 함께 둔다. 다른 파일에 흩어 놓지 않는다.
+- 토큰·서명키·비밀번호는 브라우저 저장소(localStorage·sessionStorage)에 두지 않는다. 라이더 토큰 서명은 Vite 개발 서버에서만 하고 브라우저에는 토큰만 준다(RR-01). 비밀 파일은 `PMART_SECRETS_DIR`(기본 `../pmart-backend/deploy/lan/.secrets`)에서 읽기만 한다. 로그·일지·화면에 토큰·주소·전화번호를 남기지 않는다.
+- 실서버 모드의 가상 라이더는 **시뮬레이터 전용 라이더 ID**(접두어는 RR-02 회신 전까지 `RD-sim-`)만 쓴다. 실제 라이더 앱 사용자를 조종하지 않는다.
+- LAN 다른 기기에는 토큰을 주지 않는다. 다른 기기 요청은 개발 서버가 GET·HEAD 허용 목록만 넘기고(직원 조회 = 관찰 계정, 라이더 본인 조회 = 시뮬레이터 라이더 ID 에 한해 서명), 쓰기·전달지(개인정보)는 막는다(`docs/design.md` §6-4).
+- 실행하지 않은 테스트·빌드를 통과했다고 보고하지 않는다.
+- 작업 일지를 `docs/worklog/YYYY-MM-DD.md` 에 남긴다(형식·규칙 `docs/worklog/README.md`, 백엔드 일지 형식을 따름). 일지 없이 커밋하지 않고, 백엔드에서 읽어 확인한 사실은 근거(파일·커밋)와 함께 적는다.
+
+## 다른 PC 에서 이어서 작업할 때
+1. 이 파일 → `docs/design.md`(설계·계약 요약·단계 계획) → `docs/worklog/` 최신 일지 → `docs/backend-requests.md` 순서로 읽는다.
+2. 형제 폴더가 같은 위치에 있어야 한다: `../pmart-backend`, `../pmart-mfc-simulation`, `../pmart-clients`, `../PMart-Delivery-Test`. 백엔드는 `git pull` 만 하고 고치지 않는다.
+3. 일지의 "백엔드 확인" 커밋과 지금 백엔드 커밋이 다르면 계약 버전(`contracts/openapi/delivery-*.yaml` 의 `info.version`)과 `services/delivery-*/CLAUDE.md` "상태" 절을 다시 읽고 `docs/design.md` §3 표를 고친다.
+4. 실서버 모드는 LAN 비밀 파일(`deploy/lan/.secrets/rider-auth-signing-key.pem`·`rider-auth-signing-kid`, 관찰 계정 비밀번호)이 그 PC 에 있어야 한다. Git 에 없다 — 없으면 MOCK 으로만 작업한다.
+
+## 명령 (골격을 만든 뒤 — 2026-11-16 현재 코드 없음)
+```bash
+npm run dev        # http://localhost:5181 (실서버 모드는 PMART_GATEWAY 로 프록시)
+npm test
+npm run typecheck
+npm run build
+```
+
+## 참고 문서 (읽기 전용)
+- 배송 업무: `../pmart-backend/docs/business/Delivery-business-logic.md`, 주문 사가 `docs/business/flows/order-checkout-saga.md`, 취소·인계 경합 `docs/business/flows/cancel-vs-handover.md`
+- 서비스 책임: `../pmart-backend/docs/architecture/service-map.md` §7, MFC 와의 약속 `docs/architecture/service-requests/delivery-kickoff-from-mfc.md`
+- 구현 상태: `../pmart-backend/services/{delivery-dispatch,delivery-execution,delivery-tracking,rider,rider-auth}-service/CLAUDE.md` "상태" 절
+- 실제 흐름 전례: `../pmart-backend/deploy/lan/checks/rider_e2e.py`(LAN 라이더 처음부터 끝까지, 2026-11-16 첫 실행)
+- 백엔드 → 시뮬레이터 공지: `../pmart-backend/docs/handoff/simulator/`, 시뮬레이터 범위 `docs/simulator/scope.md`
+- 짝 시뮬레이터: `../pmart-mfc-simulation/CLAUDE.md`, `docs/backend-requests.md`(SIM-7: 라이더는 배송 구현 뒤)
+- 어디를 읽나 전체 목록: `docs/backend-handoff.md`

@@ -1,0 +1,36 @@
+# 의존성·빌드 결과
+node_modules/
+dist/
+dist-ssr/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# 로그
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 환경변수 — 키 값은 각 PC 의 .env.local 에만 (이름만 있는 .env.example 은 올림)
+.env
+.env.*
+!.env.example
+*.local
+
+# 비밀 파일 — 서명키·비밀번호는 저장소에 두지 않는다 (LAN 비밀은 ../pmart-backend/deploy/lan/.secrets 에서 읽기만)
+.secrets/
+*.pem
+*.key
+*.p12
+*.jks
+
+# 편집기·OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
