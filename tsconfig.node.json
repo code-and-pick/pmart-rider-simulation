@@ -1,0 +1,17 @@
+// Vite 설정과 개발 서버 플러그인(server/) — Node 에서만 돈다. 서명키를 읽는 코드는 여기에만 둔다(docs/design.md §6-5 조건 1).
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["vite.config.ts", "server"]
+}

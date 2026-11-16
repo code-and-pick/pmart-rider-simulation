@@ -31,13 +31,15 @@ MFC 쪽 시뮬레이터(`../pmart-mfc-simulation`)의 짝이다. MFC 에서 점�
 3. 일지의 "백엔드 확인" 커밋과 지금 백엔드 커밋이 다르면 계약 버전(`contracts/openapi/delivery-*.yaml` 의 `info.version`)과 `services/delivery-*/CLAUDE.md` "상태" 절을 다시 읽고 `docs/design.md` §3 표를 고친다.
 4. 실서버 모드는 LAN 비밀 파일(`deploy/lan/.secrets/rider-auth-signing-key.pem`·`rider-auth-signing-kid`, 관찰 계정 비밀번호)이 그 PC 에 있어야 한다. Git 에 없다. **PC 5 에서 시작할 때 이 파일들이 `../pmart-backend/deploy/lan/.secrets/` 에 있는지 먼저 확인**한다(PC 1 에서 사용자가 같은 경로로 복사 — RR-06 사용자 결정). 없으면 MOCK 으로만 작업한다. 저장소·다른 폴더로는 옮기지 않는다.
 
-## 명령 (골격을 만든 뒤 — 2026-11-16 현재 코드 없음)
+## 명령 (P0 골격 2026-11-16 PC 5)
 ```bash
-npm run dev        # http://localhost:5181 (실서버 모드는 PMART_GATEWAY 로 프록시)
-npm test
-npm run typecheck
+npm run dev        # http://localhost:5181, LAN http://<이 PC IP>:5181 (/api 는 PMART_GATEWAY 로 프록시, 기본 192.168.0.40:8080)
+npm test           # vitest — 화면 없이
+npm run typecheck  # src·test(tsconfig.json) + vite.config·server(tsconfig.node.json)
 npm run build
 ```
+- 구조: `src/domain/contract.ts`(계약 사본, 머리에 버전) · `src/backend/port.ts`(`RiderPort`) · `src/config.ts`(근거 태그 수치) · `server/`(Vite 개발 서버 플러그인 — Node 전용. 다른 기기 가드 `lanPolicy.ts`, P2 에 토큰 서명. **서명키를 읽는 코드는 `server/` 에만**).
+- 저장소 루트의 `env.download` 같은 키 파일은 `.gitignore` 에 걸리지 않는다 — 커밋은 경로를 지정해서만 올린다(`git add -A` 금지).
 
 ## 참고 문서 (읽기 전용)
 - 배송 업무: `../pmart-backend/docs/business/Delivery-business-logic.md`, 주문 사가 `docs/business/flows/order-checkout-saga.md`, 취소·인계 경합 `docs/business/flows/cancel-vs-handover.md`

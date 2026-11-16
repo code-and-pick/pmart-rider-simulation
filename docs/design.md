@@ -1,6 +1,6 @@
 # 배송·라이더 가상 현장 설계
 
-> 기준: 2026-11-16, 백엔드 `pmart-backend` `main` `cb2bf317`(처음 `aa46ce11` → DD-2 계약 반영). 계약 버전은 §3 표.
+> 기준: 2026-11-16, 백엔드 `pmart-backend` `main` `cb2bf317`(처음 `aa46ce11` → DD-2 계약 반영). 계약 버전은 §3 표. PC 5 에서 `origin/main` `516e7cf5` 로 다시 확인 — 이 표의 계약 버전 그대로(그 사이 계약 변경은 case-service 만).
 > 이 문서는 **설계와 결정의 정본**이다. 결정이 바뀌면 §10 이력에 날짜와 함께 남기고 본문을 고친다.
 
 ## 1. 목표와 범위
@@ -215,7 +215,7 @@ PMart-Delivery-Test 는 **배송 기능(배차·인계·위치 추적·경로 �
 
 | 단계 | 내용 | 완료 기준 |
 |---|---|---|
-| P0 | 골격: package.json·vite(포트 5181, `/api` 프록시)·tsconfig, `src/domain/contract.ts`(§3 계약 사본), `src/backend/port.ts`(`RiderPort`), `src/config.ts` | typecheck·빌드 통과 |
+| P0 | 골격: package.json·vite(포트 5181, `/api` 프록시)·tsconfig, `src/domain/contract.ts`(§3 계약 사본), `src/backend/port.ts`(`RiderPort`), `src/config.ts` + LAN 다른 기기 가드(`server/lanPolicy.ts` — §6-4 중 토큰 붙이기 뺀 부분) | typecheck·빌드 통과 — **완료 2026-11-16 PC 5** |
 | P1 | MOCK 백엔드 + 가상 라이더 상태기계 + 카카오 지도 화면(§6 — 키 없으면 좌표 평면 대체, MFC·고객·라이더 마커·경로선) | 화면 없이 도는 vitest(배차→완료 1건, 동시 수락 1명, 픽업 전 사진 완료 거부 등) |
 | P2 | 실서버 읽기: 라이더 토큰(RR-01), 관찰 계정 토큰, 배차 대기 배송·제안 조회 표시, 다른 기기 조회 경로(§6-4), dispatch `shipmentId` 실측(§5) | LAN 에서 실제 PDA 배차 요청이 화면에 뜸 |
 | P3 | 실서버 쓰기: 가상 라이더 수락 → 인계 → 완료 | 실제 PDA 주문 1건이 DeliveryCompleted 까지 |
@@ -236,3 +236,6 @@ PMart-Delivery-Test 는 **배송 기능(배차·인계·위치 추적·경로 �
 | 2026-11-16 | 시험 라이더 토큰 = 개발 서버가 LAN 서명키로 직접, 조건 7개(§6-5) | 백엔드 회신 RR-01(사용자 "A번") |
 | 2026-11-16 | 작업 PC = PC 5. 서명키는 PC 5 의 같은 경로에 사용자가 복사해 읽기만(RR-01 조건 ② 예외) | 사용자(RR-06) |
 | 2026-11-16 | **최종: 카카오 지도(웹 JS SDK) + 꾸민 마커**(지도는 평면, 라이더는 입체처럼 그린 커스텀 오버레이). OSM 3D 도시안은 채택 안 함. 지도 화면에 r3f 미사용 | 사용자 "1번으로 하자" |
+| 2026-11-16 | P0: `host: true` 를 켜는 순간부터 다른 기기 가드를 둔다 — 다른 기기는 GET·HEAD 허용 목록만(아니면 403 `LAN_READ_ONLY`/`LAN_PATH_BLOCKED`), Authorization 지움, `/sim-auth` 루프백만. 토큰 붙이기는 P2 | 설계(§6-4 를 앞당김) |
+| 2026-11-16 | 의존성 범위는 MFC 시뮬레이터와 같게 두되 **Vite 는 6.4.6 이상**(`^6.4.6`) — MFC 시뮬레이터 lock 의 6.3.5 는 Windows `server.fs.deny` 우회 등 high 권고 대상이고 이쪽은 LAN 에 연다. Vitest 3.x(tinypool) 권고는 남음 — 고치려면 Vitest 5(주 버전) | 설계(보안 권고), Vitest 는 사용자 결정 대기 |
+| 2026-11-16 | 게이트웨이 기본값 `http://192.168.0.40:8080`(`rider_e2e.py` 37행과 같은 곳). MFC 시뮬레이터는 `http://D603-16:8080` — `PMART_GATEWAY` 로 바꾼다 | 설계 |

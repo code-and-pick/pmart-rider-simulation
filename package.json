@@ -1,0 +1,27 @@
+{
+  "name": "pmart-rider-simulation",
+  "version": "0.1.0",
+  "description": "PMart 배송·라이더 가상 현장 — 카카오 지도 위 가상 라이더 (React, 백엔드 delivery-* 계약)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run"
+  },
+  "type": "module",
+  "dependencies": {
+    "react": "~19.2.0",
+    "react-dom": "~19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.4.6",
+    "vitest": "^3.2.7"
+  },
+  "private": true
+}
