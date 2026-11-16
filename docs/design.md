@@ -119,7 +119,7 @@
 3. **수락**: 제안 상세 → ACCEPT(시뮬 정책에 따라 일부 REJECT·무응답 만료도). 결과 LATE 면 그 이유를 기록하고 대기로.
 4. **MFC 로**: 경로를 따라 이동하며 위치 업로드(`deliveryId` 붙임) → execution 에 배정이 보이면 가게 도착.
 5. **인계**: `GET /deliveries/{id}/dispatch` 의 shipmentId → 포장 목록·qrCode 확보(RR-03) → 포장마다 허가 → 확정. 출고가 아직 READY 가 아니면(포장 중) 가게에서 기다린다(대기 시간 = 지표).
-   - 주의(2026-11-16 MFC 시뮬레이터 발견, 그쪽 R-19): MFC 출고 `Shipment.deliveryId` 가 인계 뒤에도 null 이었다. 이 시뮬레이터는 반대 방향(배송 → dispatch `Delivery.shipmentId` → 출고)으로 잇는데, dispatch 의 `shipmentId` 가 채워지는지는 **아직 실측 안 함**. 비어 있으면 MFC 시뮬레이터처럼 `orderId` 로 잇는다(배송 찾기 `GET /deliveries?mfcId=` 의 orderId ↔ 출고의 주문). P2 에서 먼저 확인.
+   - 주의(2026-11-16 MFC 시뮬레이터 발견, 그쪽 R-19): MFC 출고 `Shipment.deliveryId` 가 인계 뒤에도 null 이었다. 이 시뮬레이터는 반대 방향(배송 → dispatch `Delivery.shipmentId` → 출고)으로 잇는데, dispatch 의 `shipmentId` 는 **채워진다**(2026-11-16 P2 실측 — MFC-SEED-01 배송 4건 모두, 관찰 계정 `GET /deliveries/{id}/dispatch`). 그래서 배송 → dispatch `shipmentId` → 출고로 잇는다. 비어 있는 배송이 나오면 MFC 시뮬레이터처럼 `orderId` 로 잇는다(엔진은 지금 오류로 멈춘다 — P3 에서 orderId 대체 추가 여부 결정).
 6. **픽업 확인**: execution 이 PICKED_UP 이 될 때까지 조회(사건 반영). `POST …/pickups` 로 handoverIds 확인(선택).
 7. **고객으로**: `…/drop-info` 로 배송지 핀(lat·lng)만 쓰고 주소·전화는 화면·로그에 남기지 않는다 → 이동하며 위치 업로드.
 8. **도착·완료**: 고객 도착 → 시험용 사진 업로드 → 전달 완료. (시나리오에 따라 전달 실패·도움요청·배차 취소)
@@ -167,7 +167,7 @@ MFC 시뮬레이터 실행 구조(그쪽 커밋 `d0dd0b2`, `vite.config.ts` `ser
 | 구분 | 이 PC (`http://localhost:5181`) | 다른 기기 (`http://<이 PC IP>:5181`) |
 |---|---|---|
 | 화면 | 전부 | 전부(보기만) |
-| 토큰 | 브라우저가 개발 서버 `/sim-auth/…` 에서 받아 직접 붙임 | **토큰을 주지 않음** — 토큰 경로는 루프백만(`LOOPBACK_ONLY`) |
+| 토큰 | **브라우저는 토큰을 받지 않는다**(P2 결정): `X-Sim-Rider: RD-sim-NN` / `X-Sim-Actor: observer` 만 보내면 개발 서버가 서명·로그인해 붙인다. `/sim-auth/status`(비밀 파일 있는지만)는 루프백만 | **토큰을 주지 않음** — 같은 방식으로 개발 서버가 붙이되 아래 허용 목록만. `/sim-auth/*` 는 루프백만(`LOOPBACK_ONLY`) |
 | 백엔드 호출 | 읽기·쓰기(가상 라이더 운행) | **GET·HEAD 만**(그 밖 403 `LAN_READ_ONLY`). 개발 서버가 들어온 Authorization 을 지우고 아래 토큰을 붙여 프록시로 넘김 |
 | 가상 라이더 | 켤 수 있음 | 켜지 않음 |
 
@@ -186,7 +186,7 @@ rider-auth 에 시험 토큰 발급 경로는 없다. **Vite 개발 서버가 LA
 
 | # | 조건 | 구현에서 |
 |---|---|---|
-| 1 | Vite 개발 서버(Node)에서만 서명. 서명키는 브라우저·번들·localStorage·sessionStorage 에 두지 않고 브라우저에는 토큰만 | `server/` 플러그인에서만 키를 읽는다. `src/` 는 키를 모른다 |
+| 1 | Vite 개발 서버(Node)에서만 서명. 서명키는 브라우저·번들·localStorage·sessionStorage 에 두지 않고 브라우저에는 토큰만 | `server/` 플러그인에서만 키를 읽는다(`server/secrets.ts`·`riderToken.ts`). `src/` 는 키도 토큰도 모른다 — 토큰은 개발 서버가 프록시 요청에 붙인다(`server/devServer.ts`). 빌드 결과에 비밀 문자열 없음 확인 |
 | 2 | 키는 `PMART_SECRETS_DIR`(기본 `../pmart-backend/deploy/lan/.secrets`)의 `rider-auth-signing-key.pem`·`rider-auth-signing-kid` 를 **읽기만**. 다른 PC·다른 폴더로 복사하지 않음(실서버 모드는 비밀 파일이 있는 PC 에서만). 운영 키에 쓰지 않음 — LAN 전용. **예외: 작업 PC 인 PC 5 의 같은 경로에는 사용자가 복사해 둔다(RR-06 사용자 결정 2026-11-16)** | 파일이 없으면 실서버 모드를 끄고 MOCK 만(오류 안내) |
 | 3 | 주체(`sub`)는 **`RD-sim-` 접두어 라이더만**. 서명 함수 안에서 접두어가 아니면 거절 | 서명 함수 첫 줄 검사 + vitest |
 | 4 | `rider_e2e.py` 와 같은 모양: RS256, `kid` = 서명키 ID, `iss` = LAN rider-auth 발급자, `aud: ["pmart-api"]`, `typ: "RIDER"`, `roles`·`centers` 빈 배열, `sid` = `sim-…` 새 값, **유효 15분**(`exp = iat + 900`), `jti` 새 값. 만료되면 새로 만듦(재사용·연장 없음) | 만료 직전이면 새 토큰. 같은 토큰 연장 금지 |
@@ -218,7 +218,7 @@ PMart-Delivery-Test 는 **배송 기능(배차·인계·위치 추적·경로 �
 |---|---|---|
 | P0 | 골격: package.json·vite(포트 5181, `/api` 프록시)·tsconfig, `src/domain/contract.ts`(§3 계약 사본), `src/backend/port.ts`(`RiderPort`), `src/config.ts` + LAN 다른 기기 가드(`server/lanPolicy.ts` — §6-4 중 토큰 붙이기 뺀 부분) | typecheck·빌드 통과 — **완료 2026-11-16 PC 5** |
 | P1 | MOCK 백엔드 + 가상 라이더 상태기계 + 카카오 지도 화면(§6 — 키 없으면 좌표 평면 대체, MFC·고객·라이더 마커·경로선) | 화면 없이 도는 vitest(배차→완료 1건, 동시 수락 1명, 픽업 전 사진 완료 거부 등) — **완료 2026-11-16**(시험 25건). 카카오 지도 화면은 콘솔 카카오맵 사용 설정 뒤 실제로 띄워 확인 필요(좌표 평면으로만 확인) |
-| P2 | 실서버 읽기: 라이더 토큰(RR-01), 관찰 계정 토큰, 배차 대기 배송·제안 조회 표시, 다른 기기 조회 경로(§6-4), dispatch `shipmentId` 실측(§5) | LAN 에서 실제 PDA 배차 요청이 화면에 뜸 |
+| P2 | 실서버 읽기: 라이더 토큰(RR-01), 관찰 계정 토큰, 배차 대기 배송·제안 조회 표시, 다른 기기 조회 경로(§6-4), dispatch `shipmentId` 실측(§5) | LAN 에서 실제 PDA 배차 요청이 화면에 뜸 — **구현·LAN 읽기 확인 2026-11-16**(기존 배송 4건·토큰 두 종류·다른 기기 경로). 진행 중인 배차 요청이 없어 "새 배차 요청이 뜨는 것"은 아직 못 봄 |
 | P3 | 실서버 쓰기: 가상 라이더 수락 → 인계 → 완료 | 실제 PDA 주문 1건이 DeliveryCompleted 까지 |
 | P4 | 시나리오: 거절·만료·재배차·전달 실패·도움요청·위치 끊김(장애 주입) | 시나리오별 기대 결과 기록 |
 
@@ -244,3 +244,6 @@ PMart-Delivery-Test 는 **배송 기능(배차·인계·위치 추적·경로 �
 | 2026-11-16 | P1: 시뮬레이션 진행은 50ms 타이머(한 번에 실제 1초까지), 그리기는 rAF — rAF 는 가려진 창에서 초당 1~2회로 줄어 시각이 밀렸다(실측). 실서버(P2)는 백그라운드 탭 타이머 제한(분당 1회까지)이 남는다 → P2 에서 Worker 또는 "탭을 앞에 둘 것" 결정 | 설계 |
 | 2026-11-16 | P1 MOCK 단순화: AI 추천 제안은 그 반경 단계 안 적격 라이더 모두에게 한 번에, 반경 한 단계 60초, 전달지 값은 가짜(좌표만 의미) — `docs/backend-requests.md` "시뮬레이터가 정한 값" | 설계 [시뮬] |
 | 2026-11-16 | 가상 라이더는 purpose ≠ DELIVERY(회수 등) 제안을 거절한다(§3-1 — 회수 흐름은 P4). 제안 응답이 4xx 면(그 사이 닫힌 제안) 멈추지 않고 대기로 | 설계 |
+| 2026-11-16 | P2: **토큰은 브라우저에 주지 않는다** — 이 PC 도 다른 기기와 같이 `X-Sim-Rider`/`X-Sim-Actor` 머리글만 보내고 개발 서버가 붙인다(§6-4 표의 "브라우저가 `/sim-auth` 에서 받아" 를 바꿈. RR-01 조건 1 보다 엄격). 401 이면 그 토큰을 버리고 다음 요청에 새로 | 설계 |
+| 2026-11-16 | P2: 관찰 계정 = `claude-mfc-wrk`(staff_auth.py 와 같은 Keycloak 비밀번호 로그인 → employee-auth 시험 토큰 교환). LAN 에서 `GET /deliveries?mfcId=`·`/deliveries/{id}/dispatch` 200 확인 | 설계(§6-4 "P2 에서 확정") |
+| 2026-11-16 | P2: 모드는 주소 `?mode=http` 로 고르고 바꾸면 페이지를 새로 연다(브라우저 저장소에 두지 않음). 실서버는 벽시계 1×, 배속 잠금 | 설계 |

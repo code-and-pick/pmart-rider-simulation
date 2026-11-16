@@ -39,6 +39,17 @@ export type LanDecision =
   | { allow: true; stripAuthorization: boolean; token: LanTokenKind | null }
   | { allow: false; status: 403; code: 'LAN_READ_ONLY' | 'LAN_PATH_BLOCKED' | 'LOOPBACK_ONLY' };
 
+/** 시뮬레이터 라이더 목록 상한 [시뮬] — RR-02(인원·번호 규칙) 회신 전 임시. 다른 기기 라이더 조회는 이 목록 안만 */
+export const SIM_RIDER_MAX = 20;
+
+/** `RD-sim-01`~`RD-sim-20` 인가 — 다른 기기가 보낸 X-Sim-Rider 검사(§6-4) */
+export function isListedSimRider(riderId: string | undefined): boolean {
+  const m = /^RD-sim-(\d{2})$/.exec(riderId ?? '');
+  if (!m) return false;
+  const n = Number(m[1]);
+  return n >= 1 && n <= SIM_RIDER_MAX;
+}
+
 export function isLoopback(remoteAddress: string | undefined): boolean {
   if (!remoteAddress) return false;
   return (

@@ -7,7 +7,7 @@ import { loadKakaoMaps } from '../render/kakao';
 import { KakaoSurface } from '../render/KakaoSurface';
 import { PlaneSurface } from '../render/PlaneSurface';
 import type { MapSurface } from '../render/surface';
-import type { Simulation } from '../sim/simulation';
+import type { World } from '../sim/world';
 
 /** useSyncExternalStore 로 구독하는 작은 변경 알림. */
 export class Emitter {
@@ -43,7 +43,8 @@ export class AppController {
   private busy = false;
   private readonly doneAt = new Map<string, number>();
 
-  constructor(readonly sim: Simulation) {}
+  /** MOCK 이면 Simulation, 실서버면 RealWorld */
+  constructor(readonly sim: World) {}
 
   async attachMap(container: HTMLElement): Promise<void> {
     // React StrictMode 는 개발 중 붙이기 → 떼기 → 붙이기를 한다. SDK 를 기다리는 사이 떼어졌으면 그 붙이기는 버린다.
@@ -115,11 +116,12 @@ export class AppController {
   select(id: string | null) {
     this.selected = id;
     const r = id ? this.sim.riders.find((x) => x.id === id) : undefined;
-    if (r) this.surface?.panTo(r.pos);
+    if (r?.pos) this.surface?.panTo(r.pos);
     this.ticker.emit();
   }
 
   setSpeed(x: number) {
+    if (!this.sim.canChangeSpeed) return;
     this.sim.speed = x;
     this.ticker.emit();
   }
@@ -130,7 +132,7 @@ export class AppController {
   }
 
   addRider() {
-    this.sim.startRiders(1);
+    this.sim.addRider();
     this.ticker.emit();
   }
 
@@ -139,6 +141,11 @@ export class AppController {
     const s = this.surface;
     if (!s) return;
     for (const r of this.sim.riders) {
+      if (!r.pos) {
+        s.removeRider(r.id);
+        s.removeRoute(r.id);
+        continue;
+      }
       s.upsertRider(r.id, {
         pos: r.pos,
         heading: r.heading,
@@ -152,7 +159,8 @@ export class AppController {
     }
     const now = this.sim.clock.now;
     for (const c of this.sim.deliveryCards()) {
-      if (DONE_STATES.has(c.dispatchState)) {
+      if (!c.customer) continue; // 실서버: 고객 위치를 읽지 않는다(개인정보)
+      if (c.dispatchState && DONE_STATES.has(c.dispatchState)) {
         const at = this.doneAt.get(c.deliveryId) ?? now;
         this.doneAt.set(c.deliveryId, at);
         if (now - at > KEEP_DONE_SEC) {

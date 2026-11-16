@@ -28,7 +28,9 @@ export type RiderPhase =
   | 'WAIT_PICKUP_REFLECT'
   | 'TO_CUSTOMER'
   | 'AT_CUSTOMER'
-  | 'STOPPED';
+  | 'STOPPED'
+  /** 실서버 읽기 — 이 브라우저가 움직이지 않는 라이더(위치만 조회) */
+  | 'REMOTE';
 
 export const PHASE_LABEL: Record<RiderPhase, string> = {
   PREPARING: '준비(가입·운행 시작)',
@@ -42,6 +44,7 @@ export const PHASE_LABEL: Record<RiderPhase, string> = {
   TO_CUSTOMER: '고객으로 이동',
   AT_CUSTOMER: '고객 도착 — 전달',
   STOPPED: '멈춤',
+  REMOTE: '실서버(읽기만)',
 };
 
 /** 제안을 어떻게 할지 — 순수 함수(시험용). */

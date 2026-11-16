@@ -10,8 +10,16 @@ export function RightPanel() {
   const [tab, setTab] = useState<Tab>('deliveries');
   const m = sim.metrics();
   const t = (at: number) => seoulTime(sim.clock.epochMs(at));
+  const diag = sim.diagnostics();
   return (
     <aside className="panel right" aria-label="배송·로그">
+      {diag.length > 0 && (
+        <ul className="diag" aria-label="연결 상태">
+          {diag.map((d) => (
+            <li key={d}>{d}</li>
+          ))}
+        </ul>
+      )}
       <section className="metrics">
         <Stat label="완료" value={String(m.completed)} />
         <Stat label="진행 중" value={String(m.inProgress)} />
@@ -46,13 +54,19 @@ export function RightPanel() {
                 {/* 두 서비스의 두 상태를 출처와 함께(docs/design.md §4) */}
                 <div className="states">
                   <span className="src">배차</span>
-                  <code>{c.dispatchState}</code>
+                  <code>{c.dispatchState ?? '(아직 못 읽음)'}</code>
                   <span className="src">수행</span>
                   <code>{c.executionState ?? '(사본 없음)'}</code>
+                  <span className="src">출고</span>
+                  <code>{c.shipmentId ?? (c.dispatchState ? '(dispatch 에 없음)' : '—')}</code>
                 </div>
               </li>
             ))}
-            {sim.deliveryCards().length === 0 && <li className="empty">아직 배송이 없다 — MOCK 주문이 들어오면 생긴다.</li>}
+            {sim.deliveryCards().length === 0 && (
+              <li className="empty">
+                {sim.mode === 'mock' ? '아직 배송이 없다 — MOCK 주문이 들어오면 생긴다.' : '아직 배송이 없다 — 점원 배차 요청 뒤 생긴다.'}
+              </li>
+            )}
           </ul>
         )}
         {tab === 'events' && (

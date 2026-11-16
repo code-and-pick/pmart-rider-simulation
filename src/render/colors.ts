@@ -1,5 +1,5 @@
 import type { RiderPhase } from '../sim/rider';
-import type { DeliveryCard } from '../sim/simulation';
+import type { DeliveryCard } from '../sim/world';
 
 /** 라이더 엔진 단계별 고리 색 */
 export const PHASE_COLOR: Record<RiderPhase, string> = {
@@ -14,6 +14,7 @@ export const PHASE_COLOR: Record<RiderPhase, string> = {
   TO_CUSTOMER: '#ff8a3d',
   AT_CUSTOMER: '#2fbf71',
   STOPPED: '#e5484d',
+  REMOTE: '#5b6b86',
 };
 
 /** 고객 핀 색 — 배차 상태 기준(출처 dispatch) */

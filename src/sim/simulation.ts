@@ -8,11 +8,11 @@
 import { MockBackend, type MDelivery } from '../backend/mock/MockBackend';
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
 import { DEFAULT_PARAMS, simRiderId, type SimParams } from '../config';
-import type { DispatchState, ExecutionState } from '../domain/contract';
 import { destination, type LatLng } from '../util/geo';
 import { Rng } from '../util/rng';
 import { mockStartEpochMs, SimClock } from './clock';
 import { VirtualRider, type RiderTrip } from './rider';
+import type { DeliveryCard, MetricsSummary, World } from './world';
 
 const SUBSTEP = 0.25;
 const RING = 300;
@@ -23,32 +23,9 @@ export interface NoteRecord {
   text: string;
 }
 
-/** 화면 배송 카드 — 두 상태를 출처와 함께(docs/design.md §4). */
-export interface DeliveryCard {
-  deliveryId: string;
-  shipmentId: string;
-  dispatchState: DispatchState;
-  /** execution 사본이 아직 없으면 null(DeliveryCreated 반영 전) */
-  executionState: ExecutionState | null;
-  riderId: string | null;
-  radiusKm: number | null;
-  customer: LatLng;
-  createdAt: number;
-}
-
-export interface MetricsSummary {
-  completed: number;
-  inProgress: number;
-  dispatchFailed: number;
-  /** 평균 초 — 표본이 없으면 null */
-  offerToAccept: number | null;
-  acceptToStore: number | null;
-  storeWait: number | null;
-  pickupToComplete: number | null;
-  apiErrors: number;
-}
-
-export class Simulation {
+export class Simulation implements World {
+  readonly mode = 'mock' as const;
+  readonly canChangeSpeed = true;
   readonly clock: SimClock;
   readonly backend: MockBackend;
   readonly riders: VirtualRider[] = [];
@@ -137,6 +114,14 @@ export class Simulation {
     return [...this.backend.deliveries.values()].map((d) => card(d)).sort((a, b) => b.createdAt - a.createdAt);
   }
 
+  diagnostics(): string[] {
+    return [];
+  }
+
+  addRider(): void {
+    this.startRiders(1);
+  }
+
   metrics(): MetricsSummary {
     const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
     const done = this.trips.filter((t) => t.completedAt !== undefined);
@@ -167,6 +152,7 @@ function card(d: MDelivery): DeliveryCard {
   const at = d.d.attempts[d.d.attempts.length - 1];
   return {
     deliveryId: d.deliveryId,
+    orderId: d.orderId,
     shipmentId: d.shipmentId,
     dispatchState: d.d.state,
     executionState: d.x.exists ? d.x.state : null,

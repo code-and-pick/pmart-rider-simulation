@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideLanRequest, isLoopback } from '../server/lanPolicy';
+import { decideLanRequest, isListedSimRider, isLoopback } from '../../server/lanPolicy';
 
 const LAN = '192.168.0.55';
 const ME = '127.0.0.1';
@@ -55,6 +55,14 @@ describe('LAN 다른 기기 가드 (docs/design.md §6-4)', () => {
     expect(decideLanRequest('GET', '/api/v1/riders/me/settings', LAN)).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
     expect(decideLanRequest('GET', '/api/internal/x', LAN)).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
     expect(decideLanRequest('GET', '/api/v1/deliveries/DL-1/dispatch/extra', LAN)).toMatchObject({ allow: false });
+  });
+
+  it('다른 기기의 X-Sim-Rider 는 시뮬레이터 라이더 목록(RD-sim-01~20)만', () => {
+    expect(isListedSimRider('RD-sim-01')).toBe(true);
+    expect(isListedSimRider('RD-sim-20')).toBe(true);
+    for (const id of ['RD-sim-00', 'RD-sim-21', 'RD-sim-1', 'RD-sim-001', 'RD-claude-01', 'RD-0001', undefined]) {
+      expect(isListedSimRider(id), String(id)).toBe(false);
+    }
   });
 
   it('토큰 경로는 루프백만', () => {

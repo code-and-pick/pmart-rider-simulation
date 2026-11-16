@@ -38,7 +38,7 @@ npm test           # vitest — 화면 없이
 npm run typecheck  # src·test(tsconfig.json) + vite.config·server(tsconfig.node.json)
 npm run build
 ```
-- 구조: `src/domain/contract.ts`(계약 사본, 머리에 버전) · `src/backend/port.ts`(`RiderPort`) · `src/backend/mock/MockBackend.ts`(계약 의미 흉내 + MOCK 에서 다른 서비스 대신) · `src/sim/rider.ts`(가상 라이더 상태기계 — 포트만 봄) · `src/sim/simulation.ts`(시계·로그·지표) · `src/render/`(`MapSurface` — 카카오 / 좌표 평면, 공용 HTML 마커) · `src/app/controller.ts`(진행 타이머·rAF 그리기·4Hz 패널) · `src/config.ts`(근거 태그 수치) · `server/`(Vite 개발 서버 플러그인 — Node 전용. 다른 기기 가드 `lanPolicy.ts`, P2 에 토큰 서명. **서명키를 읽는 코드는 `server/` 에만**).
+- 구조: `src/domain/contract.ts`(계약 사본, 머리에 버전) · `src/backend/port.ts`(`RiderPort`) · `src/backend/mock/MockBackend.ts`(계약 의미 흉내 + MOCK 에서 다른 서비스 대신) · `src/sim/rider.ts`(가상 라이더 상태기계 — 포트만 봄) · `src/sim/simulation.ts`(시계·로그·지표) · `src/render/`(`MapSurface` — 카카오 / 좌표 평면, 공용 HTML 마커) · `src/app/controller.ts`(진행 타이머·rAF 그리기·4Hz 패널) · `src/backend/http/HttpBackend.ts`(실서버 — 토큰 없이 `X-Sim-Rider`/`X-Sim-Actor` 만) · `src/sim/realWorld.ts`(실서버 읽기 화면, `?mode=http`) · `src/config.ts`(근거 태그 수치) · `server/`(Vite 개발 서버 플러그인 — Node 전용: 다른 기기 가드 `lanPolicy.ts`, 시험 라이더 토큰 `riderToken.ts`, 관찰 계정 `staffToken.ts`, 비밀 파일 `secrets.ts`, 붙이기 `devServer.ts`. **서명키·비밀번호를 읽는 코드는 `server/` 에만, 토큰은 브라우저로 보내지 않는다**). 시험: `test/server/*`(tsconfig.node.json) · 나머지 `test/*`.
 - 저장소 루트의 `env.download` 같은 키 파일은 `.gitignore` 에 걸리지 않는다 — 커밋은 경로를 지정해서만 올린다(`git add -A` 금지).
 
 ## 참고 문서 (읽기 전용)
