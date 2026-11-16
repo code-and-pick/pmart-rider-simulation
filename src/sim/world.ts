@@ -50,9 +50,27 @@ export interface PhaseSegment {
   hint: string;
 }
 
+/** MOCK 시나리오 조절 바 — 실패를 보려고 바꾸는 값(모두 [시뮬]) */
+export interface ScenarioKnobs {
+  /** 시간당 주문 수 */
+  ordersPerHour: number;
+  /** 라이더 수락 확률(0~1) — 나머지는 거절·무응답 */
+  acceptProbability: number;
+  /** 포장 시간 배율 */
+  packTimeScale: number;
+  /** 고객 부재 확률(0~1) → 전달 실패 */
+  customerAbsentRate: number;
+  /** 쓰기 응답이 사라질 확률(0~1) → 같은 키 재전송 */
+  networkDropRate: number;
+}
+
 export interface MetricsSummary {
   /** 전달 완료(지금까지) */
   completed: number;
+  /** 전달 실패(등록·확정 — 지금까지) */
+  deliveryFailed: number;
+  /** 응답이 끊긴 요청 수(재전송으로 이어짐) */
+  responseLost: number;
   /** 배정돼 배송 중(가게로·가게에서·고객에게) */
   delivering: number;
   /** 배차 요청 뒤 라이더를 찾는 중 */
@@ -101,4 +119,8 @@ export interface World {
   readonly operating: boolean;
   /** 운행 종료 — 진행 중 배송은 끝낸 뒤 OFF_DUTY */
   stopOperation(): void;
+  /** 시나리오 조절 바를 쓸 수 있나(MOCK 만 — 실서버는 실제 결과만) */
+  readonly tunable: boolean;
+  getKnobs(): ScenarioKnobs;
+  setKnobs(k: Partial<ScenarioKnobs>): void;
 }

@@ -8,7 +8,7 @@ import { KakaoSurface } from '../render/KakaoSurface';
 import { PlaneSurface } from '../render/PlaneSurface';
 import type { MapSurface } from '../render/surface';
 import { PHASE_LABEL } from '../sim/rider';
-import type { World } from '../sim/world';
+import type { ScenarioKnobs, World } from '../sim/world';
 
 /** useSyncExternalStore 로 구독하는 작은 변경 알림. */
 export class Emitter {
@@ -52,6 +52,8 @@ export type MapStatus = { kind: 'loading' } | { kind: 'kakao' } | { kind: 'plane
 const DONE_STATES = new Set(['CLOSED', 'CANCELLED_BEFORE_PICKUP', 'DISPATCH_FAILED', 'BLOCKED']);
 /** 끝난 배송 핀을 지도에 남겨 두는 시간(시뮬 초) [시뮬] */
 const KEEP_DONE_SEC = 90;
+/** 실패로 끝난 배송 핀은 더 오래 남긴다(시뮬 초) [시뮬] — 빠른 배속에서도 실패 위치가 보이게 */
+const KEEP_FAILED_SEC = 600;
 
 export class AppController {
   /** 패널 다시 그리기 박자 */
@@ -212,6 +214,20 @@ export class AppController {
     this.ticker.emit();
   }
 
+  /** 시나리오 조절 바 열림(MOCK) */
+  scenarioOpen = false;
+
+  toggleScenario() {
+    if (!this.sim.tunable) return;
+    this.scenarioOpen = !this.scenarioOpen;
+    this.ticker.emit();
+  }
+
+  setKnobs(k: Partial<ScenarioKnobs>) {
+    this.sim.setKnobs(k);
+    this.ticker.emit();
+  }
+
   /** 지도 위 물체를 시뮬레이션 상태에 맞춘다 — 매 프레임. */
   private syncMap() {
     const s = this.surface;
@@ -242,7 +258,7 @@ export class AppController {
         this.lastFollowAt = performance.now();
         s.panTo(r.pos);
       }
-      const kind = r.phase === 'TO_STORE' ? 'TO_STORE' : r.phase === 'TO_CUSTOMER' ? 'TO_CUSTOMER' : null;
+      const kind = r.phase === 'TO_STORE' || r.phase === 'RETURNING' ? 'TO_STORE' : r.phase === 'TO_CUSTOMER' ? 'TO_CUSTOMER' : null;
       if (kind && r.path) s.upsertRoute(r.id, r.path, kind, r.pathKind === 'ROAD');
       else s.removeRoute(r.id);
     }
@@ -252,7 +268,8 @@ export class AppController {
       if (c.dispatchState && DONE_STATES.has(c.dispatchState)) {
         const at = this.doneAt.get(c.deliveryId) ?? now;
         this.doneAt.set(c.deliveryId, at);
-        if (now - at > KEEP_DONE_SEC) {
+        const keep = c.executionState === 'FAILED' || c.dispatchState === 'DISPATCH_FAILED' ? KEEP_FAILED_SEC : KEEP_DONE_SEC;
+        if (now - at > keep) {
           s.removeCustomer(c.deliveryId);
           continue;
         }

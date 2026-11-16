@@ -23,6 +23,13 @@ export function Metrics({ m }: { m: MetricsSummary }) {
         <Count n={m.delivering} label="배송 중" tone="active" hint="라이더가 배정돼 가게로·가게에서·고객에게 가는 중인 배송" />
         <Count n={m.searching} label="라이더 찾는 중" tone="wait" hint="점원 배차 요청 뒤 아직 라이더가 수락하지 않은 배송(반경 1→2→3km 제안 중)" />
         <Count n={m.dispatchFailed} label="배차 실패" tone="fail" hint="반경을 다 넓히고 재시도해도 라이더를 못 찾은 배송" />
+        <Count n={m.deliveryFailed} label="전달 실패" tone="fail" hint="고객 부재 등으로 라이더가 전달 실패를 등록한 배송(확정 대기 + 확정)" />
+        <Count
+          n={m.responseLost}
+          label="응답 끊김"
+          tone="fail"
+          hint="응답이 오지 않은 요청 수 — 라이더가 같은 키로 다시 보내 중복 없이 이어진다(재전송 횟수)"
+        />
       </div>
       <div className="phases">
         {m.phases ? (

@@ -13,7 +13,7 @@ import { Rng } from '../util/rng';
 import { mockStartEpochMs, SimClock } from './clock';
 import { VirtualRider, type RiderTrip } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
-import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, World } from './world';
+import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, ScenarioKnobs, World } from './world';
 
 const SUBSTEP = 0.25;
 const RING = 300;
@@ -37,10 +37,12 @@ export class Simulation implements World {
   /** MFC·고객 이동 경로(기본 직선 — 시험, 화면은 DevServerRoutes) */
   private readonly routes: RouteProvider;
 
-  constructor(
-    readonly params: SimParams = DEFAULT_PARAMS,
-    opts: { startEpochMs?: number; routes?: RouteProvider } = {},
-  ) {
+  /** 이 시뮬레이션만의 설정 사본 — 조절 바가 바꿔도 기본값(DEFAULT_PARAMS)은 그대로 */
+  readonly params: SimParams;
+
+  constructor(params: SimParams = DEFAULT_PARAMS, opts: { startEpochMs?: number; routes?: RouteProvider } = {}) {
+    this.params = { ...params, mock: { ...params.mock } };
+    params = this.params;
     this.routes = opts.routes ?? straightRoutes;
     this.clock = new SimClock(opts.startEpochMs ?? mockStartEpochMs());
     this.rng = new Rng(params.seed);
@@ -139,6 +141,33 @@ export class Simulation implements World {
     /* MOCK 은 해당 없음 */
   }
 
+  readonly tunable = true;
+
+  getKnobs(): ScenarioKnobs {
+    const p = this.params;
+    return {
+      ordersPerHour: p.mock.ordersPerHour,
+      acceptProbability: p.acceptProbability,
+      packTimeScale: p.mock.packTimeScale,
+      customerAbsentRate: p.customerAbsentRate,
+      networkDropRate: p.mock.networkDropRate,
+    };
+  }
+
+  /** 조절 바 — 바로 반영(라이더·MOCK 백엔드가 같은 설정 사본을 읽는다). 주문량이 바뀌면 다음 주문 시각을 다시 뽑는다. */
+  setKnobs(k: Partial<ScenarioKnobs>): void {
+    const p = this.params;
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    if (k.ordersPerHour !== undefined && k.ordersPerHour !== p.mock.ordersPerHour) {
+      p.mock.ordersPerHour = clamp(k.ordersPerHour, 0, 200);
+      this.backend.resetOrderClock();
+    }
+    if (k.acceptProbability !== undefined) p.acceptProbability = clamp(k.acceptProbability, 0, 1);
+    if (k.packTimeScale !== undefined) p.mock.packTimeScale = clamp(k.packTimeScale, 0.1, 10);
+    if (k.customerAbsentRate !== undefined) p.customerAbsentRate = clamp(k.customerAbsentRate, 0, 1);
+    if (k.networkDropRate !== undefined) p.mock.networkDropRate = clamp(k.networkDropRate, 0, 0.9);
+  }
+
   /**
    * 화면 지표. 시간은 시뮬레이션 시각(배속 반영)이고, 구간 평균은 모두 같은 "완료된 배송 n 건"에서 잰다.
    *  - 라이더 찾기: 점원 배차 요청(배송 생성) → 라이더 수락·배정
@@ -150,8 +179,10 @@ export class Simulation implements World {
     let searching = 0;
     let delivering = 0;
     let failed = 0;
+    let deliveryFailed = 0;
     for (const d of this.backend.deliveries.values()) {
-      if (d.d.state === 'DISPATCH_FAILED') failed++;
+      if (d.x.state === 'FAILURE_REPORTED' || d.x.state === 'FAILED') deliveryFailed++;
+      else if (d.d.state === 'DISPATCH_FAILED') failed++;
       else if (d.d.state === 'CREATED' || d.d.state === 'DISPATCHING') searching++;
       else if (d.d.state === 'ASSIGNED' || d.d.state === 'PICKED_UP') delivering++;
     }
@@ -163,7 +194,8 @@ export class Simulation implements World {
       return [[t.acceptedAt - created, t.storeArrivedAt - t.acceptedAt, t.pickedUpAt - t.storeArrivedAt, t.completedAt - t.pickedUpAt]];
     });
     const completed = this.trips.filter((t) => t.completedAt !== undefined).length;
-    if (!full.length) return { completed, delivering, searching, dispatchFailed: failed, phases: null, timeBasis: 'sim', apiErrors: this.apiErrors };
+    const base = { completed, deliveryFailed, responseLost: this.apiErrors, delivering, searching, dispatchFailed: failed, timeBasis: 'sim' as const, apiErrors: this.apiErrors };
+    if (!full.length) return { ...base, phases: null };
     const avg = (i: number) => full.reduce((a, r) => a + (r[i] as number), 0) / full.length;
     const segments: PhaseSegment[] = [
       { key: 'findRider', label: '라이더 찾기', sec: avg(0), hint: '점원 배차 요청(배송 생성) → 라이더 수락·배정' },
@@ -171,15 +203,7 @@ export class Simulation implements World {
       { key: 'atStore', label: '가게에서 대기·인계', sec: avg(2), hint: '가게 도착 → 픽업 완료(포장 끝 기다림 + QR 인계 + 반영 대기)' },
       { key: 'toCustomer', label: '고객에게 이동·전달', sec: avg(3), hint: '픽업 완료 → 전달 완료(이동 + 문 앞 + 사진 + 완료 처리)' },
     ];
-    return {
-      completed,
-      delivering,
-      searching,
-      dispatchFailed: failed,
-      phases: { n: full.length, totalSec: segments.reduce((a, s) => a + s.sec, 0), segments },
-      timeBasis: 'sim',
-      apiErrors: this.apiErrors,
-    };
+    return { ...base, phases: { n: full.length, totalSec: segments.reduce((a, s) => a + s.sec, 0), segments } };
   }
 }
 

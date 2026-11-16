@@ -16,7 +16,7 @@ import { SimClock } from './clock';
 import { VirtualRider } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
 import type { LatLng } from '../util/geo';
-import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, RiderView, World } from './world';
+import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, RiderView, ScenarioKnobs, World } from './world';
 
 const RING = 300;
 const SUBSTEP = 0.25;
@@ -152,7 +152,7 @@ export class RealWorld implements World {
         this.backend.asRider(r.id),
         this.backend.observer,
         this.clock,
-        this.params,
+        { ...this.params, customerAbsentRate: 0 }, // 실서버에는 가짜 전달 실패를 만들지 않는다(조절 바는 MOCK 만)
         home,
         r.pos ?? home,
         {
@@ -164,6 +164,23 @@ export class RealWorld implements World {
       this.driven.set(r.id, v);
       void v.run();
     });
+  }
+
+  /** 실서버는 실제 결과만 — 시나리오 조절 바 없음(실패를 일부러 만들지 않는다) */
+  readonly tunable = false;
+
+  getKnobs(): ScenarioKnobs {
+    return {
+      ordersPerHour: 0,
+      acceptProbability: this.params.acceptProbability,
+      packTimeScale: 1,
+      customerAbsentRate: 0,
+      networkDropRate: 0,
+    };
+  }
+
+  setKnobs(): void {
+    /* 실서버는 조절하지 않는다 */
   }
 
   /** 운행 종료 — 진행 중 배송은 끝낸 뒤 OFF_DUTY(VirtualRider.requestStop). */
@@ -331,10 +348,12 @@ export class RealWorld implements World {
     let delivering = 0;
     let searching = 0;
     let failed = 0;
+    let deliveryFailed = 0;
     const full: number[][] = [];
     for (const r of this.rows.values()) {
       const s = r.summary;
       if (s.state === 'COMPLETED') completed++;
+      else if (s.state === 'FAILURE_REPORTED' || s.state === 'FAILED') deliveryFailed++;
       else if (r.dispatch?.state === 'DISPATCH_FAILED') failed++;
       else if (s.state === 'UNASSIGNED') searching++;
       else if (!TERMINAL_X.has(s.state ?? '')) delivering++;
@@ -343,7 +362,7 @@ export class RealWorld implements World {
         full.push([(t[1] as number) - (t[0] as number), (t[2] as number) - (t[1] as number), (t[3] as number) - (t[2] as number)]);
       }
     }
-    const base = { completed, delivering, searching, dispatchFailed: failed, timeBasis: 'real' as const, apiErrors: this.apiErrors };
+    const base = { completed, deliveryFailed, responseLost: this.apiErrors, delivering, searching, dispatchFailed: failed, timeBasis: 'real' as const, apiErrors: this.apiErrors };
     if (!full.length) return { ...base, phases: null };
     const avg = (i: number) => full.reduce((a, r) => a + (r[i] as number), 0) / full.length;
     const segments: PhaseSegment[] = [

@@ -14,6 +14,7 @@
 import { CONTRACT, isSimRiderId, type MockParams } from '../../config';
 import {
   ApiProblem,
+  ResultUnknown,
   type AccountRestriction,
   type AssignmentCancellationRequest,
   type Center,
@@ -316,10 +317,16 @@ export class MockBackend implements RiderPort {
     const h = this.clock.seoulHour();
     const { startHour, endHour } = CONTRACT.dispatchHours;
     if (h < startHour || h >= endHour) return;
+    if (this.params.ordersPerHour <= 0) return; // 조절 바 0 = 주문 없음
     while (this.clock.now >= this.nextOrderAt) {
       this.createOrder();
-      this.nextOrderAt += this.rng.exp(3600 / Math.max(0.1, this.params.ordersPerHour));
+      this.nextOrderAt += this.rng.exp(3600 / this.params.ordersPerHour);
     }
+  }
+
+  /** 주문량이 바뀌었을 때(조절 바) 다음 주문 시각을 새 주문량으로 다시 뽑는다 */
+  resetOrderClock(): void {
+    this.nextOrderAt = this.clock.now + (this.params.ordersPerHour > 0 ? this.rng.exp(3600 / this.params.ordersPerHour) : 0);
   }
 
   /** 주문 하나 → (pickSec 뒤) 점원 배차 요청 → (packMinutes 뒤) 출하 대기. 시험에서도 부른다. */
@@ -343,7 +350,7 @@ export class MockBackend implements RiderPort {
         sealedAt: null,
       });
     }
-    const packMinutes = opts.packMinutes ?? this.rng.range(p.packMinutes[0], p.packMinutes[1]);
+    const packMinutes = opts.packMinutes ?? this.rng.range(p.packMinutes[0], p.packMinutes[1]) * p.packTimeScale;
     const ship: MShipment = {
       shipmentId,
       orderId,
@@ -570,12 +577,25 @@ export class MockBackend implements RiderPort {
         if ('err' in prev.outcome) throw prev.outcome.err;
         return prev.outcome.ok as T;
       }
+      // 응답 끊김 흉내(조절 바 networkDropRate): 절반은 처리 전에 끊김(아무 일도 안 일어남),
+      // 절반은 처리한 뒤 응답만 사라짐(서버에는 반영됨) — 어느 쪽이든 호출자는 같은 키로 다시 보내야 하고, 두 번째는 같은 결과를 받는다.
+      const drop = this.params.networkDropRate > 0 && this.rng.next() < this.params.networkDropRate;
+      const dropBefore = drop && this.rng.next() < 0.5;
+      if (dropBefore) {
+        this.log(actor, method, path, 'ERR', 'NETWORK_DROP_BEFORE');
+        throw new ResultUnknown(`응답 없음(처리 전 끊김): ${method} ${path}`);
+      }
       try {
         const v = fn();
         this.idem.set(k, { fp, outcome: { ok: v } });
+        if (drop) {
+          this.log(actor, method, path, 'ERR', 'NETWORK_DROP_AFTER');
+          throw new ResultUnknown(`응답 없음(처리 뒤 끊김): ${method} ${path}`);
+        }
         this.log(actor, method, path, okStatus);
         return v;
       } catch (e) {
+        if (e instanceof ResultUnknown) throw e;
         // 업무 거절(4xx)만 같은 결과로 기억한다
         if (e instanceof ApiProblem && e.status < 500 && e.code !== 'IDEMPOTENCY_CONFLICT') this.idem.set(k, { fp, outcome: { err: e } });
         this.log(actor, method, path, statusOf(e), e instanceof ApiProblem ? e.code : undefined);
@@ -1461,7 +1481,14 @@ export class MockBackend implements RiderPort {
               contactAttempts: body.contactAttempts?.length ?? 0,
               reportedAt: b.clock.iso(),
             };
-            b.xHistory(del, 'FAILURE_REPORTED', 'RIDER');
+            b.xHistory(del, 'FAILURE_REPORTED', 'RIDER'); // 실패 등록 자체는 사건 없음(계약 0.3.0 — 확정 때 DeliveryFailed)
+            // 운영자 확정을 MOCK 이 대신(failureConfirmSec 뒤) — FAILED + DeliveryFailed, dispatch CLOSED(라이더 진행 중 수에서 빠짐)
+            b.schedule(b.params.failureConfirmSec, () => {
+              if (del.x.state !== 'FAILURE_REPORTED') return;
+              b.xHistory(del, 'FAILED', 'OPERATOR', 'mock-operator');
+              b.emit('DeliveryFailed', `${deliveryId} 전달 실패 확정(MOCK 운영자)`, { deliveryId, riderId: me });
+              b.setDispatchState(del, 'CLOSED');
+            });
             return b.cmd(o.idempotencyKey, { version: del.x.version });
           },
           { key: o.idempotencyKey, body },

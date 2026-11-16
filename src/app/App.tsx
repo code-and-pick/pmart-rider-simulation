@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
 import { LeftPanel } from '../ui/LeftPanel';
 import { RightPanel } from '../ui/RightPanel';
+import { ScenarioBar } from '../ui/ScenarioBar';
 import { TopBar } from '../ui/TopBar';
 import type { AppController } from './controller';
 
@@ -19,6 +20,7 @@ export function App({ controller }: { controller: AppController }) {
     <Ctx.Provider value={controller}>
       <div className="app">
         <TopBar />
+        <ScenarioSlot />
         <div className="body">
           <LeftPanel />
           <MapView />
@@ -27,6 +29,11 @@ export function App({ controller }: { controller: AppController }) {
       </div>
     </Ctx.Provider>
   );
+}
+
+function ScenarioSlot() {
+  const app = useApp();
+  return app.scenarioOpen && app.sim.tunable ? <ScenarioBar /> : null;
 }
 
 function MapView() {

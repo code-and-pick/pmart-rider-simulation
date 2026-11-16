@@ -39,6 +39,10 @@ export type RiderPhase =
   | 'TO_CUSTOMER'
   | 'AT_CUSTOMER'
   | 'STOPPED'
+  /** 전달 실패 처리(연락·실패 등록·확정 대기) */
+  | 'FAILING'
+  /** 실패한 상품 들고 MFC 로 */
+  | 'RETURNING'
   /** 실서버 읽기 — 이 브라우저가 움직이지 않는 라이더(위치만 조회) */
   | 'REMOTE';
 
@@ -54,6 +58,8 @@ export const PHASE_LABEL: Record<RiderPhase, string> = {
   TO_CUSTOMER: '고객으로 이동',
   AT_CUSTOMER: '고객 도착 — 전달',
   STOPPED: '멈춤',
+  FAILING: '전달 실패 처리',
+  RETURNING: '상품 들고 MFC 복귀',
   REMOTE: '실서버(읽기만)',
 };
 
@@ -79,6 +85,8 @@ export interface RiderTrip {
   readyAt?: number;
   pickedUpAt?: number;
   completedAt?: number;
+  /** 전달 실패 등록 시각(완료 대신) */
+  failedAt?: number;
 }
 
 export interface RiderHooks {
@@ -117,7 +125,8 @@ export class VirtualRider {
   private lastSampleAt = -Infinity;
   private lastUploadAt = -Infinity;
   private uploading = false;
-  private uploadKey: string | null = null;
+  /** 보내는 중인 위치 묶음 — 응답이 끊기면 이 키·이 점 그대로 다시 보낸다 */
+  private pendingUpload: { key: string; points: { lat: number; lng: number; recordedAt: string; deliveryId?: string; accuracyM: number }[] } | null = null;
   private readonly api: RiderApi;
 
   constructor(
@@ -188,24 +197,24 @@ export class VirtualRider {
       this.trail.push({ lat: this.pos.lat, lng: this.pos.lng, recordedAt: this.clock.iso(now), deliveryId: this.deliveryId ?? undefined });
       if (this.trail.length > CONTRACT.locationBatchMax) this.trail.splice(0, this.trail.length - CONTRACT.locationBatchMax);
     }
-    if (this.uploading || now - this.lastUploadAt < this.params.locationUploadIntervalSec || !this.trail.length) return;
+    if (this.uploading || now - this.lastUploadAt < this.params.locationUploadIntervalSec) return;
+    // 보내는 중인 묶음이 있으면(앞서 응답이 끊김) 그 묶음을 같은 키·같은 점으로 다시 — 새 점을 붙이면 같은 키·다른 본문(409 IDEMPOTENCY_CONFLICT)
+    if (!this.pendingUpload) {
+      if (!this.trail.length) return;
+      const points = this.trail.splice(0, this.trail.length).map((p) => ({ ...p, accuracyM: 8 }));
+      this.pendingUpload = { key: this.keys.next('loc'), points };
+    }
+    const batch = this.pendingUpload;
     this.uploading = true;
-    const points = this.trail.slice();
-    const key = this.uploadKey ?? this.keys.next('loc');
-    this.uploadKey = key;
     this.api
-      .uploadLocations({ points: points.map((p) => ({ ...p, accuracyM: 8 })) }, { idempotencyKey: key })
+      .uploadLocations({ points: batch.points }, { idempotencyKey: batch.key })
       .then(() => {
-        this.trail.splice(0, points.length);
-        this.uploadKey = null;
+        this.pendingUpload = null;
         this.lastUploadAt = this.clock.now;
       })
       .catch((e: unknown) => {
-        // 응답 없음 → 같은 키·같은 점으로 다음 박자에 다시. 거절이면 버리고 새로.
-        if (!(e instanceof ResultUnknown)) {
-          this.trail.splice(0, points.length);
-          this.uploadKey = null;
-        }
+        // 응답 없음 → 다음 박자에 같은 묶음 그대로. 거절이면 그 묶음은 버린다.
+        if (!(e instanceof ResultUnknown)) this.pendingUpload = null;
         this.lastUploadAt = this.clock.now;
       })
       .finally(() => {
@@ -438,9 +447,9 @@ export class VirtualRider {
       this.hooks.onTripDone(trip);
       return;
     }
-    await this.write(this.opts('arrive-store', version), (o) =>
-      this.api.reportStoreArrival(deliveryId, { occurredAt: this.clock.iso(), location: { ...this.pos } }, o),
-    );
+    // 본문은 한 번만 만든다 — 응답이 끊겨 같은 키로 다시 보낼 때 시각·위치가 바뀌면 같은 키·다른 본문(409 IDEMPOTENCY_CONFLICT)
+    const storeBody = { occurredAt: this.clock.iso(), location: { ...this.pos } };
+    await this.write(this.opts('arrive-store', version), (o) => this.api.reportStoreArrival(deliveryId, storeBody, o));
     trip.storeArrivedAt = this.clock.now;
 
     // 5. 인계 — 출고·포장 QR 은 관찰 계정으로 읽는다(RR-03 시뮬레이터 가정 = 라벨을 본다)
@@ -479,11 +488,15 @@ export class VirtualRider {
     // 8. 도착 → 사진 → 완료
     this.phase = 'AT_CUSTOMER';
     const cur = await this.api.getExecution(deliveryId);
-    await this.write(this.opts('arrive-customer', cur.version), (o) =>
-      this.api.reportCustomerArrival(deliveryId, { occurredAt: this.clock.iso(), location: { ...this.pos } }, o),
-    );
+    const arriveBody = { occurredAt: this.clock.iso(), location: { ...this.pos } }; // 한 번만 — 재전송 때 같은 본문
+    await this.write(this.opts('arrive-customer', cur.version), (o) => this.api.reportCustomerArrival(deliveryId, arriveBody, o));
     await this.wait(20); // 문 앞까지 [시뮬]
     const photo = await this.write(this.opts('photo'), (o) => this.api.uploadEvidencePhoto(deliveryId, testPhoto(), o));
+    // 고객 부재(조절 바 customerAbsentRate) — 0 이면 난수를 쓰지 않는다(기존 흐름·시험 그대로)
+    if (this.params.customerAbsentRate > 0 && this.rng.next() < this.params.customerAbsentRate) {
+      await this.failDelivery(deliveryId, trip, photo.photoRef);
+      return;
+    }
     const takenAt = this.clock.iso();
     const after = await this.api.getExecution(deliveryId);
     await this.write(this.opts('complete', after.version), (o) =>
@@ -497,6 +510,47 @@ export class VirtualRider {
     this.say(`전달 완료 ${deliveryId}`);
     this.hooks.onTripDone(trip);
     this.dropPoint = null;
+    this.target = null;
+  }
+
+  /**
+   * 전달 실패(고객 부재): 연락 2번(계약 — 고객 사유는 2회 이상 필수) → 문 앞 사진을 근거로 실패 등록(FAILURE_REPORTED, 아직 진행 중)
+   * → 운영자 확정(FAILED) 기다림 → 상품을 들고 MFC 로 복귀. 실패 확정은 라이더가 하지 않는다(execution 계약 — 운영자).
+   */
+  private async failDelivery(deliveryId: string, trip: RiderTrip, photoRef: string) {
+    this.phase = 'FAILING';
+    this.say('고객 부재 — 연락 2번 시도');
+    const first = this.clock.iso();
+    await this.wait(30); // 전화·메시지 [시뮬]
+    const second = this.clock.iso();
+    const x = await this.api.getExecution(deliveryId);
+    await this.write(this.opts('fail', x.version), (o) =>
+      this.api.reportFailure(
+        deliveryId,
+        {
+          reason: 'CUSTOMER_ABSENT',
+          detail: '고객 부재(시뮬레이터)',
+          evidenceRefs: [photoRef],
+          goodsLocation: 'WITH_RIDER',
+          contactAttempts: [
+            { attemptedAt: first, method: 'SAFE_NUMBER_CALL', result: 'NO_ANSWER' },
+            { attemptedAt: second, method: 'APP_MESSAGE', result: 'NO_ANSWER' },
+          ],
+          occurredAt: second,
+        },
+        o,
+      ),
+    );
+    trip.failedAt = this.clock.now;
+    this.say('전달 실패 등록 — 운영자 확정 기다림');
+    // 확정은 사람(운영자)이 한다 — 실서버면 오래 걸릴 수 있어 최대 30분만 기다리고, 그 뒤에도 상품은 들고 돌아간다
+    const v = await this.waitExecution(deliveryId, (s) => s === 'FAILED', 30 * 60);
+    this.say(v === null ? '실패 확정 안 됨(30분) — 상품 들고 MFC 로' : '실패 확정 — 상품 들고 MFC 로 복귀');
+    this.phase = 'RETURNING';
+    this.dropPoint = null;
+    await this.moveTo(this.home, this.params.riderSpeedMps, true);
+    this.say(`MFC 복귀 — ${deliveryId} 상품 반납(회수는 별도 배송)`);
+    this.hooks.onTripDone(trip);
     this.target = null;
   }
 
@@ -530,9 +584,8 @@ export class VirtualRider {
   /** 포장 하나: QR 허가 → 확정. 확정 결과를 모르면 판정 조회로 해소. fence 만료면 다시 찍는다. */
   private async handover(packageId: string, qrCode: string, deliveryId: string) {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const auth = await this.write(this.opts('ho-auth'), (o) =>
-        this.api.authorizeHandover(packageId, { riderId: this.id, deliveryId, scannedCode: qrCode, scannedAt: this.clock.iso() }, o),
-      );
+      const authBody = { riderId: this.id, deliveryId, scannedCode: qrCode, scannedAt: this.clock.iso() }; // 한 번만 — 재전송 때 같은 본문
+      const auth = await this.write(this.opts('ho-auth'), (o) => this.api.authorizeHandover(packageId, authBody, o));
       this.say(`QR 인계 ${packageId}`);
       await this.wait(3); // 포장을 받아 드는 시간 [시뮬]
       try {

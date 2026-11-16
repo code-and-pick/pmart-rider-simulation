@@ -59,6 +59,8 @@ export interface SimParams {
   assignmentReflectWaitSec: number;
   /** 제안을 받은 라이더가 수락할 확률 [시뮬] — 나머지는 거절 또는 무응답 만료(P4 시나리오에서 조정) */
   acceptProbability: number;
+  /** 고객 부재 확률 [시뮬] — 고객 도착 뒤 이 확률로 연락 2번·사진 → 전달 실패 등록(MOCK 조절 바, 실서버는 늘 0) */
+  customerAbsentRate: number;
   /** 제안을 보고 응답하기까지 걸리는 시간 범위(초) [시뮬] */
   offerResponseDelaySec: [number, number];
   /** 가게에서 출고 READY 를 기다리며 다시 볼 간격 [시뮬] */
@@ -98,6 +100,12 @@ export interface MockParams {
   fenceTtlSec: number;
   /** 사건이 다른 서비스 사본에 반영되는 지연 범위(초) [시뮬] — 예: DeliveryAssigned → execution ASSIGNED (docs/design.md §4) */
   eventLagSec: [number, number];
+  /** 포장 시간 배율 [시뮬] — 조절 바(1 = packMinutes 그대로) */
+  packTimeScale: number;
+  /** 쓰기 요청 응답이 사라질 확률 [시뮬] — 절반은 처리 전, 절반은 처리 뒤 응답만 사라짐(ResultUnknown → 같은 키 재전송 확인) */
+  networkDropRate: number;
+  /** 전달 실패 등록 → 운영자 확정까지 초 [시뮬] — MOCK 이 운영자 대신(실서버는 사람이 확정) */
+  failureConfirmSec: number;
 }
 
 export const DEFAULT_PARAMS: SimParams = {
@@ -111,6 +119,7 @@ export const DEFAULT_PARAMS: SimParams = {
   locationUploadIntervalSec: 5,
   assignmentReflectWaitSec: 30,
   acceptProbability: 0.9,
+  customerAbsentRate: 0,
   offerResponseDelaySec: [3, 15],
   storeWaitPollSec: 5,
   tokenRenewBeforeSec: 60,
@@ -128,6 +137,9 @@ export const DEFAULT_PARAMS: SimParams = {
     radiusStepSec: 60,
     fenceTtlSec: 120,
     eventLagSec: [0.5, 3],
+    packTimeScale: 1,
+    networkDropRate: 0,
+    failureConfirmSec: 60,
   },
   seed: 1,
 };
