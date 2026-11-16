@@ -122,6 +122,12 @@ export class Simulation implements World {
     this.startRiders(1);
   }
 
+  readonly operationLock = null;
+
+  startOperation(): void {
+    /* MOCK 은 시작할 때 이미 운행 */
+  }
+
   metrics(): MetricsSummary {
     const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
     const done = this.trips.filter((t) => t.completedAt !== undefined);

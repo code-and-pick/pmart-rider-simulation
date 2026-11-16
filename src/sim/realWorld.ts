@@ -1,4 +1,5 @@
-// 실서버 읽기(P2) — 백엔드에서 읽은 것만 그린다. 쓰기(가상 라이더 운행)는 P3.
+// 실서버 읽기(P2) + 가상 라이더 운행 자리(P3 — REAL_RIDER_GATE 로 잠김, 사용자 결정 대기).
+// 읽기는 백엔드에서 읽은 것만 그린다. 운행(쓰기)은 잠금이 풀린 뒤에만 VirtualRider 가 HttpBackend 로 한다.
 //
 // 읽는 것(모두 GET):
 //  - 관찰 계정: execution 직원 배송 찾기 GET /deliveries?mfcId= → 진행 중 배송의 dispatch GET /deliveries/{id}/dispatch
@@ -9,12 +10,16 @@
 
 import { HttpBackend } from '../backend/http/HttpBackend';
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
-import { DEFAULT_PARAMS, simRiderId, type SimParams } from '../config';
+import { DEFAULT_PARAMS, REAL_RIDER_GATE, simRiderId, type SimParams } from '../config';
 import { ApiProblem, type Delivery, type DomainEventType, type StaffDeliverySummary } from '../domain/contract';
 import { SimClock } from './clock';
+import { VirtualRider } from './rider';
 import type { DeliveryCard, MetricsSummary, RiderView, World } from './world';
 
 const RING = 300;
+const SUBSTEP = 0.25;
+/** 한 번에 따라잡는 최대 시간(초) [시뮬] — 그보다 오래 멈췄으면 시계만 맞춘다 */
+const MAX_CATCHUP_SEC = 600;
 const TERMINAL_X = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'RETURNED_TO_STORE']);
 /** 한 번 조회에서 dispatch 를 다시 읽는 배송 수 상한 [시뮬] — 게이트웨이 처리율 제한(주체 단위)을 아끼려고 */
 const DISPATCH_READS_PER_POLL = 15;
@@ -39,7 +44,9 @@ export class RealWorld implements World {
   readonly mode = 'http' as const;
   readonly clock: SimClock;
   readonly backend: HttpBackend;
-  readonly riders: RemoteRider[] = [];
+  private readonly remote: RemoteRider[] = [];
+  /** 이 브라우저가 움직이는 가상 라이더(P3 — 잠금이 풀린 뒤에만) */
+  private readonly driven = new Map<string, VirtualRider>();
   readonly apiLog: ApiCallRecord[] = [];
   readonly eventLog: DomainEventRecord[] = [];
   speed = 1;
@@ -60,13 +67,58 @@ export class RealWorld implements World {
       push(this.apiLog, r);
       if (r.status === 'ERR' || (typeof r.status === 'number' && r.status >= 500)) this.apiErrors++;
     });
-    for (let i = 0; i < params.riderCount; i++) this.riders.push(new RemoteRider(simRiderId(i)));
+    for (let i = 0; i < params.riderCount; i++) this.remote.push(new RemoteRider(simRiderId(i)));
     void this.checkAuth();
   }
 
-  /** 실서버는 실제 시각 1× — 박자가 늦어도 벽시계로 맞춘다 */
+  get riders(): RiderView[] {
+    return this.remote.map((r) => this.driven.get(r.id) ?? r);
+  }
+
+  get operationLock(): string | null {
+    if (!REAL_RIDER_GATE.operationAllowed) return '실서버 가상 라이더 운행 잠김 — 가입·운행 여부 사용자 결정 대기(RR-02·RR-07)';
+    if (this.driven.size) return '운행 중';
+    return null;
+  }
+
+  /** 가상 라이더를 실서버에서 움직인다(쓰기). 잠겨 있으면 아무것도 안 한다. */
+  startOperation(): void {
+    if (!REAL_RIDER_GATE.operationAllowed || this.driven.size) return;
+    this.remote.forEach((r, i) => {
+      const v = new VirtualRider(
+        i,
+        this.backend.asRider(r.id),
+        this.backend.observer,
+        this.clock,
+        this.params,
+        this.params.mfcLocation,
+        r.pos ?? this.params.mfcLocation,
+        {
+          onTripDone: () => undefined,
+          onNote: () => undefined,
+        },
+        { allowSignup: REAL_RIDER_GATE.signupAllowed },
+      );
+      this.driven.set(r.id, v);
+      void v.run();
+    });
+  }
+
+  /** 실서버는 실제 시각 1× — 박자가 늦거나 탭이 가려져도 벽시계로 맞춘다 */
   async advance(_dtReal: number): Promise<void> {
-    this.clock.now = (Date.now() - this.startWall) / 1000;
+    const wall = (Date.now() - this.startWall) / 1000;
+    let gap = wall - this.clock.now;
+    if (gap > MAX_CATCHUP_SEC) {
+      this.clock.now = wall - MAX_CATCHUP_SEC;
+      gap = MAX_CATCHUP_SEC;
+    }
+    while (gap > 1e-6) {
+      const dt = Math.min(SUBSTEP, gap);
+      gap -= dt;
+      this.clock.now += dt;
+      for (const v of this.driven.values()) v.tick(dt);
+    }
+    this.clock.now = wall;
     if (this.paused || this.polling) return;
     if (this.clock.now - this.lastPollAt < this.params.lanObserverPollSec) return;
     this.lastPollAt = this.clock.now;
@@ -134,7 +186,8 @@ export class RealWorld implements World {
     }
 
     // 3. 시뮬레이터 라이더 마지막 위치(라이더 본인 토큰 — 개발 서버가 서명)
-    for (const r of this.riders) {
+    for (const r of this.remote) {
+      if (this.driven.has(r.id)) continue; // 움직이는 라이더는 이 브라우저가 위치를 안다
       try {
         const loc = await this.backend.asRider(r.id).getLatestLocation();
         if (loc.lat !== undefined && loc.lng !== undefined) r.pos = { lat: loc.lat, lng: loc.lng };
@@ -210,7 +263,7 @@ export class RealWorld implements World {
     const lines = [this.authStatus, this.status];
     if (withD.length) lines.push(`dispatch shipmentId 실측(§5): 채워짐 ${filled} / 읽은 배송 ${withD.length}`);
     if (errs.length) lines.push(`배차 조회 실패 ${errs.length}건 — 예: ${errs[0]}`);
-    lines.push('실서버 읽기만(P2) — 가상 라이더 운행은 P3');
+    lines.push(this.operationLock ?? '실서버 가상 라이더 운행 가능(잠금 풀림)');
     return lines;
   }
 }

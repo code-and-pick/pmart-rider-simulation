@@ -64,4 +64,8 @@ export interface World {
   /** 화면 위쪽 안내 줄(연결 상태·실측 결과 등) */
   diagnostics(): string[];
   addRider(): void;
+  /** 실서버 가상 라이더 운행 — null 이면 해당 없음(MOCK), 문자열이면 잠긴 이유 */
+  readonly operationLock: string | null;
+  /** 실서버 가상 라이더 운행 시작(잠겨 있으면 아무것도 안 함) */
+  startOperation(): void;
 }

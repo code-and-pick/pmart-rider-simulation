@@ -36,6 +36,8 @@ import type {
   Shipment,
   StaffDeliveryListResponse,
   TransitionRequest,
+  Withdrawal,
+  WithdrawalRequest,
 } from '../domain/contract';
 
 /**
@@ -84,6 +86,9 @@ export interface RiderApi {
   setOperatingState(body: OperatingStateRequest, opts: WriteOptions): Promise<OperatingState>;
   getDispatchSettings(): Promise<DispatchSettings>;
   setDispatchSettings(body: DispatchSettings, opts: WriteOptions): Promise<DispatchSettings>;
+  /** 탈퇴 신청 — 백엔드는 아직 501(RR-07). 진행 중 배송·미정산 수행료·제한 조사 중이면 409 */
+  withdraw(body: WithdrawalRequest, opts: WriteOptions): Promise<CommandResponse>;
+  getWithdrawal(requestId: string): Promise<Withdrawal>;
 
   // ── delivery-tracking 0.4.0 ──
   uploadLocations(body: LocationBatch, opts: WriteOptions): Promise<CommandResponse>;

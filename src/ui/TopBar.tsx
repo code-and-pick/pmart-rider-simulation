@@ -50,6 +50,16 @@ export function TopBar() {
           + 라이더
         </button>
       )}
+      {real && (
+        <button
+          className="btn"
+          disabled={sim.operationLock !== null}
+          title={sim.operationLock ?? '가상 라이더를 실서버에서 움직인다(가입·운행·수락·인계·완료 = 쓰기)'}
+          onClick={() => app.startOperation()}
+        >
+          가상 라이더 운행
+        </button>
+      )}
       <span className="clock" title={real ? '실제 시각(서울)' : '시뮬레이션 시각(서울)'}>
         {seoulTime(sim.clock.epochMs())}
       </span>

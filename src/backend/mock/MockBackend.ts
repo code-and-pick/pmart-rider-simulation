@@ -59,6 +59,7 @@ import {
   type StatusHistoryEntry,
   type TransitionRequest,
   type VehicleType,
+  type Withdrawal,
 } from '../../domain/contract';
 import type { SimClock } from '../../sim/clock';
 import { destination, distanceM, type LatLng } from '../../util/geo';
@@ -90,6 +91,8 @@ interface MRider {
   restriction: AccountRestriction;
   location?: { lat: number; lng: number; accuracyM?: number; recordedAt: string; receivedAt: number };
   consecutiveRejections: number;
+  /** 탈퇴 완료 [시뮬] — 계약은 탈퇴 뒤 모습을 정하지 않음(RR-07 질문) */
+  withdrawn: boolean;
 }
 
 interface MFence {
@@ -240,6 +243,7 @@ export class MockBackend implements RiderPort {
   readonly shipments = new Map<string, MShipment>();
   readonly offers = new Map<string, MOffer>();
   private readonly photos = new Map<string, MPhoto>();
+  private readonly withdrawals = new Map<string, { riderId: string; state: 'PENDING' | 'COMPLETED' | 'REJECTED' }>();
   private readonly idem = new Map<string, { fp: string; outcome: IdemOutcome }>();
   private readonly later: { at: number; fn: () => void }[] = [];
   private readonly apiListeners = new Set<ApiListener>();
@@ -589,6 +593,7 @@ export class MockBackend implements RiderPort {
         settings: { oneAtATime: false, dispatchMode: 'AI_RECOMMENDED', version: 0 },
         restriction: 'NORMAL',
         consecutiveRejections: 0,
+        withdrawn: false,
       };
       this.riders.set(riderId, r);
     }
@@ -1093,9 +1098,9 @@ export class MockBackend implements RiderPort {
           '/riders/signups',
           () => {
             const r = b.rider(me);
-            if (r.signedUp) fail(409, 'DUPLICATE_RIDER');
+            if (r.signedUp || r.withdrawn) fail(409, 'DUPLICATE_RIDER'); // 탈퇴한 ID 재가입 불가 [시뮬]
             if (!/^01[0-9]{8,9}$/.test(body.phone) || !body.deliveryAreas?.length) fail(400, 'VALIDATION_FAILED');
-            for (const other of b.riders.values()) if (other.signedUp && other.phone === body.phone) fail(409, 'DUPLICATE_RIDER');
+            for (const other of b.riders.values()) if ((other.signedUp || other.withdrawn) && other.phone === body.phone) fail(409, 'DUPLICATE_RIDER');
             r.signedUp = true;
             r.phone = body.phone;
             r.name = body.name;
@@ -1134,6 +1139,32 @@ export class MockBackend implements RiderPort {
           },
           { key: o.idempotencyKey, body },
         ),
+      withdraw: (body, o: WriteOptions) =>
+        b.call(
+          me,
+          'POST',
+          '/riders/me/withdrawals',
+          () => {
+            const r = b.signedRider(me);
+            // 계약: 진행 중 배송·미정산 수행료·제한 조사 중이면 409. MOCK 에는 수행료 정산이 없어 앞의 둘만 본다 [시뮬]
+            if (b.activeDeliveryCount(me) > 0 || r.restriction !== 'NORMAL') fail(409, 'INVALID_STATE');
+            const requestId = o.idempotencyKey;
+            b.withdrawals.set(requestId, { riderId: me, state: 'COMPLETED' });
+            r.signedUp = false;
+            r.withdrawn = true;
+            r.operating = { ...r.operating, status: 'OFF_DUTY', newDispatchEnabled: false, version: r.operating.version + 1 };
+            b.emit('RiderStateChanged', `${me} 탈퇴`);
+            return b.cmd(requestId, { status: 'ACCEPTED', resultId: requestId });
+          },
+          { key: o.idempotencyKey, body: body ?? {} },
+          202,
+        ),
+      getWithdrawal: (requestId: string) =>
+        b.call(me, 'GET', `/riders/me/withdrawals/${requestId}`, (): Withdrawal => {
+          const w = b.withdrawals.get(requestId);
+          if (!w || w.riderId !== me) fail(404, 'NOT_FOUND');
+          return { requestId, state: w.state, blockers: [] };
+        }),
       getDispatchSettings: () => b.call(me, 'GET', '/riders/me/settings', () => ({ ...b.signedRider(me).settings }) as DispatchSettings),
       setDispatchSettings: (body: DispatchSettings, o: WriteOptions) =>
         b.call(

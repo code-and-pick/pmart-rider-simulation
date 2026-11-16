@@ -642,6 +642,18 @@ export interface RiderProfile {
   joinedAt?: string;
 }
 
+/** POST /riders/me/withdrawals 본문(선택). 진행 중 배송·미정산 수행료·제한 조사 중이면 409 INVALID_STATE. 백엔드는 아직 501(RR-07). */
+export interface WithdrawalRequest {
+  reason?: string;
+}
+
+/** GET /riders/me/withdrawals/{requestId} */
+export interface Withdrawal {
+  requestId?: string;
+  state?: 'PENDING' | 'COMPLETED' | 'REJECTED';
+  blockers?: string[];
+}
+
 // ───────────────────────── mfc-fulfillment 0.4.11 (출고 조회·인계) ─────────────────────────
 
 export type ShipmentState = 'PREPARING' | 'READY' | 'PARTIALLY_HANDED_OVER' | 'HANDED_OVER' | 'CANCELLED' | 'CLOSED_PARTIAL';

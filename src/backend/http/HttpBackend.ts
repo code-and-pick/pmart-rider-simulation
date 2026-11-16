@@ -30,6 +30,7 @@ import {
   type RiderProfile,
   type Shipment,
   type StaffDeliveryListResponse,
+  type Withdrawal,
 } from '../../domain/contract';
 import type {
   ApiCallRecord,
@@ -171,6 +172,8 @@ export class HttpBackend implements RiderPort {
       setOperatingState: (body, w) => r<OperatingState>('PUT', '/riders/me/state', { body, write: w }),
       getDispatchSettings: () => r<DispatchSettings>('GET', '/riders/me/settings'),
       setDispatchSettings: (body, w) => r<DispatchSettings>('PUT', '/riders/me/settings', { body, write: w }),
+      withdraw: (body, w) => r<CommandResponse>('POST', '/riders/me/withdrawals', { body, write: w }),
+      getWithdrawal: (id) => r<Withdrawal>('GET', `/riders/me/withdrawals/${enc(id)}`),
       // delivery-tracking 0.4.0
       uploadLocations: (body, w) => r<CommandResponse>('POST', '/riders/me/locations', { body, write: w }),
       getLatestLocation: () => r<RiderLocation>('GET', '/riders/me/locations/latest'),

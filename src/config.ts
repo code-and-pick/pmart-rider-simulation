@@ -128,6 +128,17 @@ export const DEFAULT_PARAMS: SimParams = {
   seed: 1,
 };
 
+/**
+ * 실서버 가상 라이더 운행 잠금 [결정 대기 — 사용자 2026-11-16 "가입 없이 할 수 있는 P3 준비만 먼저"].
+ * 가입·운행은 백엔드에 지울 수 없는 데이터를 남긴다(탈퇴 501 — RR-07, 인원·전화 대역 RR-02). 사용자가 정한 뒤에만 바꾼다.
+ * - operationAllowed: 실서버 화면에서 가상 라이더를 움직일 수 있나(운행 ON·위치·수락·인계·완료 = 쓰기)
+ * - signupAllowed: 미가입 라이더를 가입시킬 수 있나(false 면 미가입 라이더는 멈춘다)
+ */
+export const REAL_RIDER_GATE: { operationAllowed: boolean; signupAllowed: boolean } = {
+  operationAllowed: false,
+  signupAllowed: false,
+};
+
 /** 시뮬레이터 라이더 ID — `RD-sim-01` 형식 [시뮬] (접두어는 [확정] RR-01, 번호 규칙은 RR-02 회신 전 임시). */
 export function simRiderId(index: number): string {
   return `${CONTRACT.simRiderPrefix}${String(index + 1).padStart(2, '0')}`;

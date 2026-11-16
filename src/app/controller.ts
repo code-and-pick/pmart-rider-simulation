@@ -26,6 +26,26 @@ export class Emitter {
   }
 }
 
+/**
+ * intervalMs 마다 fn 을 부른다. 가능하면 전용 Worker 의 타이머로(가려진 탭에서 덜 늦춰짐), 안 되면 setInterval.
+ * Worker 코드는 한 줄짜리 Blob — 외부 파일·외부 주소를 불러오지 않는다. 돌려주는 함수로 멈춘다.
+ */
+export function startTicker(fn: () => void, intervalMs: number): () => void {
+  try {
+    const src = `setInterval(() => postMessage(0), ${Math.max(10, Math.floor(intervalMs))});`;
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    const w = new Worker(url);
+    w.onmessage = () => fn();
+    return () => {
+      w.terminate();
+      URL.revokeObjectURL(url);
+    };
+  } catch {
+    const id = window.setInterval(fn, intervalMs);
+    return () => window.clearInterval(id);
+  }
+}
+
 export type MapStatus = { kind: 'loading' } | { kind: 'kakao' } | { kind: 'plane'; reason: string };
 
 const DONE_STATES = new Set(['CLOSED', 'CANCELLED_BEFORE_PICKUP', 'DISPATCH_FAILED', 'BLOCKED']);
@@ -83,7 +103,7 @@ export class AppController {
   start() {
     if (this.raf) return;
     this.lastStep = performance.now();
-    this.timer = window.setInterval(() => {
+    const step = () => {
       if (this.busy) return;
       const t = performance.now();
       const dt = (t - this.lastStep) / 1000;
@@ -92,7 +112,10 @@ export class AppController {
       void this.sim.advance(dt).finally(() => {
         this.busy = false;
       });
-    }, 50);
+    };
+    // 탭이 가려지면 브라우저가 화면 쪽 타이머를 늦춘다(오래 가려지면 분당 1회까지). 전용 Worker 의 타이머는 그만큼 늦추지 않아서
+    // 박자를 Worker 에서 받는다 — 실서버 가상 라이더의 위치 업로드가 끊기지 않게(3분 끊김 = RiderLocationStale). [미검증: 가려진 탭에서 실측 안 함]
+    this.stopTicker = startTicker(step, 50);
     const loop = (t: number) => {
       this.raf = requestAnimationFrame(loop);
       this.syncMap();
@@ -106,11 +129,17 @@ export class AppController {
 
   stop() {
     cancelAnimationFrame(this.raf);
-    window.clearInterval(this.timer);
+    this.stopTicker?.();
+    this.stopTicker = null;
     this.raf = 0;
   }
 
-  private timer = 0;
+  startOperation() {
+    this.sim.startOperation();
+    this.ticker.emit();
+  }
+
+  private stopTicker: (() => void) | null = null;
   private lastStep = 0;
 
   select(id: string | null) {

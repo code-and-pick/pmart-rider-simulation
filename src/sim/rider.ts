@@ -14,7 +14,16 @@ import { CONTRACT, type SimParams } from '../config';
 import { ApiProblem, ResultUnknown, type Offer, type Shipment } from '../domain/contract';
 import { bearingDeg, distanceM, moveToward, type LatLng } from '../util/geo';
 import { IdGen, Rng } from '../util/rng';
+import { RiderRestrictedError, STOP_RESTRICTIONS, withAuthRecovery } from './authGuard';
 import type { SimClock } from './clock';
+
+/** 실서버에서 가입이 허용되지 않았는데 미가입인 라이더 */
+export class SignupNotAllowedError extends Error {
+  constructor() {
+    super('미가입 — 가입 허용 안 됨');
+    this.name = 'SignupNotAllowedError';
+  }
+}
 
 /** 엔진 쪽 단계 — 백엔드 상태가 아니다(화면에는 "엔진" 출처로 보인다). */
 export type RiderPhase =
@@ -102,18 +111,23 @@ export class VirtualRider {
   private lastUploadAt = -Infinity;
   private uploading = false;
   private uploadKey: string | null = null;
+  private readonly api: RiderApi;
 
   constructor(
     readonly index: number,
-    private readonly api: RiderApi,
+    api: RiderApi,
     private readonly observer: ObserverApi,
     private readonly clock: SimClock,
     private readonly params: SimParams,
     readonly home: LatLng,
     start: LatLng,
     private readonly hooks: RiderHooks,
+    /** 미가입이면 가입할지 — 실서버는 사용자 결정 전까지 false(가입은 백엔드에 지울 수 없는 데이터를 남긴다, RR-02·RR-07) */
+    private readonly options: { allowSignup: boolean } = { allowSignup: true },
   ) {
     this.id = api.riderId;
+    // 401 → 계정 제한 확인 → 정지면 멈춤(RR-01 조건 7)
+    this.api = withAuthRecovery(api, (t) => this.say(t));
     this.pos = { ...start };
     this.rng = new Rng(params.seed * 7919 + index * 104729);
     this.keys = new IdGen(`${this.id}-`);
@@ -228,17 +242,22 @@ export class VirtualRider {
       }
     } catch (e) {
       this.phase = 'STOPPED';
-      this.say(`멈춤: ${e instanceof ApiProblem ? `${e.status} ${e.code ?? ''}` : String(e)}`);
+      if (e instanceof RiderRestrictedError) this.say(`멈춤: 계정 제한 ${e.restriction} — 운행하지 않음(RR-01 조건 7)`);
+      else if (e instanceof SignupNotAllowedError) this.say('멈춤: 미가입 — 실서버 가입은 사용자 결정 대기(RR-02)');
+      else this.say(`멈춤: ${e instanceof ApiProblem ? `${e.status} ${e.code ?? ''}` : String(e)}`);
     }
   }
 
-  /** 1. 준비: 가입 확인 → 운행 ON·신규배차 ON → 배차 설정(AI 추천·하나씩 배달) */
+  /** 1. 준비: 가입 확인(제한이면 멈춤) → 배차 설정(AI 추천·하나씩 배달) → 운행 ON·신규배차 ON */
   private async prepare() {
     this.phase = 'PREPARING';
     try {
-      await this.api.getMe();
+      const me = await this.api.getMe();
+      const r = me.restriction?.state;
+      if (r && STOP_RESTRICTIONS.includes(r)) throw new RiderRestrictedError(this.id, r);
     } catch (e) {
       if (!(e instanceof ApiProblem && e.status === 404)) throw e;
+      if (!this.options.allowSignup) throw new SignupNotAllowedError();
       this.say('미가입 → 가입');
       await this.write(this.opts('signup'), (o) =>
         this.api.signup(
