@@ -16,7 +16,7 @@ import { SimClock } from './clock';
 import { VirtualRider } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
 import type { LatLng } from '../util/geo';
-import type { DeliveryCard, MetricsSummary, NoteRecord, RiderView, World } from './world';
+import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, RiderView, World } from './world';
 
 const RING = 300;
 const SUBSTEP = 0.25;
@@ -311,25 +311,37 @@ export class RealWorld implements World {
     });
   }
 
+  /**
+   * 실서버 지표 — 관찰 계정으로 읽은 최근 배송(최대 30건) 기준, 실제 시각.
+   * 구간은 직원 배송 목록의 시각(createdAt·assignedAt·pickedUpAt·completedAt)으로 잰다. 가게 도착 시각은 목록에 없어
+   * "MFC 로 이동"과 "가게에서 대기·인계"를 한 구간으로 묶는다.
+   */
   metrics(): MetricsSummary {
     let completed = 0;
-    let inProgress = 0;
+    let delivering = 0;
+    let searching = 0;
     let failed = 0;
+    const full: number[][] = [];
     for (const r of this.rows.values()) {
-      if (r.summary.state === 'COMPLETED') completed++;
+      const s = r.summary;
+      if (s.state === 'COMPLETED') completed++;
       else if (r.dispatch?.state === 'DISPATCH_FAILED') failed++;
-      else if (!TERMINAL_X.has(r.summary.state ?? '')) inProgress++;
+      else if (s.state === 'UNASSIGNED') searching++;
+      else if (!TERMINAL_X.has(s.state ?? '')) delivering++;
+      const t = [s.createdAt, s.assignedAt, s.pickedUpAt, s.completedAt].map((x) => (x ? Date.parse(x) / 1000 : NaN));
+      if (s.state === 'COMPLETED' && t.every((x) => Number.isFinite(x))) {
+        full.push([(t[1] as number) - (t[0] as number), (t[2] as number) - (t[1] as number), (t[3] as number) - (t[2] as number)]);
+      }
     }
-    return {
-      completed,
-      inProgress,
-      dispatchFailed: failed,
-      offerToAccept: null,
-      acceptToStore: null,
-      storeWait: null,
-      pickupToComplete: null,
-      apiErrors: this.apiErrors,
-    };
+    const base = { completed, delivering, searching, dispatchFailed: failed, timeBasis: 'real' as const, apiErrors: this.apiErrors };
+    if (!full.length) return { ...base, phases: null };
+    const avg = (i: number) => full.reduce((a, r) => a + (r[i] as number), 0) / full.length;
+    const segments: PhaseSegment[] = [
+      { key: 'findRider', label: '라이더 찾기', sec: avg(0), hint: '배송 생성 → 배정(직원 배송 목록 createdAt → assignedAt)' },
+      { key: 'storeAll', label: 'MFC 로 이동·가게(인계까지)', sec: avg(1), hint: '배정 → 픽업 완료(assignedAt → pickedUpAt) — 가게 도착 시각은 목록에 없음' },
+      { key: 'toCustomer', label: '고객에게 이동·전달', sec: avg(2), hint: '픽업 완료 → 전달 완료(pickedUpAt → completedAt)' },
+    ];
+    return { ...base, phases: { n: full.length, totalSec: segments.reduce((a, x) => a + x.sec, 0), segments } };
   }
 
   diagnostics(): string[] {

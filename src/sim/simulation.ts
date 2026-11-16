@@ -13,7 +13,7 @@ import { Rng } from '../util/rng';
 import { mockStartEpochMs, SimClock } from './clock';
 import { VirtualRider, type RiderTrip } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
-import type { DeliveryCard, MetricsSummary, NoteRecord, World } from './world';
+import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, World } from './world';
 
 const SUBSTEP = 0.25;
 const RING = 300;
@@ -139,27 +139,45 @@ export class Simulation implements World {
     /* MOCK 은 해당 없음 */
   }
 
+  /**
+   * 화면 지표. 시간은 시뮬레이션 시각(배속 반영)이고, 구간 평균은 모두 같은 "완료된 배송 n 건"에서 잰다.
+   *  - 라이더 찾기: 점원 배차 요청(배송 생성) → 라이더 수락·배정
+   *  - MFC 로 이동: 배정 → 가게 도착 처리(execution 배정 반영 대기 포함)
+   *  - 가게에서 대기·인계: 가게 도착 → 픽업 완료(포장 끝 기다림 + QR 인계 + 반영 대기)
+   *  - 고객에게 이동·전달: 픽업 완료 → 전달 완료(이동 + 문 앞 + 사진 + 완료)
+   */
   metrics(): MetricsSummary {
-    const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-    const done = this.trips.filter((t) => t.completedAt !== undefined);
-    let inProgress = 0;
+    let searching = 0;
+    let delivering = 0;
     let failed = 0;
     for (const d of this.backend.deliveries.values()) {
       if (d.d.state === 'DISPATCH_FAILED') failed++;
-      else if (d.d.state !== 'CLOSED' && d.d.state !== 'CANCELLED_BEFORE_PICKUP') inProgress++;
+      else if (d.d.state === 'CREATED' || d.d.state === 'DISPATCHING') searching++;
+      else if (d.d.state === 'ASSIGNED' || d.d.state === 'PICKED_UP') delivering++;
     }
+    const full = this.trips.flatMap((t) => {
+      const created = this.backend.deliveries.get(t.deliveryId)?.createdAt;
+      if (created === undefined || t.acceptedAt === undefined || t.storeArrivedAt === undefined || t.pickedUpAt === undefined || t.completedAt === undefined) {
+        return [];
+      }
+      return [[t.acceptedAt - created, t.storeArrivedAt - t.acceptedAt, t.pickedUpAt - t.storeArrivedAt, t.completedAt - t.pickedUpAt]];
+    });
+    const completed = this.trips.filter((t) => t.completedAt !== undefined).length;
+    if (!full.length) return { completed, delivering, searching, dispatchFailed: failed, phases: null, timeBasis: 'sim', apiErrors: this.apiErrors };
+    const avg = (i: number) => full.reduce((a, r) => a + (r[i] as number), 0) / full.length;
+    const segments: PhaseSegment[] = [
+      { key: 'findRider', label: '라이더 찾기', sec: avg(0), hint: '점원 배차 요청(배송 생성) → 라이더 수락·배정' },
+      { key: 'toStore', label: 'MFC 로 이동', sec: avg(1), hint: '배정 → 가게 도착 처리(수행 쪽 배정 반영 대기 포함)' },
+      { key: 'atStore', label: '가게에서 대기·인계', sec: avg(2), hint: '가게 도착 → 픽업 완료(포장 끝 기다림 + QR 인계 + 반영 대기)' },
+      { key: 'toCustomer', label: '고객에게 이동·전달', sec: avg(3), hint: '픽업 완료 → 전달 완료(이동 + 문 앞 + 사진 + 완료 처리)' },
+    ];
     return {
-      completed: done.length,
-      inProgress,
+      completed,
+      delivering,
+      searching,
       dispatchFailed: failed,
-      offerToAccept: avg(this.trips.filter((t) => t.acceptedAt !== undefined).map((t) => (t.acceptedAt as number) - t.offeredAt)),
-      acceptToStore: avg(
-        this.trips.filter((t) => t.acceptedAt !== undefined && t.storeArrivedAt !== undefined).map((t) => (t.storeArrivedAt as number) - (t.acceptedAt as number)),
-      ),
-      storeWait: avg(
-        this.trips.filter((t) => t.storeArrivedAt !== undefined && t.pickedUpAt !== undefined).map((t) => (t.pickedUpAt as number) - (t.storeArrivedAt as number)),
-      ),
-      pickupToComplete: avg(done.filter((t) => t.pickedUpAt !== undefined).map((t) => (t.completedAt as number) - (t.pickedUpAt as number))),
+      phases: { n: full.length, totalSec: segments.reduce((a, s) => a + s.sec, 0), segments },
+      timeBasis: 'sim',
       apiErrors: this.apiErrors,
     };
   }

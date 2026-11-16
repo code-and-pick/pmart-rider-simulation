@@ -41,15 +41,28 @@ export interface DeliveryCard {
   createdAt: number;
 }
 
+/** 완료된 배송의 구간 하나 — 평균 초와, 어디서 어디까지 쟀는지 */
+export interface PhaseSegment {
+  key: 'findRider' | 'toStore' | 'atStore' | 'storeAll' | 'toCustomer';
+  label: string;
+  sec: number;
+  /** 정확히 무엇부터 무엇까지(마우스 설명) */
+  hint: string;
+}
+
 export interface MetricsSummary {
+  /** 전달 완료(지금까지) */
   completed: number;
-  inProgress: number;
+  /** 배정돼 배송 중(가게로·가게에서·고객에게) */
+  delivering: number;
+  /** 배차 요청 뒤 라이더를 찾는 중 */
+  searching: number;
+  /** 라이더를 못 찾아 배차 실패 */
   dispatchFailed: number;
-  /** 평균 초 — 표본이 없으면 null */
-  offerToAccept: number | null;
-  acceptToStore: number | null;
-  storeWait: number | null;
-  pickupToComplete: number | null;
+  /** 완료된 배송 n 건의 구간별 평균(모든 구간이 같은 n 건). 완료가 없으면 null */
+  phases: { n: number; totalSec: number; segments: PhaseSegment[] } | null;
+  /** 시간 기준 — sim = 시뮬레이션 시각(배속 반영), real = 실제 시각 */
+  timeBasis: 'sim' | 'real';
   apiErrors: number;
 }
 

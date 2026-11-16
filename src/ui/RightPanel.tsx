@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../app/App';
-import { dur, seoulTime } from './format';
+import { seoulTime } from './format';
+import { Metrics } from './Metrics';
 import { displayStage } from '../domain/displayStage';
 import { Progress } from './Progress';
 import { apiFor, cardsFor, eventsFor, notesFor, roleOf } from './riderFilter';
@@ -36,15 +37,7 @@ export function RightPanel() {
           ))}
         </ul>
       )}
-      <section className="metrics">
-        <Stat label="완료" value={String(m.completed)} />
-        <Stat label="진행 중" value={String(m.inProgress)} />
-        <Stat label="배차 실패" value={String(m.dispatchFailed)} />
-        <Stat label="제안→수락" value={dur(m.offerToAccept)} />
-        <Stat label="수락→가게" value={dur(m.acceptToStore)} />
-        <Stat label="가게 대기" value={dur(m.storeWait)} />
-        <Stat label="픽업→완료" value={dur(m.pickupToComplete)} />
-      </section>
+      <Metrics m={m} />
       {sel && (
         <div className="filter-chip" role="status">
           <span>
@@ -155,11 +148,3 @@ export function RightPanel() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="stat">
-      <div className="stat-v">{value}</div>
-      <div className="stat-l">{label}</div>
-    </div>
-  );
-}

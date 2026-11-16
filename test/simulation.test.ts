@@ -29,6 +29,16 @@ describe('가상 라이더 (MOCK, 화면 없이)', () => {
     expect(sim.metrics().completed).toBe(1);
     expect(rider!.phase).toBe('IDLE');
 
+    // 지표: 구간 4개(같은 1건), 합 = 배차 요청(배송 생성) → 전달 완료
+    const m = sim.metrics();
+    expect(m).toMatchObject({ searching: 0, delivering: 0, dispatchFailed: 0, timeBasis: 'sim' });
+    expect(m.phases?.n).toBe(1);
+    expect(m.phases?.segments.map((s) => s.key)).toEqual(['findRider', 'toStore', 'atStore', 'toCustomer']);
+    expect(m.phases?.segments.every((s) => s.sec >= 0)).toBe(true);
+    const del = [...sim.backend.deliveries.values()][0]!;
+    const trip = sim.trips[0]!;
+    expect(m.phases?.totalSec).toBeCloseTo((trip.completedAt as number) - del.createdAt, 6);
+
     // 사건 순서(계약 이름 그대로)
     const types = sim.eventLog.map((e) => e.type);
     const order = ['DispatchRequested', 'DeliveryCreated', 'DispatchOfferSent', 'DeliveryAssigned', 'ShipmentReady', 'PackageHandedOver', 'PickupCompleted', 'DeliveryCompleted'];
@@ -56,7 +66,7 @@ describe('가상 라이더 (MOCK, 화면 없이)', () => {
     expect(sim.deliveryCards()[0]?.executionState).toBe('ARRIVED_AT_STORE');
     await sim.runFor(25 * 60);
     expect(sim.deliveryCards()[0]?.executionState).toBe('COMPLETED');
-    expect(sim.metrics().storeWait).toBeGreaterThan(9 * 60);
+    expect(sim.metrics().phases?.segments.find((s) => s.key === 'atStore')?.sec).toBeGreaterThan(9 * 60);
   });
 
   it('2시간 운영: 라이더 5명이 주문을 나눠 끝내고 멈춘 라이더가 없다', async () => {
