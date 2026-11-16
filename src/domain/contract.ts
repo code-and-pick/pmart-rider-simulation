@@ -794,6 +794,7 @@ export type DomainEventType =
   | 'DeliveryAssigned'
   | 'DeliveryAssignmentChanged'
   | 'DeliveryCancelledBeforePickup'
+  | 'DispatchFailed'
   | 'PickupCompleted'
   | 'DeliveryCompleted'
   | 'DeliveryFailed'

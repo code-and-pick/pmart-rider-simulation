@@ -1,0 +1,475 @@
+// 가상 라이더 — 라이더 앱처럼 계약 API 를 부르는 상태기계 (docs/design.md §5, 순서는 rider_e2e.py 와 같게).
+// RiderApi·ObserverApi 만 보고 움직이므로 MOCK·실서버(P3)가 같은 코드로 돈다.
+//
+// 지키는 것
+//  - 배송 상태를 만들지 않는다: 픽업 완료는 인계 확정(PackageHandedOver)으로 execution 이 바꾼 것을 조회로 확인, 완료는 사진 + 완료 요청.
+//    경로 끝 도착·시간 경과만으로 상태를 넘기지 않는다.
+//  - 응답 없음(ResultUnknown)은 실패가 아니다 — 같은 Idempotency-Key 로 다시 보낸다.
+//  - 사건 반영 지연을 기다린다(수락 직후 execution UNASSIGNED 등 — "반영 대기").
+//  - 전달지(drop-info)는 좌표만 쓰고 나머지는 버린다(저장·로그·화면 금지).
+//  - purpose 가 DELIVERY 가 아닌 제안(오배송 회수 등)은 지금은 거절한다(docs/design.md §3-1 — 회수 흐름은 P4).
+
+import type { ObserverApi, RiderApi, WriteOptions } from '../backend/port';
+import { CONTRACT, type SimParams } from '../config';
+import { ApiProblem, ResultUnknown, type Offer, type Shipment } from '../domain/contract';
+import { bearingDeg, distanceM, moveToward, type LatLng } from '../util/geo';
+import { IdGen, Rng } from '../util/rng';
+import type { SimClock } from './clock';
+
+/** 엔진 쪽 단계 — 백엔드 상태가 아니다(화면에는 "엔진" 출처로 보인다). */
+export type RiderPhase =
+  | 'PREPARING'
+  | 'IDLE'
+  | 'DECIDING'
+  | 'TO_STORE'
+  | 'WAIT_ASSIGN_REFLECT'
+  | 'AT_STORE_WAIT_READY'
+  | 'HANDOVER'
+  | 'WAIT_PICKUP_REFLECT'
+  | 'TO_CUSTOMER'
+  | 'AT_CUSTOMER'
+  | 'STOPPED';
+
+export const PHASE_LABEL: Record<RiderPhase, string> = {
+  PREPARING: '준비(가입·운행 시작)',
+  IDLE: '대기(제안 조회)',
+  DECIDING: '제안 검토',
+  TO_STORE: 'MFC 로 이동',
+  WAIT_ASSIGN_REFLECT: '배정 반영 대기',
+  AT_STORE_WAIT_READY: '가게 — 포장 대기',
+  HANDOVER: 'QR 인계',
+  WAIT_PICKUP_REFLECT: '픽업 반영 대기',
+  TO_CUSTOMER: '고객으로 이동',
+  AT_CUSTOMER: '고객 도착 — 전달',
+  STOPPED: '멈춤',
+};
+
+/** 제안을 어떻게 할지 — 순수 함수(시험용). */
+export type OfferDecision = { kind: 'ACCEPT' } | { kind: 'REJECT'; reason: 'OTHER' | 'TOO_FAR' } | { kind: 'IGNORE' };
+
+export function decideOffer(offer: Offer, roll: number, acceptProbability: number): OfferDecision {
+  // 회수 배송·고객 반품은 아직 흐름이 없다 — 받지 않는다(§3-1)
+  if (offer.purpose !== undefined && offer.purpose !== 'DELIVERY') return { kind: 'REJECT', reason: 'OTHER' };
+  if (offer.deliveryType !== undefined && offer.deliveryType !== 'FORWARD') return { kind: 'REJECT', reason: 'OTHER' };
+  if (roll < acceptProbability) return { kind: 'ACCEPT' };
+  // 나머지 절반은 거절, 절반은 무응답으로 만료 [시뮬]
+  return roll < acceptProbability + (1 - acceptProbability) / 2 ? { kind: 'REJECT', reason: 'TOO_FAR' } : { kind: 'IGNORE' };
+}
+
+/** 시뮬레이터가 지표·화면에 쓰는 한 배송의 엔진 기록. */
+export interface RiderTrip {
+  deliveryId: string;
+  offeredAt: number;
+  acceptedAt?: number;
+  storeArrivedAt?: number;
+  readyAt?: number;
+  pickedUpAt?: number;
+  completedAt?: number;
+}
+
+export interface RiderHooks {
+  onTripDone(trip: RiderTrip): void;
+  onNote(riderId: string, text: string): void;
+}
+
+/** 시뮬 시각 기준 대기·이동 약속을 tick 이 풀어 준다(MFC 시뮬레이터 Agent 와 같은 방식). */
+export class VirtualRider {
+  readonly id: string;
+  pos: LatLng;
+  heading = 0;
+  phase: RiderPhase = 'PREPARING';
+  /** 화면 표시용 이유(예: "출고 PREPARING — 포장 대기") */
+  note = '';
+  deliveryId: string | null = null;
+  /** 지금 가는 곳 — 화면 경로선(직선, 도로 아님) */
+  target: LatLng | null = null;
+  /** 진행 중 배송의 고객 좌표(drop-info 에서 lat·lng 만) */
+  dropPoint: LatLng | null = null;
+  trip: RiderTrip | null = null;
+  done = false;
+
+  private readonly rng: Rng;
+  private readonly keys: IdGen;
+  private waitUntil: number | null = null;
+  private waitResolve: (() => void) | null = null;
+  private moveResolve: (() => void) | null = null;
+  private moveSpeed = 0;
+  private trail: { lat: number; lng: number; recordedAt: string; deliveryId?: string }[] = [];
+  private lastSampleAt = -Infinity;
+  private lastUploadAt = -Infinity;
+  private uploading = false;
+  private uploadKey: string | null = null;
+
+  constructor(
+    readonly index: number,
+    private readonly api: RiderApi,
+    private readonly observer: ObserverApi,
+    private readonly clock: SimClock,
+    private readonly params: SimParams,
+    readonly home: LatLng,
+    start: LatLng,
+    private readonly hooks: RiderHooks,
+  ) {
+    this.id = api.riderId;
+    this.pos = { ...start };
+    this.rng = new Rng(params.seed * 7919 + index * 104729);
+    this.keys = new IdGen(`${this.id}-`);
+  }
+
+  // ───────────── 박자 ─────────────
+
+  tick(dt: number): void {
+    const now = this.clock.now;
+    if (this.moveResolve && this.target) {
+      const step = moveToward(this.pos, this.target, this.moveSpeed * dt);
+      if (distanceM(this.pos, step.pos) > 0.01) this.heading = bearingDeg(this.pos, step.pos);
+      this.pos = step.pos;
+      if (step.arrived) {
+        const r = this.moveResolve;
+        this.moveResolve = null;
+        r();
+      }
+    }
+    if (this.waitResolve && this.waitUntil !== null && now >= this.waitUntil) {
+      const r = this.waitResolve;
+      this.waitResolve = null;
+      this.waitUntil = null;
+      r();
+    }
+    this.sampleAndUpload(now);
+  }
+
+  /** 1초마다 위치 점을 모아 locationUploadIntervalSec 마다 올린다. 응답 없음이면 같은 키로 다시. */
+  private sampleAndUpload(now: number) {
+    if (this.phase === 'PREPARING' || this.phase === 'STOPPED') return;
+    if (now - this.lastSampleAt >= 1) {
+      this.lastSampleAt = now;
+      this.trail.push({ lat: this.pos.lat, lng: this.pos.lng, recordedAt: this.clock.iso(now), deliveryId: this.deliveryId ?? undefined });
+      if (this.trail.length > CONTRACT.locationBatchMax) this.trail.splice(0, this.trail.length - CONTRACT.locationBatchMax);
+    }
+    if (this.uploading || now - this.lastUploadAt < this.params.locationUploadIntervalSec || !this.trail.length) return;
+    this.uploading = true;
+    const points = this.trail.slice();
+    const key = this.uploadKey ?? this.keys.next('loc');
+    this.uploadKey = key;
+    this.api
+      .uploadLocations({ points: points.map((p) => ({ ...p, accuracyM: 8 })) }, { idempotencyKey: key })
+      .then(() => {
+        this.trail.splice(0, points.length);
+        this.uploadKey = null;
+        this.lastUploadAt = this.clock.now;
+      })
+      .catch((e: unknown) => {
+        // 응답 없음 → 같은 키·같은 점으로 다음 박자에 다시. 거절이면 버리고 새로.
+        if (!(e instanceof ResultUnknown)) {
+          this.trail.splice(0, points.length);
+          this.uploadKey = null;
+        }
+        this.lastUploadAt = this.clock.now;
+      })
+      .finally(() => {
+        this.uploading = false;
+      });
+  }
+
+  private wait(sec: number): Promise<void> {
+    return new Promise((resolve) => {
+      this.waitUntil = this.clock.now + Math.max(0, sec);
+      this.waitResolve = resolve;
+    });
+  }
+
+  private moveTo(target: LatLng, speedMps: number): Promise<void> {
+    this.target = { ...target };
+    this.moveSpeed = speedMps;
+    return new Promise((resolve) => {
+      this.moveResolve = resolve;
+    });
+  }
+
+  private opts(prefix: string, expectedVersion?: number): WriteOptions {
+    return { idempotencyKey: this.keys.next(prefix), expectedVersion };
+  }
+
+  /** 쓰기 한 번: 응답 없음이면 같은 키로 최대 5번 다시 보낸다. 거절(ApiProblem)은 호출자에게. */
+  private async write<T>(o: WriteOptions, fn: (o: WriteOptions) => Promise<T>): Promise<T> {
+    for (let i = 0; ; i++) {
+      try {
+        return await fn(o);
+      } catch (e) {
+        if (e instanceof ResultUnknown && i < 5) {
+          this.say('응답 없음 — 같은 키로 다시 보냄');
+          await this.wait(2 + i * 2);
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+
+  private say(text: string) {
+    this.note = text;
+    this.hooks.onNote(this.id, text);
+  }
+
+  // ───────────── 순서 ─────────────
+
+  async run(): Promise<void> {
+    try {
+      await this.prepare();
+      for (;;) {
+        if (this.done) return;
+        const offer = await this.idleUntilAssigned();
+        if (!offer) return;
+        await this.deliver(offer);
+      }
+    } catch (e) {
+      this.phase = 'STOPPED';
+      this.say(`멈춤: ${e instanceof ApiProblem ? `${e.status} ${e.code ?? ''}` : String(e)}`);
+    }
+  }
+
+  /** 1. 준비: 가입 확인 → 운행 ON·신규배차 ON → 배차 설정(AI 추천·하나씩 배달) */
+  private async prepare() {
+    this.phase = 'PREPARING';
+    try {
+      await this.api.getMe();
+    } catch (e) {
+      if (!(e instanceof ApiProblem && e.status === 404)) throw e;
+      this.say('미가입 → 가입');
+      await this.write(this.opts('signup'), (o) =>
+        this.api.signup(
+          {
+            // 시험 전화번호 [시뮬] — 실서버 대역은 RR-02 회신 대기
+            phone: `0109${String(900000 + this.index).padStart(7, '0')}`,
+            vehicleType: 'MOTORCYCLE',
+            deliveryAreas: [{ mfcId: this.params.mfcId }],
+            consents: [{ consentType: 'TERMS', version: 'sim' }],
+          },
+          o,
+        ),
+      );
+    }
+    await this.write(this.opts('settings'), (o) => this.api.setDispatchSettings({ oneAtATime: true, dispatchMode: 'AI_RECOMMENDED' }, o));
+    await this.write(this.opts('state'), (o) =>
+      this.api.setOperatingState({ status: 'ON_DUTY', newDispatchEnabled: true, mfcId: this.params.mfcId }, o),
+    );
+    this.phase = 'IDLE';
+    this.say('운행 시작');
+  }
+
+  /** 2·3. 대기 — 제안을 pollAfterSec 간격으로 보고, 받기로 하면 수락. 배정되면 그 제안을 돌려준다. */
+  private async idleUntilAssigned(): Promise<Offer | null> {
+    this.phase = 'IDLE';
+    this.deliveryId = null;
+    this.dropPoint = null;
+    this.trip = null;
+    const handled = new Set<string>();
+    for (;;) {
+      if (this.done) return null;
+      // 대기 중에는 MFC 근처(300m)로 천천히 다가간다 [시뮬]
+      if (!this.moveResolve && distanceM(this.pos, this.home) > 400) {
+        const near = moveToward(this.home, this.pos, 300).pos;
+        void this.moveTo(near, this.params.riderSpeedMps * this.params.idleDriftFactor);
+      }
+      const list = await this.api.listOffers();
+      const pollSec = list.pollAfterSec ?? null;
+      const offer = (list.items ?? []).find((o) => o.offerId && !handled.has(o.offerId));
+      if (offer?.offerId) {
+        handled.add(offer.offerId);
+        const accepted = await this.considerOffer(offer);
+        if (accepted) return accepted;
+        this.phase = 'IDLE';
+      }
+      if (pollSec === null) this.say('제안을 받을 수 없는 상태(pollAfterSec null)');
+      else if (this.note.startsWith('제안을 받을 수 없는')) this.say('대기 — 제안 조회');
+      await this.wait(pollSec ?? 15);
+    }
+  }
+
+  private async considerOffer(offer: Offer): Promise<Offer | null> {
+    const offerId = offer.offerId as string;
+    this.phase = 'DECIDING';
+    const detail = await this.api.getOffer(offerId);
+    const decision = decideOffer(detail, this.rng.next(), this.params.acceptProbability);
+    const [lo, hi] = this.params.offerResponseDelaySec;
+    const delay = Math.min(this.rng.range(lo, hi), Math.max(0, (detail.remainingSec ?? CONTRACT.offerResponseWindowSec) - 2));
+    this.trip = { deliveryId: detail.deliveryId ?? '', offeredAt: this.clock.now };
+    if (decision.kind === 'IGNORE') {
+      this.say(`제안 ${detail.deliveryId} 무응답(만료되게 둠)`);
+      return null;
+    }
+    await this.wait(delay);
+    let res;
+    try {
+      res = await this.write(this.opts('offer'), (o) =>
+        this.api.respondToOffer(offerId, decision.kind === 'ACCEPT' ? { response: 'ACCEPT' } : { response: 'REJECT', rejectReason: decision.reason }, o),
+      );
+    } catch (e) {
+      // 그 사이 다른 라이더에게 배정·취소되는 등 제안이 이미 닫힘 — 계약상 409/404 가 올 수 있다. 대기로 돌아간다.
+      if (e instanceof ApiProblem && e.status >= 400 && e.status < 500) {
+        this.say(`제안 응답 거절됨(${e.status} ${e.code ?? ''}) — 대기로`);
+        return null;
+      }
+      throw e;
+    }
+    if (res.outcome === 'ASSIGNED') {
+      this.trip.acceptedAt = this.clock.now;
+      this.say(`수락 → 배정 ${res.deliveryId}`);
+      return detail;
+    }
+    this.say(res.outcome === 'LATE' ? `늦은 수락: ${res.lateReason}` : `거절(${decision.kind === 'REJECT' ? decision.reason : ''})`);
+    return null;
+  }
+
+  /** 4~8. 배정된 배송 하나를 끝까지. */
+  private async deliver(offer: Offer) {
+    const deliveryId = offer.deliveryId as string;
+    this.deliveryId = deliveryId;
+    const trip = this.trip ?? { deliveryId, offeredAt: this.clock.now };
+    this.trip = trip;
+
+    // 4. MFC 로
+    this.phase = 'TO_STORE';
+    this.say('MFC 로 이동');
+    await this.moveTo(this.home, this.params.riderSpeedMps);
+
+    // execution 에 배정이 보일 때까지(사건 반영 대기)
+    this.phase = 'WAIT_ASSIGN_REFLECT';
+    let version = await this.waitExecution(deliveryId, (s) => s === 'ASSIGNED', this.params.assignmentReflectWaitSec);
+    if (version === null) {
+      this.say('배정이 execution 에 보이지 않음 — 이 배송을 놓고 대기로');
+      this.hooks.onTripDone(trip);
+      return;
+    }
+    await this.write(this.opts('arrive-store', version), (o) =>
+      this.api.reportStoreArrival(deliveryId, { occurredAt: this.clock.iso(), location: { ...this.pos } }, o),
+    );
+    trip.storeArrivedAt = this.clock.now;
+
+    // 5. 인계 — 출고·포장 QR 은 관찰 계정으로 읽는다(RR-03 시뮬레이터 가정 = 라벨을 본다)
+    this.phase = 'AT_STORE_WAIT_READY';
+    const dispatch = await this.api.getDispatch(deliveryId);
+    if (!dispatch.shipmentId) throw new Error(`배차 조회에 shipmentId 없음 (${deliveryId}) — §5 orderId 로 잇기 필요`);
+    const ship = await this.waitShipmentReady(dispatch.shipmentId);
+    trip.readyAt = this.clock.now;
+    this.phase = 'HANDOVER';
+    for (const pk of ship.packages ?? []) {
+      if (pk.state === 'HANDED_OVER' || !pk.packageId || !pk.qrCode) continue;
+      await this.handover(pk.packageId, pk.qrCode, deliveryId);
+    }
+
+    // 6. 픽업 확인 — execution 이 PickupCompleted 로 PICKED_UP 이 될 때까지
+    this.phase = 'WAIT_PICKUP_REFLECT';
+    this.say('픽업 반영 대기');
+    version = await this.waitExecution(deliveryId, (s) => s === 'PICKED_UP', 60);
+    if (version === null) throw new Error(`인계 뒤 PICKED_UP 이 보이지 않음 (${deliveryId})`);
+    trip.pickedUpAt = this.clock.now;
+    const exec = await this.api.getExecution(deliveryId);
+    if (exec.handoverIds?.length) {
+      await this.write(this.opts('pickup'), (o) => this.api.reportPickup(deliveryId, { handoverIds: exec.handoverIds ?? [] }, o));
+    }
+
+    // 7. 고객으로 — drop-info 는 좌표만
+    const drop = await this.api.getDropInfo(deliveryId);
+    if (drop.lat === null || drop.lat === undefined || drop.lng === null || drop.lng === undefined) {
+      throw new Error(`전달지에 지도 핀 없음 (${deliveryId})`);
+    }
+    this.dropPoint = { lat: drop.lat, lng: drop.lng };
+    this.phase = 'TO_CUSTOMER';
+    this.say('고객으로 이동(직선 — 도로 경로 아님)');
+    await this.moveTo(this.dropPoint, this.params.riderSpeedMps);
+
+    // 8. 도착 → 사진 → 완료
+    this.phase = 'AT_CUSTOMER';
+    const cur = await this.api.getExecution(deliveryId);
+    await this.write(this.opts('arrive-customer', cur.version), (o) =>
+      this.api.reportCustomerArrival(deliveryId, { occurredAt: this.clock.iso(), location: { ...this.pos } }, o),
+    );
+    await this.wait(20); // 문 앞까지 [시뮬]
+    const photo = await this.write(this.opts('photo'), (o) => this.api.uploadEvidencePhoto(deliveryId, testPhoto(), o));
+    const takenAt = this.clock.iso();
+    const after = await this.api.getExecution(deliveryId);
+    await this.write(this.opts('complete', after.version), (o) =>
+      this.api.reportCompletion(
+        deliveryId,
+        { method: 'CONTACTLESS', evidence: { photoRefs: [photo.photoRef], takenAt, placement: 'FRONT_DOOR' }, occurredAt: takenAt },
+        o,
+      ),
+    );
+    trip.completedAt = this.clock.now;
+    this.say(`전달 완료 ${deliveryId}`);
+    this.hooks.onTripDone(trip);
+    this.dropPoint = null;
+    this.target = null;
+  }
+
+  /** execution 조회로 조건이 될 때까지 기다린다. 404(아직 사본 없음·배정 반영 전)는 기다림. 돌려주는 값 = 그때 버전. */
+  private async waitExecution(deliveryId: string, ok: (s: string | undefined) => boolean, maxSec: number): Promise<number | null> {
+    const until = this.clock.now + maxSec;
+    for (;;) {
+      try {
+        const x = await this.api.getExecution(deliveryId);
+        if (ok(x.state)) return x.version ?? 0;
+      } catch (e) {
+        if (!(e instanceof ApiProblem && e.status === 404)) throw e;
+      }
+      if (this.clock.now >= until) return null;
+      await this.wait(1);
+    }
+  }
+
+  private async waitShipmentReady(shipmentId: string): Promise<Shipment> {
+    for (;;) {
+      const s = await this.observer.getShipment(shipmentId);
+      if (s.state === 'READY' || s.state === 'PARTIALLY_HANDED_OVER') return s;
+      if (s.state === 'HANDED_OVER' || s.state === 'CANCELLED' || s.state === 'CLOSED_PARTIAL') {
+        throw new Error(`출고 ${shipmentId} 상태 ${s.state} — 인계할 수 없음`);
+      }
+      this.say(`포장 대기(출고 ${s.state})`);
+      await this.wait(this.params.storeWaitPollSec);
+    }
+  }
+
+  /** 포장 하나: QR 허가 → 확정. 확정 결과를 모르면 판정 조회로 해소. fence 만료면 다시 찍는다. */
+  private async handover(packageId: string, qrCode: string, deliveryId: string) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const auth = await this.write(this.opts('ho-auth'), (o) =>
+        this.api.authorizeHandover(packageId, { riderId: this.id, deliveryId, scannedCode: qrCode, scannedAt: this.clock.iso() }, o),
+      );
+      this.say(`QR 인계 ${packageId}`);
+      await this.wait(3); // 포장을 받아 드는 시간 [시뮬]
+      try {
+        const res = await this.write(this.opts('ho-commit'), (o) =>
+          this.api.commitHandover(
+            packageId,
+            { handoverAuthorizationId: auth.handoverAuthorizationId ?? '', fenceVersion: auth.fenceVersion ?? 0, riderId: this.id },
+            o,
+          ),
+        );
+        if (res.status === 'APPLIED') return;
+        if (res.status === 'UNKNOWN_RESULT') {
+          for (let i = 0; i < 10; i++) {
+            await this.wait(2);
+            const v = await this.api.getHandoverResolution(packageId);
+            if (v.verdict === 'HANDED_OVER') return;
+          }
+        }
+        throw new Error(`인계 확정 ${res.status} (${packageId}) — 대사 필요`);
+      } catch (e) {
+        if (e instanceof ApiProblem && e.code === 'FENCE_EXPIRED') {
+          this.say('인계 허가 만료 — 다시 찍음');
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error(`인계 반복 실패 (${packageId})`);
+  }
+}
+
+/** 시험용 증빙 사진(JPEG 머리만 있는 작은 바이트) — 실제 사진이 아니다. */
+function testPhoto(): Blob {
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9]);
+  return new Blob([bytes], { type: 'image/jpeg' });
+}

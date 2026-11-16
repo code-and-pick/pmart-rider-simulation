@@ -1,0 +1,458 @@
+:root {
+  --bg: #eef1f6;
+  --panel: #ffffff;
+  --ink: #1d2433;
+  --muted: #6b768a;
+  --line: #dde3ec;
+  --accent: #2b5cd6;
+  --warn: #c2410c;
+  --chip-ok: #e3f6ec;
+  --chip-ok-ink: #17663d;
+  --chip-warn: #fff1e0;
+  --chip-warn-ink: #9a4a07;
+  --plane-bg: #f4f6fa;
+  --plane-grid: #dde3ec;
+  --plane-radius: #6b7a96;
+  --plane-ink: #55627a;
+  --marker-label-bg: rgba(255, 255, 255, 0.92);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f131b;
+    --panel: #171c26;
+    --ink: #e6eaf2;
+    --muted: #93a0b6;
+    --line: #2a3242;
+    --accent: #7aa2ff;
+    --warn: #ff9b5e;
+    --chip-ok: #143224;
+    --chip-ok-ink: #8fe0b4;
+    --chip-warn: #3a2612;
+    --chip-warn-ink: #ffc58f;
+    --plane-bg: #121722;
+    --plane-grid: #222a38;
+    --plane-radius: #7f8db0;
+    --plane-ink: #a5b1c7;
+    --marker-label-bg: rgba(23, 28, 38, 0.92);
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', 'Noto Sans KR', sans-serif;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.topbar h1 {
+  font-size: 15px;
+  margin: 0 8px 0 0;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.seg button,
+.btn,
+.tabs button {
+  border: 0;
+  background: transparent;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.seg button + button {
+  border-left: 1px solid var(--line);
+}
+.seg button.on,
+.tabs button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.seg button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.btn:hover,
+.seg button:not(.on):not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.clock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin-left: auto;
+}
+.chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.chip.kakao {
+  background: var(--chip-ok);
+  color: var(--chip-ok-ink);
+}
+.chip.plane,
+.chip.loading {
+  background: var(--chip-warn);
+  color: var(--chip-warn-ink);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px 1fr 340px;
+}
+.panel {
+  background: var(--panel);
+  overflow: auto;
+  padding: 10px 12px;
+}
+.panel.left {
+  border-right: 1px solid var(--line);
+}
+.panel.right {
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+.panel h2 {
+  font-size: 13px;
+  margin: 2px 0 4px;
+}
+.muted,
+.hint {
+  color: var(--muted);
+}
+.hint {
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+.riders {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rider {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: 12px auto 1fr;
+  gap: 2px 6px;
+  cursor: pointer;
+}
+.rider:hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.rider.sel {
+  border-color: var(--accent);
+}
+.rider .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+}
+.rider .rid {
+  font-weight: 600;
+}
+.rider .phase {
+  color: var(--muted);
+}
+.rider .dl,
+.rider .note {
+  grid-column: 2 / 4;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.map-wrap {
+  position: relative;
+  min-width: 0;
+}
+.map {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.map-legend {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 30;
+  background: var(--marker-label-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  max-width: calc(100% - 20px);
+}
+.legend-dash {
+  display: inline-block;
+  width: 22px;
+  border-top: 3px dashed var(--muted);
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.map-fallback {
+  color: var(--chip-warn-ink);
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.stat {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+.stat-v {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.stat-l {
+  font-size: 11px;
+  color: var(--muted);
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+.tabs button {
+  border-radius: 6px;
+}
+.tab-body {
+  flex: 1;
+  overflow: auto;
+  padding-top: 6px;
+}
+.cards,
+.log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.states {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 6px;
+  margin-top: 2px;
+}
+.src {
+  color: var(--muted);
+  font-size: 12px;
+}
+code {
+  font: 12px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.log li {
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 12px;
+  word-break: break-all;
+}
+.log li.warn {
+  color: var(--warn);
+}
+.time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.actor {
+  color: var(--accent);
+}
+.empty {
+  color: var(--muted);
+  padding: 8px 0;
+}
+
+/* ───── 지도 마커 (카카오 커스텀 오버레이·평면 공용) ───── */
+.mk-rider {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  --rider-color: #7c8aa5;
+}
+.mk-rider-shadow {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 4px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.28);
+  filter: blur(2px);
+}
+.mk-rider-ring {
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid var(--rider-color);
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #eef2f8 55%, #cfd8e6 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+.mk-rider-body {
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  transition: transform 0.2s;
+}
+.mk-rider-box {
+  fill: var(--rider-color);
+}
+.mk-west .mk-rider-body {
+  transform: scaleX(-1);
+}
+.mk-selected .mk-rider-ring {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--rider-color) 35%, transparent),
+    0 2px 4px rgba(0, 0, 0, 0.25);
+}
+.mk-rider-label,
+.mk-mfc-label,
+.mk-cust-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font: 600 11px/1.2 system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--marker-label-bg);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.mk-rider-label {
+  top: 40px;
+}
+.mk-mfc {
+  position: relative;
+  width: 34px;
+  height: 32px;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
+}
+.mk-mfc-label {
+  top: 32px;
+}
+.mk-cust {
+  position: relative;
+  width: 18px;
+  height: 24px;
+  --cust-color: #9aa4b5;
+}
+.mk-cust-pin {
+  position: absolute;
+  left: 2px;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--cust-color);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.mk-cust-label {
+  top: 22px;
+  font-weight: 500;
+  font-size: 10px;
+}
+
+/* 평면 대체 화면: 마커를 좌표로 옮긴다(앵커 = 마커 기준점) */
+.map.plane canvas {
+  position: absolute;
+  inset: 0;
+}
+.plane-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.plane-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+}
+.plane-anchor.anchor-rider {
+  margin: -36px 0 0 -22px;
+}
+.plane-anchor.anchor-bottom.mk-mfc {
+  margin: -28px 0 0 -17px;
+}
+.plane-anchor.anchor-bottom.mk-cust {
+  margin: -24px 0 0 -9px;
+}
+
+@media (max-width: 900px) {
+  .body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 45vh auto auto;
+  }
+  .map-wrap {
+    grid-row: 1;
+    min-height: 45vh;
+  }
+  .panel.left,
+  .panel.right {
+    border: 0;
+    border-top: 1px solid var(--line);
+  }
+}

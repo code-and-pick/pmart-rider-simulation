@@ -1,0 +1,145 @@
+// 카카오 지도 위에 그리기 — 라이더·MFC·고객은 커스텀 오버레이(HTML), 반경은 Circle, 경로는 Polyline(점선).
+// 라이더 위치는 매 프레임 setPosition 으로 직접 옮긴다(React 상태 아님). 카카오 로고·저작권 표기는 지우지 않는다.
+
+import { ROUTE_COLOR } from './colors';
+import type { KakaoMaps, KCircle, KCustomOverlay, KMap, KPolyline } from './kakao';
+import { createCustomerEl, createMfcEl, createRiderEl, updateCustomerEl, updateRiderEl } from './markers';
+import type { CustomerPinState, MapSurface, RiderMarkerState, RouteKind } from './surface';
+import type { LatLng } from '../util/geo';
+
+interface Marker {
+  ov: KCustomOverlay;
+  el: HTMLElement;
+  lat: number;
+  lng: number;
+}
+
+export class KakaoSurface implements MapSurface {
+  readonly kind = 'kakao' as const;
+  private readonly map: KMap;
+  private readonly riders = new Map<string, Marker>();
+  private readonly customers = new Map<string, Marker>();
+  private readonly routes = new Map<string, { line: KPolyline; kind: RouteKind }>();
+  private mfc: KCustomOverlay | null = null;
+  private circles: KCircle[] = [];
+  private readonly ro: ResizeObserver;
+
+  constructor(
+    private readonly k: KakaoMaps,
+    private readonly container: HTMLElement,
+    center: LatLng,
+    private readonly onRiderClick: (id: string) => void,
+  ) {
+    this.map = new k.Map(container, { center: new k.LatLng(center.lat, center.lng), level: 6 });
+    this.ro = new ResizeObserver(() => this.map.relayout());
+    this.ro.observe(container);
+  }
+
+  private ll(p: LatLng) {
+    return new this.k.LatLng(p.lat, p.lng);
+  }
+
+  setMfc(pos: LatLng, label: string, radiiKm: readonly number[]): void {
+    this.mfc?.setMap(null);
+    for (const c of this.circles) c.setMap(null);
+    this.circles = radiiKm.map(
+      (km) =>
+        new this.k.Circle({
+          center: this.ll(pos),
+          radius: km * 1000,
+          strokeWeight: 1.5,
+          strokeColor: '#2b3a55',
+          strokeOpacity: 0.55,
+          strokeStyle: 'dash',
+          fillColor: '#4c8dff',
+          fillOpacity: 0.03,
+          map: this.map,
+        }),
+    );
+    this.mfc = new this.k.CustomOverlay({ position: this.ll(pos), content: createMfcEl(label), xAnchor: 0.5, yAnchor: 0.85, zIndex: 3, map: this.map });
+  }
+
+  upsertRider(id: string, s: RiderMarkerState): void {
+    let m = this.riders.get(id);
+    if (!m) {
+      const el = createRiderEl();
+      el.addEventListener('click', () => this.onRiderClick(id));
+      const ov = new this.k.CustomOverlay({ position: this.ll(s.pos), content: el, xAnchor: 0.5, yAnchor: 0.8, zIndex: 10, map: this.map, clickable: true });
+      m = { ov, el, lat: s.pos.lat, lng: s.pos.lng };
+      this.riders.set(id, m);
+    }
+    if (m.lat !== s.pos.lat || m.lng !== s.pos.lng) {
+      m.ov.setPosition(this.ll(s.pos));
+      m.lat = s.pos.lat;
+      m.lng = s.pos.lng;
+    }
+    m.ov.setZIndex(s.selected ? 20 : 10);
+    updateRiderEl(m.el, s.color, s.label, s.heading, s.selected);
+  }
+
+  removeRider(id: string): void {
+    this.riders.get(id)?.ov.setMap(null);
+    this.riders.delete(id);
+  }
+
+  upsertCustomer(id: string, s: CustomerPinState): void {
+    let m = this.customers.get(id);
+    if (!m) {
+      const el = createCustomerEl();
+      const ov = new this.k.CustomOverlay({ position: this.ll(s.pos), content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 5, map: this.map });
+      m = { ov, el, lat: s.pos.lat, lng: s.pos.lng };
+      this.customers.set(id, m);
+    }
+    updateCustomerEl(m.el, s.color, s.label);
+  }
+
+  removeCustomer(id: string): void {
+    this.customers.get(id)?.ov.setMap(null);
+    this.customers.delete(id);
+  }
+
+  upsertRoute(id: string, from: LatLng, to: LatLng, kind: RouteKind): void {
+    const r = this.routes.get(id);
+    const path = [this.ll(from), this.ll(to)];
+    if (!r) {
+      const line = new this.k.Polyline({
+        path,
+        strokeWeight: 3,
+        strokeColor: ROUTE_COLOR[kind],
+        strokeOpacity: 0.85,
+        strokeStyle: 'shortdash', // 점선 = 직선, 도로 경로 아님(§6-3)
+        map: this.map,
+      });
+      this.routes.set(id, { line, kind });
+      return;
+    }
+    if (r.kind !== kind) {
+      r.line.setOptions({ strokeColor: ROUTE_COLOR[kind] });
+      r.kind = kind;
+    }
+    r.line.setPath(path);
+  }
+
+  removeRoute(id: string): void {
+    this.routes.get(id)?.line.setMap(null);
+    this.routes.delete(id);
+  }
+
+  panTo(pos: LatLng): void {
+    this.map.panTo(this.ll(pos));
+  }
+
+  frame(): void {
+    /* 카카오 지도는 스스로 다시 그린다 */
+  }
+
+  destroy(): void {
+    this.ro.disconnect();
+    for (const id of [...this.riders.keys()]) this.removeRider(id);
+    for (const id of [...this.customers.keys()]) this.removeCustomer(id);
+    for (const id of [...this.routes.keys()]) this.removeRoute(id);
+    this.mfc?.setMap(null);
+    for (const c of this.circles) c.setMap(null);
+    this.container.innerHTML = '';
+  }
+}

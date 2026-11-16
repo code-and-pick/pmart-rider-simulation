@@ -67,7 +67,33 @@ export interface SimParams {
   panelHz: number;
   /** MOCK 배속 [시뮬] — 실서버는 늘 1×(MFC 시뮬레이터 SIM-1 과 같게) */
   mockTimeScale: number;
+  /** 라이더 시작 위치: MFC 에서 이 거리 범위(m) 안 아무 곳 [시뮬] — 반경 단계(1→2→3km)가 보이도록 3km 안팎으로 흩는다 */
+  riderStartRadiusM: [number, number];
+  /** 대기 중 MFC 쪽으로 천천히 돌아오는 비율(대기 이동 속도 / riderSpeedMps) [시뮬] */
+  idleDriftFactor: number;
+  /** MOCK 이 다른 서비스 대신 하는 일 — 실서버에는 없는 값 */
+  mock: MockParams;
   seed: number;
+}
+
+/** MOCK 전용 [시뮬] 값. docs/backend-requests.md "시뮬레이터가 정한 값"에 같이 적는다. */
+export interface MockParams {
+  /** 시간당 주문(배송) 수 [시뮬] */
+  ordersPerHour: number;
+  /** 주문 → 점원 배차 요청(패킹 시작)까지 초 범위 [시뮬] — 실제는 PDA 가 패킹 시작 때 요청 */
+  pickSec: [number, number];
+  /** 배차 요청 → 출하 대기(포장 끝)까지 분 범위 [시뮬] — 요청 본문의 예상 포장 시간과 같게 쓴다 */
+  packMinutes: [number, number];
+  /** 출고당 포장 수 범위 [시뮬] */
+  packagesPerShipment: [number, number];
+  /** MFC → 고객 직선거리 범위(m) [시뮬] */
+  customerDistanceM: [number, number];
+  /** 반경 한 단계(1→2→3km) 머무는 시간 [시뮬] — 계약은 단계만 정하고 시간은 정하지 않음. 응답 대기 1분과 같게 */
+  radiusStepSec: number;
+  /** 인계 허가(fence) 유효시간 [시뮬] — 계약은 fenceExpiresAt 만 정의(센터 설정값) */
+  fenceTtlSec: number;
+  /** 사건이 다른 서비스 사본에 반영되는 지연 범위(초) [시뮬] — 예: DeliveryAssigned → execution ASSIGNED (docs/design.md §4) */
+  eventLagSec: [number, number];
 }
 
 export const DEFAULT_PARAMS: SimParams = {
@@ -87,6 +113,18 @@ export const DEFAULT_PARAMS: SimParams = {
   lanObserverPollSec: 5,
   panelHz: 4,
   mockTimeScale: 1,
+  riderStartRadiusM: [300, 3200],
+  idleDriftFactor: 0.5,
+  mock: {
+    ordersPerHour: 12,
+    pickSec: [60, 240],
+    packMinutes: [3, 6],
+    packagesPerShipment: [1, 2],
+    customerDistanceM: [600, 3000],
+    radiusStepSec: 60,
+    fenceTtlSec: 120,
+    eventLagSec: [0.5, 3],
+  },
   seed: 1,
 };
 
