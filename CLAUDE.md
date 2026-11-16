@@ -4,7 +4,7 @@ PMart 라스트마일(MFC → 고객) 배송을 **카카오 지도 위에서** �
 MFC 쪽 시뮬레이터(`../pmart-mfc-simulation`)의 짝이다. MFC 에서 점원이 **배차 요청**을 하면(실제 PDA 또는 MFC 시뮬레이터 가상 작업자) 백엔드 delivery-dispatch 가 배송을 열고, 이 시뮬레이터의 가상 라이더가 제안을 받아 수락 → MFC 이동 → QR 인계 → 고객 이동 → 전달 완료까지 수행한다.
 두 시뮬레이터는 서로 직접 부르지 않는다 — **백엔드 사건으로만 이어진다**(설계 `docs/design.md` §2).
 
-스택: `../pmart-mfc-simulation` 과 같다(사용자 결정 2026-11-16) — Vite 6 + TypeScript 5 + React 19 + Vitest(react-three-fiber 는 지도 화면에 쓰지 않음 — 필요할 때만). 지도는 카카오맵 웹 JS SDK(JavaScript 키 `VITE_KAKAO_JS_KEY`, `.env.local` — Git 제외)로 띄우고, 라이더는 커스텀 오버레이로 그린다. 키가 없으면 좌표 평면 대체 화면으로 돈다(`docs/design.md` §6). 카카오 REST 키는 브라우저에 두지 않는다.
+스택: `../pmart-mfc-simulation` 과 같다(사용자 결정 2026-11-16) — Vite 6 + TypeScript 5 + React 19 + Vitest(react-three-fiber 는 지도 화면에 쓰지 않음 — 필요할 때만). 지도는 카카오맵 웹 JS SDK(JavaScript 키 `VITE_KAKAO_JS_KEY`, `.env.local` — Git 제외)로 띄우고, 라이더는 커스텀 오버레이로 그린다. 키가 없으면 좌표 평면 대체 화면으로 돈다(`docs/design.md` §6). 카카오 REST 키는 브라우저에 두지 않는다 — 도로 경로용 카카오모빌리티 REST 키는 `.env.local` `KAKAO_MOBILITY_REST_KEY`(**`VITE_` 금지**, 개발 서버 `/sim-route` 만 읽음, 시뮬레이터 전용 키 — 백엔드 키와 나눠 쓰지 않음, §6-3).
 - **역할**: 배차는 백엔드가 한다. 실서버에서 라이더 API 를 부르는 것은 이 시뮬레이터뿐이고, MFC 시뮬레이터는 배차·수행 상태를 읽어 앞마당 인계만 그린다(`docs/design.md` §2-1, MFC 쪽에 넘길 내용 `docs/mfc-simulator-requests.md`).
 - 시뮬레이션 엔진(`src/sim`)·백엔드 어댑터(`src/backend`)·도메인(`src/domain`)은 React 에 의존하지 않는다(테스트가 화면 없이 돈다).
 - 매 프레임 바뀌는 값(라이더 위치)은 React 상태로 올리지 않고 지도 오버레이 객체를 직접 옮긴다. 패널은 약 4Hz 박자·선택 변경 때만 다시 그린다.

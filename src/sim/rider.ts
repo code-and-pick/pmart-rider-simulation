@@ -15,6 +15,7 @@ import { ApiProblem, ResultUnknown, type Offer, type Shipment } from '../domain/
 import { bearingDeg, distanceM, moveToward, type LatLng } from '../util/geo';
 import { IdGen, Rng } from '../util/rng';
 import { RiderRestrictedError, STOP_RESTRICTIONS, withAuthRecovery } from './authGuard';
+import { straightRoutes, type Route, type RouteKind, type RouteProvider } from './route';
 import type { SimClock } from './clock';
 
 /** 실서버에서 가입이 허용되지 않았는데 미가입인 라이더 */
@@ -94,8 +95,13 @@ export class VirtualRider {
   /** 화면 표시용 이유(예: "출고 PREPARING — 포장 대기") */
   note = '';
   deliveryId: string | null = null;
-  /** 지금 가는 곳 — 화면 경로선(직선, 도로 아님) */
+  /** 지금 가는 곳 */
   target: LatLng | null = null;
+  /** 지금 따라가는 경로(처음 = 출발, 끝 = 목적지) — 화면 경로선 */
+  path: LatLng[] | null = null;
+  /** ROAD = 카카오모빌리티 도로 경로(자동차 기준), STRAIGHT = 직선(도로 경로 아님) */
+  pathKind: RouteKind | null = null;
+  private pathIdx = 0;
   /** 진행 중 배송의 고객 좌표(drop-info 에서 lat·lng 만) */
   dropPoint: LatLng | null = null;
   trip: RiderTrip | null = null;
@@ -123,8 +129,11 @@ export class VirtualRider {
     readonly home: LatLng,
     start: LatLng,
     private readonly hooks: RiderHooks,
-    /** 미가입이면 가입할지 — 실서버는 사용자 결정 전까지 false(가입은 백엔드에 지울 수 없는 데이터를 남긴다, RR-02·RR-07) */
-    private readonly options: { allowSignup: boolean } = { allowSignup: true },
+    /**
+     * allowSignup: 미가입이면 가입할지(가입은 백엔드에 지울 수 없는 데이터를 남긴다 — RR-07).
+     * routes: MFC·고객으로 갈 때 경로(기본 직선 — 시험). 화면은 개발 서버 도로 경로(DevServerRoutes).
+     */
+    private readonly options: { allowSignup: boolean; routes?: RouteProvider } = { allowSignup: true },
   ) {
     this.id = api.riderId;
     // 401 → 계정 제한 확인 → 정지면 멈춤(RR-01 조건 7)
@@ -138,11 +147,25 @@ export class VirtualRider {
 
   tick(dt: number): void {
     const now = this.clock.now;
-    if (this.moveResolve && this.target) {
-      const step = moveToward(this.pos, this.target, this.moveSpeed * dt);
-      if (distanceM(this.pos, step.pos) > 0.01) this.heading = bearingDeg(this.pos, step.pos);
-      this.pos = step.pos;
-      if (step.arrived) {
+    if (this.moveResolve && this.path) {
+      // 경로 점을 차례로 따라간다(한 박자에 여러 점을 지날 수 있다)
+      let left = this.moveSpeed * dt;
+      while (left > 0 && this.pathIdx < this.path.length) {
+        const next = this.path[this.pathIdx] as LatLng;
+        const d = distanceM(this.pos, next);
+        if (d <= left) {
+          if (d > 0.01) this.heading = bearingDeg(this.pos, next);
+          this.pos = { ...next };
+          left -= d;
+          this.pathIdx++;
+        } else {
+          const m = moveToward(this.pos, next, left);
+          if (distanceM(this.pos, m.pos) > 0.01) this.heading = bearingDeg(this.pos, m.pos);
+          this.pos = m.pos;
+          left = 0;
+        }
+      }
+      if (this.pathIdx >= this.path.length) {
         const r = this.moveResolve;
         this.moveResolve = null;
         r();
@@ -197,8 +220,21 @@ export class VirtualRider {
     });
   }
 
-  private moveTo(target: LatLng, speedMps: number): Promise<void> {
+  /**
+   * target 까지 이동. viaRoad 면 경로 공급자(도로 — 못 받으면 직선)로, 아니면 직선(대기 중 짧은 이동).
+   * 앞의 이동(대기 중 다가가기)은 버린다. viaRoad 가 아니면 await 없이 곧바로 이동을 건다.
+   */
+  private async moveTo(target: LatLng, speedMps: number, viaRoad = false): Promise<void> {
+    this.moveResolve = null;
     this.target = { ...target };
+    let route: Route = { kind: 'STRAIGHT', points: [{ ...this.pos }, { ...target }] };
+    if (viaRoad) {
+      route = await (this.options.routes ?? straightRoutes).route(this.pos, target);
+      if (route.note) this.say(`직선으로 이동 — ${route.note}`);
+    }
+    this.path = route.points;
+    this.pathKind = route.kind;
+    this.pathIdx = 1;
     this.moveSpeed = speedMps;
     return new Promise((resolve) => {
       this.moveResolve = resolve;
@@ -390,7 +426,7 @@ export class VirtualRider {
     // 4. MFC 로
     this.phase = 'TO_STORE';
     this.say('MFC 로 이동');
-    await this.moveTo(this.home, this.params.riderSpeedMps);
+    await this.moveTo(this.home, this.params.riderSpeedMps, true);
 
     // execution 에 배정이 보일 때까지(사건 반영 대기)
     this.phase = 'WAIT_ASSIGN_REFLECT';
@@ -435,8 +471,8 @@ export class VirtualRider {
     }
     this.dropPoint = { lat: drop.lat, lng: drop.lng };
     this.phase = 'TO_CUSTOMER';
-    this.say('고객으로 이동(직선 — 도로 경로 아님)');
-    await this.moveTo(this.dropPoint, this.params.riderSpeedMps);
+    this.say('고객으로 이동');
+    await this.moveTo(this.dropPoint, this.params.riderSpeedMps, true);
 
     // 8. 도착 → 사진 → 완료
     this.phase = 'AT_CUSTOMER';

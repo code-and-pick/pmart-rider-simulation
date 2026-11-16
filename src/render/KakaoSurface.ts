@@ -19,7 +19,7 @@ export class KakaoSurface implements MapSurface {
   private readonly map: KMap;
   private readonly riders = new Map<string, Marker>();
   private readonly customers = new Map<string, Marker>();
-  private readonly routes = new Map<string, { line: KPolyline; kind: RouteKind }>();
+  private readonly routes = new Map<string, { line: KPolyline; kind: RouteKind; road: boolean; points: LatLng[] }>();
   private mfc: KCustomOverlay | null = null;
   private circles: KCircle[] = [];
   private readonly ro: ResizeObserver;
@@ -98,26 +98,31 @@ export class KakaoSurface implements MapSurface {
     this.customers.delete(id);
   }
 
-  upsertRoute(id: string, from: LatLng, to: LatLng, kind: RouteKind): void {
+  upsertRoute(id: string, points: LatLng[], kind: RouteKind, road: boolean): void {
     const r = this.routes.get(id);
-    const path = [this.ll(from), this.ll(to)];
+    // 실선 = 도로 경로(카카오모빌리티), 점선 = 직선(도로 경로 아님, §6-3)
+    const style = road ? 'solid' : 'shortdash';
     if (!r) {
       const line = new this.k.Polyline({
-        path,
-        strokeWeight: 3,
+        path: points.map((p) => this.ll(p)),
+        strokeWeight: road ? 4 : 3,
         strokeColor: ROUTE_COLOR[kind],
-        strokeOpacity: 0.85,
-        strokeStyle: 'shortdash', // 점선 = 직선, 도로 경로 아님(§6-3)
+        strokeOpacity: road ? 0.75 : 0.85,
+        strokeStyle: style,
         map: this.map,
       });
-      this.routes.set(id, { line, kind });
+      this.routes.set(id, { line, kind, road, points });
       return;
     }
-    if (r.kind !== kind) {
-      r.line.setOptions({ strokeColor: ROUTE_COLOR[kind] });
+    if (r.kind !== kind || r.road !== road) {
+      r.line.setOptions({ strokeColor: ROUTE_COLOR[kind], strokeStyle: style, strokeWeight: road ? 4 : 3 });
       r.kind = kind;
+      r.road = road;
     }
-    r.line.setPath(path);
+    if (r.points !== points) {
+      r.line.setPath(points.map((p) => this.ll(p)));
+      r.points = points;
+    }
   }
 
   removeRoute(id: string): void {

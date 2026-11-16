@@ -188,7 +188,7 @@ export class AppController {
         selected: r.id === this.selected,
       });
       const kind = r.phase === 'TO_STORE' ? 'TO_STORE' : r.phase === 'TO_CUSTOMER' ? 'TO_CUSTOMER' : null;
-      if (kind && r.target) s.upsertRoute(r.id, r.pos, r.target, kind);
+      if (kind && r.path) s.upsertRoute(r.id, r.path, kind, r.pathKind === 'ROAD');
       else s.removeRoute(r.id);
     }
     const now = this.sim.clock.now;

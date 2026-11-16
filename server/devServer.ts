@@ -13,6 +13,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HttpProxy, Plugin } from 'vite';
 import { decideLanRequest, isListedSimRider, isLoopback } from './lanPolicy';
 import { makeSigner, NotSimRiderError, RiderTokenCache } from './riderToken';
+import { parsePoint, RouteService } from './routing';
 import { Secrets, SECRET_FILES, secretsDir } from './secrets';
 import { fetchStaffToken, OBSERVER_ACCOUNT, staffAuthEndpoints, StaffTokenCache } from './staffToken';
 
@@ -23,12 +24,13 @@ interface AuthDeps {
   secrets: Secrets;
   riders: RiderTokenCache | null;
   staff: StaffTokenCache | null;
+  routes: RouteService;
 }
 
 const ACTOR = Symbol('simActor');
 let deps: AuthDeps | null = null;
 
-function initDeps(root: string): AuthDeps {
+function initDeps(root: string, kakaoRestKey: string | null): AuthDeps {
   const secrets = new Secrets(secretsDir(root));
   const st = secrets.status();
   const riders = st.riderSigning
@@ -42,7 +44,8 @@ function initDeps(root: string): AuthDeps {
       st.riderSigning && st.observer ? '가능' : '일부/불가'
     })`,
   );
-  return { secrets, riders, staff };
+  console.info(`[sim-route] 카카오모빌리티 REST 키 ${kakaoRestKey ? '있음 — 도로 경로' : '없음 — 직선으로'}`);
+  return { secrets, riders, staff, routes: new RouteService(kakaoRestKey) };
 }
 
 function problem(res: ServerResponse, status: number, code: string, title: string) {
@@ -71,6 +74,18 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
     return;
   }
   if (path === '/sim-auth' || path.startsWith('/sim-auth/')) return problem(res, 404, 'NOT_FOUND', '없는 경로');
+  if (path === '/sim-route') {
+    // 도로 경로(이 PC 만 — lanPolicy). 좌표는 로그에 남기지 않는다.
+    const q = new URL(url, 'http://local').searchParams;
+    const from = parsePoint(q.get('from'));
+    const to = parsePoint(q.get('to'));
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    if (!from || !to) return problem(res, 400, 'VALIDATION_FAILED', 'from·to = lat,lng');
+    const result = deps ? await deps.routes.route(from, to) : { kind: 'NONE', reason: 'NO_KEY' };
+    res.end(JSON.stringify(result));
+    return;
+  }
   if (path !== '/api' && !path.startsWith('/api/')) return next();
 
   const loopback = isLoopback(req.socket.remoteAddress);
@@ -141,17 +156,18 @@ export function configureApiProxy(proxy: HttpProxy.Server): void {
   });
 }
 
-export function pmartDevServer(): Plugin {
+export function pmartDevServer(opts: { kakaoRestKey?: string | null } = {}): Plugin {
+  const restKey = opts.kakaoRestKey?.trim() || null;
   return {
     name: 'pmart-rider-dev-server',
     configureServer(server) {
-      if (process.env.VITEST) return; // 시험은 실제 비밀 파일을 읽지 않는다
-      deps ??= initDeps(server.config.root);
+      if (process.env.VITEST) return; // 시험은 실제 비밀 파일·키를 읽지 않는다
+      deps ??= initDeps(server.config.root, restKey);
       server.middlewares.use(apiMiddleware);
     },
     configurePreviewServer(server) {
       // vite preview 도 server.host·server.proxy 를 물려받으므로 같은 가드·토큰 붙이기
-      deps ??= initDeps(server.config.root);
+      deps ??= initDeps(server.config.root, restKey);
       server.middlewares.use(apiMiddleware);
     },
   };

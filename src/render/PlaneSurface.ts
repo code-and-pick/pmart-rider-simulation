@@ -22,7 +22,7 @@ export class PlaneSurface implements MapSurface {
   private pxPerM = 0.12;
   private readonly riders = new Map<string, { el: HTMLElement; pos: LatLng }>();
   private readonly customers = new Map<string, { el: HTMLElement; pos: LatLng }>();
-  private readonly routes = new Map<string, { from: LatLng; to: LatLng; kind: RouteKind }>();
+  private readonly routes = new Map<string, { points: LatLng[]; kind: RouteKind; road: boolean }>();
   private readonly cleanup: (() => void)[] = [];
 
   constructor(
@@ -129,8 +129,8 @@ export class PlaneSurface implements MapSurface {
     this.customers.delete(id);
   }
 
-  upsertRoute(id: string, from: LatLng, to: LatLng, kind: RouteKind): void {
-    this.routes.set(id, { from, to, kind });
+  upsertRoute(id: string, points: LatLng[], kind: RouteKind, road: boolean): void {
+    this.routes.set(id, { points, kind, road });
   }
 
   removeRoute(id: string): void {
@@ -180,13 +180,18 @@ export class PlaneSurface implements MapSurface {
       g.fillText(`${km}km`, o.x + km * 1000 * this.pxPerM + 4, o.y - 4);
     }
 
-    // 경로(직선 점선)
+    // 경로 — 도로 경로 실선, 직선 점선(도로 경로 아님)
     g.lineWidth = 3;
     for (const r of this.routes.values()) {
-      const a = this.toPx(r.from);
-      const b = this.toPx(r.to);
+      g.setLineDash(r.road ? [] : [6, 5]);
       g.strokeStyle = ROUTE_COLOR[r.kind];
-      line(g, a.x, a.y, b.x, b.y);
+      g.beginPath();
+      r.points.forEach((p, i) => {
+        const q = this.toPx(p);
+        if (i === 0) g.moveTo(q.x, q.y);
+        else g.lineTo(q.x, q.y);
+      });
+      g.stroke();
     }
     g.setLineDash([]);
 

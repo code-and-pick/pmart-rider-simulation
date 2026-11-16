@@ -43,7 +43,7 @@ function MapView() {
     <section className="map-wrap" aria-label="지도">
       <div ref={ref} className="map" />
       <div className="map-legend">
-        <span className="legend-dash" /> 점선 = 직선 — 도로 경로 아님
+        <span className="legend-solid" /> 도로 경로(카카오모빌리티, 자동차 기준) <span className="legend-dash" /> 직선 — 도로 경로 아님
         {st.kind === 'plane' && <span className="map-fallback"> · 좌표 평면 대체 화면({st.reason})</span>}
       </div>
     </section>

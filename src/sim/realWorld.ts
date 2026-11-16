@@ -14,6 +14,7 @@ import { DEFAULT_PARAMS, REAL_RIDER_GATE, simRiderId, type SimParams } from '../
 import { ApiProblem, type Delivery, type DomainEventType, type StaffDeliverySummary } from '../domain/contract';
 import { SimClock } from './clock';
 import { VirtualRider } from './rider';
+import { straightRoutes, type RouteProvider } from './route';
 import type { DeliveryCard, MetricsSummary, RiderView, World } from './world';
 
 const RING = 300;
@@ -37,6 +38,8 @@ class RemoteRider implements RiderView {
   note = '위치 조회 전';
   deliveryId: string | null = null;
   readonly target = null;
+  readonly path = null;
+  readonly pathKind = null;
   constructor(readonly id: string) {}
 }
 
@@ -64,6 +67,8 @@ export class RealWorld implements World {
     readonly params: SimParams = DEFAULT_PARAMS,
     /** 시험에서 바꿔 넣을 수 있게 — 화면은 늘 config 값 */
     private readonly gate: typeof REAL_RIDER_GATE = REAL_RIDER_GATE,
+    /** MFC·고객 이동 경로(기본 직선 — 시험, 화면은 DevServerRoutes) */
+    private readonly routes: RouteProvider = straightRoutes,
   ) {
     this.clock = new SimClock(this.startWall);
     this.backend = new HttpBackend({ apiBase: params.apiBase, sourceSystem: params.sourceSystem, now: () => this.clock.now });
@@ -107,7 +112,7 @@ export class RealWorld implements World {
           onTripDone: () => undefined,
           onNote: () => undefined,
         },
-        { allowSignup: this.gate.signupAllowed },
+        { allowSignup: this.gate.signupAllowed, routes: this.routes },
       );
       this.driven.set(r.id, v);
       void v.run();

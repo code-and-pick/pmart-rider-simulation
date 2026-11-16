@@ -12,6 +12,7 @@ import { destination, type LatLng } from '../util/geo';
 import { Rng } from '../util/rng';
 import { mockStartEpochMs, SimClock } from './clock';
 import { VirtualRider, type RiderTrip } from './rider';
+import { straightRoutes, type RouteProvider } from './route';
 import type { DeliveryCard, MetricsSummary, World } from './world';
 
 const SUBSTEP = 0.25;
@@ -37,11 +38,14 @@ export class Simulation implements World {
   paused = false;
   apiErrors = 0;
   private readonly rng: Rng;
+  /** MFC·고객 이동 경로(기본 직선 — 시험, 화면은 DevServerRoutes) */
+  private readonly routes: RouteProvider;
 
   constructor(
     readonly params: SimParams = DEFAULT_PARAMS,
-    opts: { startEpochMs?: number } = {},
+    opts: { startEpochMs?: number; routes?: RouteProvider } = {},
   ) {
+    this.routes = opts.routes ?? straightRoutes;
     this.clock = new SimClock(opts.startEpochMs ?? mockStartEpochMs());
     this.rng = new Rng(params.seed);
     this.speed = params.mockTimeScale;
@@ -72,6 +76,7 @@ export class Simulation implements World {
           onTripDone: (t) => push(this.trips, t),
           onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }),
         },
+        { allowSignup: true, routes: this.routes },
       );
       this.riders.push(r);
       made.push(r);

@@ -16,6 +16,10 @@ export interface RiderView {
   readonly note: string;
   readonly deliveryId: string | null;
   readonly target: LatLng | null;
+  /** 지금 따라가는 경로 — 화면 경로선 */
+  readonly path: LatLng[] | null;
+  /** ROAD = 도로 경로(실선), STRAIGHT = 직선(점선, 도로 경로 아님) */
+  readonly pathKind: 'ROAD' | 'STRAIGHT' | null;
 }
 
 /** 화면 배송 카드 — 두 서비스의 두 상태를 출처와 함께(docs/design.md §4). */

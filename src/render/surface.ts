@@ -26,8 +26,11 @@ export interface MapSurface {
   removeRider(id: string): void;
   upsertCustomer(id: string, s: CustomerPinState): void;
   removeCustomer(id: string): void;
-  /** 직선 경로선 — 도로 경로가 아니다(§6-3). 점선으로 그린다 */
-  upsertRoute(id: string, from: LatLng, to: LatLng, kind: RouteKind): void;
+  /**
+   * 경로선(§6-3). road = 카카오모빌리티 도로 경로 → 실선, 아니면 직선 → 점선("도로 경로 아님").
+   * points 가 같은 배열이면 다시 그리지 않는다(매 프레임 불림).
+   */
+  upsertRoute(id: string, points: LatLng[], kind: RouteKind, road: boolean): void;
   removeRoute(id: string): void;
   panTo(pos: LatLng): void;
   /** 매 프레임 끝(평면은 여기서 다시 그린다) */
