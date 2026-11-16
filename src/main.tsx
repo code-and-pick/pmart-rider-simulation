@@ -24,6 +24,11 @@ if (mode === 'http') {
 const controller = new AppController(world);
 controller.start();
 
+// 실서버 가상 라이더가 운행 중일 때 탭을 닫으면 ON_DUTY 로 남는다 — 아무도 움직이지 않는 라이더에게 실제 제안이 간다. 닫기 전에 묻는다.
+window.addEventListener('beforeunload', (e) => {
+  if (world.operating) e.preventDefault();
+});
+
 createRoot(root).render(
   <StrictMode>
     <App controller={controller} />

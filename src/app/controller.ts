@@ -139,6 +139,11 @@ export class AppController {
     this.ticker.emit();
   }
 
+  stopOperation() {
+    this.sim.stopOperation();
+    this.ticker.emit();
+  }
+
   private stopTicker: (() => void) | null = null;
   private lastStep = 0;
 

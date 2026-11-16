@@ -128,6 +128,12 @@ export class Simulation implements World {
     /* MOCK 은 시작할 때 이미 운행 */
   }
 
+  readonly operating = false;
+
+  stopOperation(): void {
+    /* MOCK 은 해당 없음 */
+  }
+
   metrics(): MetricsSummary {
     const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
     const done = this.trips.filter((t) => t.completedAt !== undefined);

@@ -1,4 +1,4 @@
-// 실서버 읽기(P2) + 가상 라이더 운행 자리(P3 — REAL_RIDER_GATE 로 잠김, 사용자 결정 대기).
+// 실서버 읽기(P2) + 가상 라이더 운행(P3 — REAL_RIDER_GATE: 사용자 2026-11-16 "시험 번호로 시작" — 2명).
 // 읽기는 백엔드에서 읽은 것만 그린다. 운행(쓰기)은 잠금이 풀린 뒤에만 VirtualRider 가 HttpBackend 로 한다.
 //
 // 읽는 것(모두 GET):
@@ -60,14 +60,19 @@ export class RealWorld implements World {
   private authStatus = '개발 서버 토큰 상태 확인 전';
   private readonly startWall = Date.now();
 
-  constructor(readonly params: SimParams = DEFAULT_PARAMS) {
+  constructor(
+    readonly params: SimParams = DEFAULT_PARAMS,
+    /** 시험에서 바꿔 넣을 수 있게 — 화면은 늘 config 값 */
+    private readonly gate: typeof REAL_RIDER_GATE = REAL_RIDER_GATE,
+  ) {
     this.clock = new SimClock(this.startWall);
     this.backend = new HttpBackend({ apiBase: params.apiBase, sourceSystem: params.sourceSystem, now: () => this.clock.now });
     this.backend.onApiCall((r) => {
       push(this.apiLog, r);
       if (r.status === 'ERR' || (typeof r.status === 'number' && r.status >= 500)) this.apiErrors++;
     });
-    for (let i = 0; i < params.riderCount; i++) this.remote.push(new RemoteRider(simRiderId(i)));
+    // 실서버 시뮬레이터 라이더 수는 사용자가 정한 값(REAL_RIDER_GATE.riderCount) — MOCK 의 riderCount 와 따로
+    for (let i = 0; i < this.gate.riderCount; i++) this.remote.push(new RemoteRider(simRiderId(i)));
     void this.checkAuth();
   }
 
@@ -76,14 +81,19 @@ export class RealWorld implements World {
   }
 
   get operationLock(): string | null {
-    if (!REAL_RIDER_GATE.operationAllowed) return '실서버 가상 라이더 운행 잠김 — 가입·운행 여부 사용자 결정 대기(RR-02·RR-07)';
-    if (this.driven.size) return '운행 중';
+    if (!this.gate.operationAllowed) return '실서버 가상 라이더 운행 잠김 — 가입·운행 여부 사용자 결정 대기(RR-02·RR-07)';
     return null;
   }
 
-  /** 가상 라이더를 실서버에서 움직인다(쓰기). 잠겨 있으면 아무것도 안 한다. */
+  /** 이 브라우저가 실서버에서 라이더를 움직이는 중인가(멈춘 라이더만 남았으면 false) */
+  get operating(): boolean {
+    return [...this.driven.values()].some((v) => v.phase !== 'STOPPED');
+  }
+
+  /** 가상 라이더를 실서버에서 움직인다(쓰기). 잠겨 있거나 이미 운행 중이면 아무것도 안 한다. */
   startOperation(): void {
-    if (!REAL_RIDER_GATE.operationAllowed || this.driven.size) return;
+    if (!this.gate.operationAllowed || this.operating) return;
+    this.driven.clear();
     this.remote.forEach((r, i) => {
       const v = new VirtualRider(
         i,
@@ -97,11 +107,16 @@ export class RealWorld implements World {
           onTripDone: () => undefined,
           onNote: () => undefined,
         },
-        { allowSignup: REAL_RIDER_GATE.signupAllowed },
+        { allowSignup: this.gate.signupAllowed },
       );
       this.driven.set(r.id, v);
       void v.run();
     });
+  }
+
+  /** 운행 종료 — 진행 중 배송은 끝낸 뒤 OFF_DUTY(VirtualRider.requestStop). */
+  stopOperation(): void {
+    for (const v of this.driven.values()) v.requestStop();
   }
 
   /** 실서버는 실제 시각 1× — 박자가 늦거나 탭이 가려져도 벽시계로 맞춘다 */

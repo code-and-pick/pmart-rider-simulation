@@ -50,7 +50,7 @@ export function TopBar() {
           + 라이더
         </button>
       )}
-      {real && (
+      {real && !sim.operating && (
         <button
           className="btn"
           disabled={sim.operationLock !== null}
@@ -58,6 +58,11 @@ export function TopBar() {
           onClick={() => app.startOperation()}
         >
           가상 라이더 운행
+        </button>
+      )}
+      {real && sim.operating && (
+        <button className="btn warn" title="진행 중 배송은 끝낸 뒤 OFF_DUTY" onClick={() => app.stopOperation()}>
+          운행 종료
         </button>
       )}
       <span className="clock" title={real ? '실제 시각(서울)' : '시뮬레이션 시각(서울)'}>

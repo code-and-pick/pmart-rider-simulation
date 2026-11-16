@@ -10,7 +10,7 @@
 //  - purpose 가 DELIVERY 가 아닌 제안(오배송 회수 등)은 지금은 거절한다(docs/design.md §3-1 — 회수 흐름은 P4).
 
 import type { ObserverApi, RiderApi, WriteOptions } from '../backend/port';
-import { CONTRACT, type SimParams } from '../config';
+import { CONTRACT, simRiderPhone, type SimParams } from '../config';
 import { ApiProblem, ResultUnknown, type Offer, type Shipment } from '../domain/contract';
 import { bearingDeg, distanceM, moveToward, type LatLng } from '../util/geo';
 import { IdGen, Rng } from '../util/rng';
@@ -60,7 +60,8 @@ export const PHASE_LABEL: Record<RiderPhase, string> = {
 export type OfferDecision = { kind: 'ACCEPT' } | { kind: 'REJECT'; reason: 'OTHER' | 'TOO_FAR' } | { kind: 'IGNORE' };
 
 export function decideOffer(offer: Offer, roll: number, acceptProbability: number): OfferDecision {
-  // 회수 배송·고객 반품은 아직 흐름이 없다 — 받지 않는다(§3-1)
+  // 회수(MISDELIVERY_RECOVERY)·고객 반품·재발송(MISDELIVERY_RESHIPMENT — dispatch 0.4.1)은 받지 않는다(§3-1).
+  // 재발송은 "배차는 일반 배송과 같다"지만 execution 이 같은 단계로 처리하는지 계약·서비스 문서에 없다 — P4 에서 확인 뒤 받는다.
   if (offer.purpose !== undefined && offer.purpose !== 'DELIVERY') return { kind: 'REJECT', reason: 'OTHER' };
   if (offer.deliveryType !== undefined && offer.deliveryType !== 'FORWARD') return { kind: 'REJECT', reason: 'OTHER' };
   if (roll < acceptProbability) return { kind: 'ACCEPT' };
@@ -231,15 +232,25 @@ export class VirtualRider {
 
   // ───────────── 순서 ─────────────
 
+  /**
+   * 운행 종료 요청 — 진행 중 배송은 끝까지 하고, 그 뒤(또는 대기 중이면 곧) 운행 상태를 OFF_DUTY 로 바꾼다.
+   * 실서버에서 ON_DUTY 로 남겨 두면 아무도 움직이지 않는 라이더에게 실제 제안이 간다.
+   */
+  requestStop(): void {
+    if (this.done) return;
+    this.done = true;
+    this.say(this.deliveryId ? '운행 종료 요청 — 진행 중 배송을 끝낸 뒤 OFF' : '운행 종료 요청');
+  }
+
   async run(): Promise<void> {
     try {
       await this.prepare();
-      for (;;) {
-        if (this.done) return;
+      while (!this.done) {
         const offer = await this.idleUntilAssigned();
-        if (!offer) return;
+        if (!offer) break;
         await this.deliver(offer);
       }
+      await this.goOffDuty();
     } catch (e) {
       this.phase = 'STOPPED';
       if (e instanceof RiderRestrictedError) this.say(`멈춤: 계정 제한 ${e.restriction} — 운행하지 않음(RR-01 조건 7)`);
@@ -262,8 +273,8 @@ export class VirtualRider {
       await this.write(this.opts('signup'), (o) =>
         this.api.signup(
           {
-            // 시험 전화번호 [시뮬] — 실서버 대역은 RR-02 회신 대기
-            phone: `0109${String(900000 + this.index).padStart(7, '0')}`,
+            // 시험 전화번호 010-0000-00NN(사용자 2026-11-16, RR-02)
+            phone: simRiderPhone(this.index),
             vehicleType: 'MOTORCYCLE',
             deliveryAreas: [{ mfcId: this.params.mfcId }],
             consents: [{ consentType: 'TERMS', version: 'sim' }],
@@ -278,6 +289,30 @@ export class VirtualRider {
     );
     this.phase = 'IDLE';
     this.say('운행 시작');
+  }
+
+  /**
+   * 운행 종료: OFF_DUTY·신규배차 OFF. 완료 직후에는 rider-service 의 "진행 중 배송 수"가 사건으로 조금 늦게 줄어 409 가 올 수 있다
+   * (docs/design.md §4 반영 지연) — 그래서 409 면 잠깐 기다렸다 몇 번 다시 한다(새 키 — 409 는 처리 안 된 요청).
+   */
+  private async goOffDuty() {
+    for (let i = 0; ; i++) {
+      try {
+        await this.write(this.opts('off'), (o) => this.api.setOperatingState({ status: 'OFF_DUTY', newDispatchEnabled: false }, o));
+        this.phase = 'STOPPED';
+        this.say('운행 종료(OFF_DUTY)');
+        return;
+      } catch (e) {
+        if (e instanceof ApiProblem && e.status === 409 && i < 6) {
+          this.say('운행 종료 대기 — 진행 중 배송 반영 기다림');
+          await this.wait(5);
+          continue;
+        }
+        this.phase = 'STOPPED';
+        this.say(`운행 종료 실패: ${e instanceof ApiProblem ? `${e.status} ${e.code ?? ''}` : String(e)} — 운행 상태 확인 필요`);
+        return;
+      }
+    }
   }
 
   /** 2·3. 대기 — 제안을 pollAfterSec 간격으로 보고, 받기로 하면 수락. 배정되면 그 제안을 돌려준다. */
@@ -322,6 +357,7 @@ export class VirtualRider {
       return null;
     }
     await this.wait(delay);
+    if (this.done) return null; // 운행 종료 요청 뒤에는 수락하지 않는다(만료되게 둠)
     let res;
     try {
       res = await this.write(this.opts('offer'), (o) =>

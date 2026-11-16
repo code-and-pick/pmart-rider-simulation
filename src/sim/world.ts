@@ -68,4 +68,8 @@ export interface World {
   readonly operationLock: string | null;
   /** 실서버 가상 라이더 운행 시작(잠겨 있으면 아무것도 안 함) */
   startOperation(): void;
+  /** 실서버 가상 라이더가 움직이는 중인가 */
+  readonly operating: boolean;
+  /** 운행 종료 — 진행 중 배송은 끝낸 뒤 OFF_DUTY */
+  stopOperation(): void;
 }

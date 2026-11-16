@@ -1,12 +1,12 @@
 // 백엔드 계약의 부분 사본 — 이 시뮬레이터(가상 라이더)가 부르거나 읽는 부분만.
 // 이름·상태값·필드는 계약을 그대로 따른다. 계약이 바뀌면 여기를 먼저 맞추고 docs/design.md §3 표를 고친다.
 //
-// 기준: pmart-backend origin/main 516e7cf5 (2026-11-16 읽음 — 아래 계약은 cb2bf317 과 같은 버전)
-//   contracts/openapi/delivery-dispatch-service.yaml   0.4.0
-//   contracts/openapi/delivery-execution-service.yaml  0.5.0
+// 기준: pmart-backend origin/main 347ea90d (2026-11-16 다시 읽음 — 516e7cf5 뒤 dispatch 0.4.1·fulfillment 0.5.0)
+//   contracts/openapi/delivery-dispatch-service.yaml   0.4.1
+//   contracts/openapi/delivery-execution-service.yaml  0.5.0 (recovery-contact·사진 보기 추가분은 아직 안 씀 — 회수 흐름 P4)
 //   contracts/openapi/delivery-tracking-service.yaml   0.4.0
 //   contracts/openapi/rider-service.yaml               0.4.0
-//   contracts/openapi/mfc-fulfillment-service.yaml     0.4.11 (출고 조회·포장 인계 부분만)
+//   contracts/openapi/mfc-fulfillment-service.yaml     0.5.0 (출고 조회·포장 인계 부분만 — 0.5.0 변경은 ConfirmOrder·사건 필드라 여기 영향 없음)
 //   contracts/openapi/_common.yaml                     0.1.0
 // 모든 경로는 게이트웨이 /api/v1 아래. POST·PUT 은 Idempotency-Key·X-Source-System 필수, 상태 전이는 X-Expected-Version(선택).
 // 이름이 서비스 사이에서 겹치는 스키마만 이름을 바꿨다(주석에 계약 이름).
@@ -76,7 +76,7 @@ export class ResultUnknown extends Error {
   }
 }
 
-// ───────────────────────── delivery-dispatch 0.4.0 ─────────────────────────
+// ───────────────────────── delivery-dispatch 0.4.1 ─────────────────────────
 
 export type DeliveryType = 'FORWARD' | 'RETURN' | 'RESHIPMENT';
 
@@ -91,8 +91,8 @@ export type DispatchState =
   | 'CLOSED'
   | 'BLOCKED';
 
-/** DELIVERY 일반, CLAIM_RETURN 고객 반품 회수(아직 없음), MISDELIVERY_RECOVERY 오배송 회수(DD-2). */
-export type DeliveryPurpose = 'DELIVERY' | 'CLAIM_RETURN' | 'MISDELIVERY_RECOVERY';
+/** DELIVERY 일반, CLAIM_RETURN 고객 반품 회수(아직 없음), MISDELIVERY_RECOVERY 오배송 회수(DD-2), MISDELIVERY_RESHIPMENT 오배송 재발송(0.4.1 — type RESHIPMENT). */
+export type DeliveryPurpose = 'DELIVERY' | 'CLAIM_RETURN' | 'MISDELIVERY_RECOVERY' | 'MISDELIVERY_RESHIPMENT';
 
 export type OfferState = 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'LATE' | 'SEND_FAILED' | 'SUPERSEDED';
 export type OfferSource = 'AI_RECOMMENDED' | 'DELIVERY_LIST';
@@ -268,6 +268,8 @@ export interface Delivery {
   updatedAt?: string;
   purpose?: DeliveryPurpose;
   recovery?: RecoveryInfo;
+  /** 0.4.1 — 재발송(MISDELIVERY_RESHIPMENT)이면 오배송 확인 사건 */
+  caseId?: string;
 }
 
 /** POST /deliveries/{id}/assignment-cancellations 본문. 픽업 뒤면 422 PICKED_UP_CASE_REQUIRED. */
@@ -654,7 +656,7 @@ export interface Withdrawal {
   blockers?: string[];
 }
 
-// ───────────────────────── mfc-fulfillment 0.4.11 (출고 조회·인계) ─────────────────────────
+// ───────────────────────── mfc-fulfillment 0.5.0 (출고 조회·인계) ─────────────────────────
 
 export type ShipmentState = 'PREPARING' | 'READY' | 'PARTIALLY_HANDED_OVER' | 'HANDED_OVER' | 'CANCELLED' | 'CLOSED_PARTIAL';
 export type PackageState = 'OPEN' | 'SEALED' | 'HANDED_OVER' | 'INVALIDATED' | 'VOIDED';

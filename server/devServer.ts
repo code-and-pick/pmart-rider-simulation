@@ -79,6 +79,10 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
   delete req.headers['x-sim-rider'];
   delete req.headers['x-sim-actor'];
   if (decision.stripAuthorization) delete req.headers.authorization;
+  // 브라우저는 POST·PUT 에 Origin(http://localhost:5181)을 붙이는데, 게이트웨이 CORS 검사가 이걸 본문 없는 403 으로 막는다
+  // (2026-11-16 실측 — 같은 요청에서 Origin 만 빼면 통과). 브라우저 ↔ 개발 서버는 같은 출처이고 게이트웨이의 클라이언트는 개발 서버라 뺀다.
+  delete req.headers.origin;
+  delete req.headers.referer;
 
   let actor: Actor | null = null;
   if (!loopback) {

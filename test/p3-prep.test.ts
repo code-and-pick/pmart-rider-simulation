@@ -1,7 +1,7 @@
 // P3 준비(가입 없이): RR-01 조건 7, 가입 잠금, 탈퇴(계약 흉내), 실서버 운행 잠금.
 import { describe, expect, it } from 'vitest';
 import type { RiderApi } from '../src/backend/port';
-import { DEFAULT_PARAMS, REAL_RIDER_GATE } from '../src/config';
+import { DEFAULT_PARAMS, REAL_RIDER_GATE, simRiderPhone } from '../src/config';
 import { ApiProblem, type RiderProfile } from '../src/domain/contract';
 import { RiderRestrictedError, withAuthRecovery } from '../src/sim/authGuard';
 import { mockStartEpochMs } from '../src/sim/clock';
@@ -114,11 +114,41 @@ describe('탈퇴(rider-service 계약 흉내 — 실서버는 501, RR-07)', () =
 });
 
 describe('실서버 운행 잠금(REAL_RIDER_GATE)', () => {
+  it('사용자 결정(2026-11-16 "시험 번호로 시작") — 2명, 시험 번호 010-0000-00NN', () => {
+    expect(REAL_RIDER_GATE).toEqual({ operationAllowed: true, signupAllowed: true, riderCount: 2 });
+    expect(new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }).riders.map((r) => r.id)).toEqual(['RD-sim-01', 'RD-sim-02']);
+    expect(simRiderPhone(0)).toBe('01000000001');
+    expect(simRiderPhone(1)).toBe('01000000002');
+    expect(/^01[0-9]{8,9}$/.test(simRiderPhone(19))).toBe(true);
+  });
+
   it('잠겨 있으면 운행을 시작하지 않는다 — 라이더는 읽기 전용으로 남는다', () => {
-    expect(REAL_RIDER_GATE).toEqual({ operationAllowed: false, signupAllowed: false });
-    const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' });
+    const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, { operationAllowed: false, signupAllowed: false, riderCount: 2 });
     expect(w.operationLock).toContain('잠김');
     w.startOperation();
+    expect(w.operating).toBe(false);
     expect(w.riders.every((r) => r.phase === 'REMOTE')).toBe(true);
+  });
+});
+
+describe('운행 종료 — OFF_DUTY', () => {
+  it('대기 중이면 곧 OFF_DUTY, 배송 중이면 끝낸 뒤 OFF_DUTY', async () => {
+    const sim = new Simulation({ ...DEFAULT_PARAMS, acceptProbability: 1 }, { startEpochMs: START });
+    sim.backend.autoOrders = false;
+    const [a, b] = sim.startRiders(2, (i) => offsetM(MFC, i === 0 ? 200 : 2500, 0));
+    await sim.runFor(10);
+    sim.backend.createOrder({ pickSec: 1, packMinutes: 3, packages: 1, customer: offsetM(MFC, 800, 0) });
+    await sim.runFor(60);
+    expect(a!.deliveryId).not.toBeNull(); // 가까운 a 가 받음
+    a!.requestStop();
+    b!.requestStop();
+    await sim.runFor(20);
+    expect(b!.phase).toBe('STOPPED');
+    expect(sim.backend.riders.get(b!.id)?.operating.status).toBe('OFF_DUTY');
+    expect(sim.backend.riders.get(a!.id)?.operating.status).toBe('ON_DUTY'); // 아직 배송 중
+    await sim.runFor(30 * 60);
+    expect(sim.deliveryCards()[0]?.executionState).toBe('COMPLETED');
+    expect(a!.phase).toBe('STOPPED');
+    expect(sim.backend.riders.get(a!.id)?.operating.status).toBe('OFF_DUTY');
   });
 });

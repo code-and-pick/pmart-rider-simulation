@@ -129,15 +129,23 @@ export const DEFAULT_PARAMS: SimParams = {
 };
 
 /**
- * 실서버 가상 라이더 운행 잠금 [결정 대기 — 사용자 2026-11-16 "가입 없이 할 수 있는 P3 준비만 먼저"].
- * 가입·운행은 백엔드에 지울 수 없는 데이터를 남긴다(탈퇴 501 — RR-07, 인원·전화 대역 RR-02). 사용자가 정한 뒤에만 바꾼다.
+ * 실서버 가상 라이더 운행 잠금. 가입·운행은 백엔드에 지울 수 없는 데이터를 남긴다(탈퇴 501 — RR-07).
+ * 2026-11-16 사용자 "시험 번호로 시작"(RR-02 를 사용자가 정함): 운행·가입 허용, 2명, 전화 010-0000-00NN.
  * - operationAllowed: 실서버 화면에서 가상 라이더를 움직일 수 있나(운행 ON·위치·수락·인계·완료 = 쓰기)
  * - signupAllowed: 미가입 라이더를 가입시킬 수 있나(false 면 미가입 라이더는 멈춘다)
+ * - riderCount: 실서버에서 움직이는 시뮬레이터 라이더 수(RD-sim-01 부터)
+ * 사용자 결정 없이 늘리거나 풀지 않는다(CLAUDE.md).
  */
-export const REAL_RIDER_GATE: { operationAllowed: boolean; signupAllowed: boolean } = {
-  operationAllowed: false,
-  signupAllowed: false,
+export const REAL_RIDER_GATE: { operationAllowed: boolean; signupAllowed: boolean; riderCount: number } = {
+  operationAllowed: true,
+  signupAllowed: true,
+  riderCount: 2,
 };
+
+/** 시뮬레이터 라이더 시험 전화번호 `010-0000-00NN` [확정 — 사용자 2026-11-16 "시험 번호로", RR-02]. 실제 배정 번호인지는 확인 안 함. */
+export function simRiderPhone(index: number): string {
+  return `0100000${String(index + 1).padStart(4, '0')}`;
+}
 
 /** 시뮬레이터 라이더 ID — `RD-sim-01` 형식 [시뮬] (접두어는 [확정] RR-01, 번호 규칙은 RR-02 회신 전 임시). */
 export function simRiderId(index: number): string {
