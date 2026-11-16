@@ -213,10 +213,11 @@ button {
   inset: 0;
   overflow: hidden;
 }
+/* 위쪽에 둔다 — 아래 왼쪽은 카카오 로고·축척 자리(가리지 않는다, docs/design.md §6-1) */
 .map-legend {
   position: absolute;
   left: 10px;
-  bottom: 10px;
+  top: 10px;
   z-index: 30;
   background: var(--marker-label-bg);
   border: 1px solid var(--line);
