@@ -25,10 +25,11 @@ MFC 쪽 시뮬레이터(`../pmart-mfc-simulation`)의 짝이다. MFC 에서 점�
 - 작업 일지를 `docs/worklog/YYYY-MM-DD.md` 에 남긴다(형식·규칙 `docs/worklog/README.md`, 백엔드 일지 형식을 따름). 일지 없이 커밋하지 않고, 백엔드에서 읽어 확인한 사실은 근거(파일·커밋)와 함께 적는다.
 
 ## 다른 PC 에서 이어서 작업할 때
+- **작업 PC 는 PC 5**(사용자 2026-11-16 — 백엔드 delivery 영역·라이더 앱과 같은 PC). 2026-11-16 설계 문서는 다른 PC(`ds603-13`)에서 썼고, P0 골격부터 PC 5 가 맡는다.
 1. 이 파일 → `docs/design.md`(설계·계약 요약·단계 계획) → `docs/worklog/` 최신 일지 → `docs/backend-requests.md` 순서로 읽는다.
 2. 형제 폴더가 같은 위치에 있어야 한다: `../pmart-backend`, `../pmart-mfc-simulation`, `../pmart-clients`, `../PMart-Delivery-Test`. 백엔드는 `git pull` 만 하고 고치지 않는다.
 3. 일지의 "백엔드 확인" 커밋과 지금 백엔드 커밋이 다르면 계약 버전(`contracts/openapi/delivery-*.yaml` 의 `info.version`)과 `services/delivery-*/CLAUDE.md` "상태" 절을 다시 읽고 `docs/design.md` §3 표를 고친다.
-4. 실서버 모드는 LAN 비밀 파일(`deploy/lan/.secrets/rider-auth-signing-key.pem`·`rider-auth-signing-kid`, 관찰 계정 비밀번호)이 그 PC 에 있어야 한다. Git 에 없다 — 없으면 MOCK 으로만 작업한다.
+4. 실서버 모드는 LAN 비밀 파일(`deploy/lan/.secrets/rider-auth-signing-key.pem`·`rider-auth-signing-kid`, 관찰 계정 비밀번호)이 그 PC 에 있어야 한다. Git 에 없다. **PC 5 에서 시작할 때 이 파일들이 `../pmart-backend/deploy/lan/.secrets/` 에 있는지 먼저 확인**한다(PC 1 에서 사용자가 같은 경로로 복사 — RR-06 사용자 결정). 없으면 MOCK 으로만 작업한다. 저장소·다른 폴더로는 옮기지 않는다.
 
 ## 명령 (골격을 만든 뒤 — 2026-11-16 현재 코드 없음)
 ```bash

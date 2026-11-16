@@ -32,12 +32,6 @@
 ### RR-05 ETA·실시간 stream — 낮음, 지금은 요청 아님
 tracking `GET /deliveries/{id}/eta`·`/stream` 은 501(TR-1, 사용자 "필요 없음/선택"). 고객 화면 ETA 는 그리지 않는다. 기록만 남긴다.
 
-### RR-06 PC 5 에 시험 라이더 서명키 두기 — 높음 (2026-11-16 추가, 받는 쪽 delivery 영역 PC 5 · 인증 platform PC 1)
-이 시뮬레이터 작업 PC 는 **PC 5**(사용자 2026-11-16 — 백엔드 delivery 영역·라이더 앱과 같은 PC)다. 그런데 서명키(`rider-auth-signing-key.pem`·`rider-auth-signing-kid`)는 PC 1 `deploy/lan/.secrets/` 에만 있다.
-- 충돌: RR-01 회신 조건 ② "다른 PC·다른 폴더로 복사하지 않는다(시뮬레이터는 비밀 파일이 있는 PC 에서만 실서버 모드)" ↔ `docs/operations/dev-on-other-pcs.md` §2 "다른 PC 에서 LAN 시험을 하려면 필요한 파일만 같은 경로(`deploy/lan/.secrets/`)로 사용자가 복사".
-- 요청(사용자 "어쩔 수 없어" — 복사가 필요): 위 두 파일을 **PC 5 의 같은 경로**(`../pmart-backend/deploy/lan/.secrets/`, 사용자가 복사)에 두고 이 시뮬레이터가 그 PC 에서 읽기만 하도록 허락해 달라. 나머지 조건(①③~⑦)은 그대로 지킨다. 저장소·다른 폴더로는 옮기지 않는다.
-- 허락이 안 되면: PC 5 에서는 MOCK 만, 실서버 모드는 PC 1 에서만 돌린다.
-
 ## 시뮬레이터가 정한 값 (MOCK 흉내 — 서버 값이 아님)
 
 아직 없음. MOCK 구현 때 `src/config.ts` 와 함께 적는다(예: MOCK 제안 만료 60초는 계약 값, 라이더 응답 지연 분포는 [시뮬]).
@@ -48,4 +42,9 @@ tracking `GET /deliveries/{id}/eta`·`/stream` 은 501(TR-1, 사용자 "필요 �
 - 회신: 백엔드 `docs/handoff/simulator/rider/2026-11-16-simulator-reply-rider-token-rr01.md`(커밋 `1f3653ed`, 보낸 영역 platform, 사용자 "A번"). 결정 기록 백엔드 `docs/simulator/rider/README.md`.
 - 결정: rider-auth 에 발급 경로는 만들지 않고, **시뮬레이터 Vite 개발 서버가 LAN 서명키로 직접 서명**. 다른 기기 조회(용도 2)도 승인.
 - 조건 7개(요약 — 정본은 회신 문서, 구현 대응은 `docs/design.md` §6-5): ① 개발 서버에서만 서명·브라우저엔 토큰만 ② 키는 `PMART_SECRETS_DIR` 읽기만·다른 PC/폴더 복사 금지·운영 키 금지 ③ 주체는 `RD-sim-` 만(서명 함수에서 거절) ④ RS256·`rider_e2e.py` 와 같은 클레임·`sid` = `sim-…`·15분·재사용/연장 없음 ⑤ 다른 기기는 토큰 없이 GET·HEAD 허용 목록만·시뮬레이터 라이더 한정·쓰기/drop-info 금지 ⑥ 토큰·키·주소·전화는 로그 금지(라이더 ID·경로·상태 코드만) ⑦ 401 이면 새 토큰, 정지 라이더는 운행 안 함.
-- 이어지는 질문: PC 5 에서 쓰려면 서명키 복사가 필요 → **RR-06**.
+- 이어진 것: PC 5 에 서명키 두기 → **RR-06**(사용자 결정으로 해소).
+
+### RR-06 PC 5 에 시험 라이더 서명키 두기 — 해소 2026-11-16 (사용자 결정, 백엔드에 묻지 않음)
+- 배경: 이 시뮬레이터 작업 PC 는 PC 5(백엔드 delivery 영역·라이더 앱과 같은 PC)인데 서명키(`rider-auth-signing-key.pem`·`rider-auth-signing-kid`)는 PC 1 `deploy/lan/.secrets/` 에만 있다. RR-01 조건 ② "다른 PC·다른 폴더로 복사하지 않는다" ↔ 백엔드 `docs/operations/dev-on-other-pcs.md` §2 "필요한 파일만 같은 경로로 사용자가 복사"가 엇갈렸다.
+- **결정(사용자 2026-11-16 "응 어쩔 수 없어")**: 두 파일을 **PC 5 의 같은 경로**(`../pmart-backend/deploy/lan/.secrets/`)에 사용자가 복사하고, 이 시뮬레이터는 그 PC 에서 읽기만 한다. 저장소·다른 폴더로는 옮기지 않는다. RR-01 의 나머지 조건(①③~⑦)은 그대로.
+- 처음엔 백엔드 질문으로 올렸다가(커밋 `c17b12b`) 사용자가 직접 정해 해소로 옮겼다.
