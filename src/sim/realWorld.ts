@@ -125,9 +125,16 @@ export class RealWorld implements World {
 
   get operationLock(): string | null {
     if (!this.gate.operationAllowed) return '실서버 가상 라이더 운행 잠김 — 가입·운행 여부 사용자 결정 대기(RR-02·RR-07)';
+    // 쓰기(운행)는 개발 서버가 라이더 토큰을 서명할 수 있는 그 PC 에서만 — 다른 기기는 GET 만 넘어간다(§6-4)
+    if (this.writeAccess === 'remote') return '다른 기기에서는 운행할 수 없음 — 개발 서버가 있는 PC(localhost)에서만';
+    if (this.writeAccess === 'no-key') return '이 PC 에 라이더 서명키가 없어 운행할 수 없음';
+    if (this.writeAccess === 'unknown') return '개발 서버 상태 확인 중';
     if (!this.center) return 'MFC 위치를 center-master 에서 아직 못 읽음 — 배차 반경이 어긋나므로 운행 막음';
     return null;
   }
+
+  /** 운행(쓰기) 가능 여부 — /sim-auth/status 로 판정 */
+  private writeAccess: 'unknown' | 'ok' | 'remote' | 'no-key' = 'unknown';
 
   /** 이 브라우저가 실서버에서 라이더를 움직이는 중인가(멈춘 라이더만 남았으면 false) */
   get operating(): boolean {
@@ -199,12 +206,15 @@ export class RealWorld implements World {
       const res = await this.doFetch('/sim-auth/status', { cache: 'no-store' });
       if (res.status === 403) {
         this.authStatus = '다른 기기 — 이 PC 의 개발 서버가 붙이는 토큰으로 조회만';
+        this.writeAccess = 'remote';
         return;
       }
       const s = (await res.json()) as { riderSigning?: boolean; observer?: boolean };
       this.authStatus = `개발 서버: 라이더 서명키 ${s.riderSigning ? '있음' : '없음'}, 관찰 계정 ${s.observer ? '있음' : '없음'}`;
+      this.writeAccess = s.riderSigning ? 'ok' : 'no-key';
     } catch {
       this.authStatus = '개발 서버 토큰 상태를 읽지 못함';
+      this.writeAccess = 'unknown';
     }
   }
 

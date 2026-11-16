@@ -27,6 +27,7 @@ describe('MFC 위치 — center-master', () => {
     let center: unknown = null;
     const fake = (async (url: string) => {
       if (url.includes('/centers/')) return center ? json(200, center) : json(503, { code: 'DEPENDENCY_UNAVAILABLE' });
+      if (url.includes('/sim-auth/status')) return json(200, { riderSigning: true, observer: true });
       return json(404, {});
     }) as unknown as typeof fetch;
     const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
@@ -46,6 +47,22 @@ describe('MFC 위치 — center-master', () => {
     expect(w.mfcLocation).toEqual({ lat: 35.1586, lng: 129.0622 });
     expect(w.operationLock).toBeNull();
     expect(w.diagnostics().some((d) => d.includes('인계 위치') && d.includes('35.15860'))).toBe(true);
+  });
+
+  it('운행(쓰기)은 서명키가 있는 그 PC 에서만 — 다른 기기·서명키 없는 PC 는 버튼을 막는다', async () => {
+    const center = { centerId: 'MFC-SEED-01', coordinates: { lat: 35.1585, lng: 129.062 } };
+    const make = (status: Response) =>
+      (async (url: string) => (url.includes('/sim-auth/status') ? status.clone() : json(200, center))) as unknown as typeof fetch;
+    const remote = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: make(json(403, { code: 'LOOPBACK_ONLY' })) });
+    await flush();
+    await remote.loadCenter();
+    expect(remote.operationLock).toContain('다른 기기');
+    remote.startOperation();
+    expect(remote.operating).toBe(false);
+    const noKey = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: make(json(200, { riderSigning: false, observer: true })) });
+    await flush();
+    await noKey.loadCenter();
+    expect(noKey.operationLock).toContain('서명키');
   });
 
   it('인계 위치가 없으면 센터 좌표', async () => {
