@@ -54,6 +54,9 @@ P1(2026-11-16) MOCK 이 정한 값. 정본은 `src/config.ts`(`MockParams`·`Sim
 | **시나리오 조절 바**(화면 "⚙ 시나리오", 2026-11-16) | 주문량 0~60/시간, 수락률 0~100%, 포장 시간 ×0.5~5, 고객 부재 0~100%, 응답 끊김 0~50%(절반은 처리 전·절반은 처리 뒤) — 기본값은 위 표 | 실서버는 조절 안 함(실제 결과만), 실서버 라이더 고객 부재는 늘 0 |
 | 전달 실패 → 운영자 확정 | 60초 뒤 MOCK 이 대신 확정(FAILED, DeliveryFailed, 배차 CLOSED) | 운영자가 `failure-decisions` 로 |
 | 전달 실패 때 라이더 | 연락 2번(30초)·문 앞 사진 → `failures`(CUSTOMER_ABSENT, WITH_RIDER) → 확정 대기(최대 30분) → 상품 들고 MFC 복귀 | 같은 엔진 값(조절 바로만 켜짐) |
+| 라이더 배정 취소(조절 바) | 수락 뒤 가게로 가다가 30~90초 뒤 `assignment-cancellations`(RIDER, RIDER_UNABLE, reassign true) | 실서버는 안 함 |
+| 위치 끊김(조절 바) | 고객에게 가는 중 4분 위치 안 올림(점은 모았다가 풀리면 최근 200점). MOCK tracking 은 30초마다 보고 3분(서비스 문서 값) 넘으면 RiderLocationStale 한 번 | 실서버는 안 함 — tracking 이 실제로 낸다 |
+| 포장 대기 도움요청 | 가게에서 10분 넘게 READY 를 기다리면 `help-requests` STORE_WAITING 한 번 | 실서버는 안 보냄(지원센터 사건이 열림) |
 
 ## 해소된 요청
 

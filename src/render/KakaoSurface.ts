@@ -74,7 +74,7 @@ export class KakaoSurface implements MapSurface {
       m.lng = s.pos.lng;
     }
     m.ov.setZIndex(s.selected ? 20 : 10);
-    updateRiderEl(m.el, s.color, s.label, s.heading, s.selected, s.title);
+    updateRiderEl(m.el, s.color, s.label, s.heading, s.selected, s.title, s.offline);
   }
 
   removeRider(id: string): void {

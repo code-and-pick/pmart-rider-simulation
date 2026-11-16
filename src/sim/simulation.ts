@@ -13,7 +13,7 @@ import { Rng } from '../util/rng';
 import { mockStartEpochMs, SimClock } from './clock';
 import { VirtualRider, type RiderTrip } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
-import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, ScenarioKnobs, World } from './world';
+import type { DeliveryCard, IncidentCounts, MetricsSummary, NoteRecord, PhaseSegment, ScenarioKnobs, World } from './world';
 
 const SUBSTEP = 0.25;
 const RING = 300;
@@ -33,6 +33,7 @@ export class Simulation implements World {
   speed: number;
   paused = false;
   apiErrors = 0;
+  readonly incidents: IncidentCounts = { assignmentCancelled: 0, locationStale: 0, helpRequests: 0 };
   private readonly rng: Rng;
   /** MFC·고객 이동 경로(기본 직선 — 시험, 화면은 DevServerRoutes) */
   private readonly routes: RouteProvider;
@@ -52,7 +53,13 @@ export class Simulation implements World {
       push(this.apiLog, r);
       if (r.status === 'ERR' || (typeof r.status === 'number' && r.status >= 500)) this.apiErrors++;
     });
-    this.backend.onEvent((e) => push(this.eventLog, e));
+    this.backend.onEvent((e) => {
+      push(this.eventLog, e);
+      // 사건 기록은 고리(최근 n 개)라 지표는 따로 센다
+      if (e.type === 'DeliveryAssignmentChanged') this.incidents.assignmentCancelled++;
+      else if (e.type === 'RiderLocationStale') this.incidents.locationStale++;
+      else if (e.type === 'DeliveryIncidentRaised') this.incidents.helpRequests++;
+    });
   }
 
   /** 가상 라이더 n 명을 MFC 둘레 아무 곳에 두고 운행을 시작한다. */
@@ -151,6 +158,8 @@ export class Simulation implements World {
       packTimeScale: p.mock.packTimeScale,
       customerAbsentRate: p.customerAbsentRate,
       networkDropRate: p.mock.networkDropRate,
+      riderCancelRate: p.riderCancelRate,
+      locationOutageRate: p.locationOutageRate,
     };
   }
 
@@ -166,6 +175,8 @@ export class Simulation implements World {
     if (k.packTimeScale !== undefined) p.mock.packTimeScale = clamp(k.packTimeScale, 0.1, 10);
     if (k.customerAbsentRate !== undefined) p.customerAbsentRate = clamp(k.customerAbsentRate, 0, 1);
     if (k.networkDropRate !== undefined) p.mock.networkDropRate = clamp(k.networkDropRate, 0, 0.9);
+    if (k.riderCancelRate !== undefined) p.riderCancelRate = clamp(k.riderCancelRate, 0, 1);
+    if (k.locationOutageRate !== undefined) p.locationOutageRate = clamp(k.locationOutageRate, 0, 1);
   }
 
   /**
@@ -194,7 +205,7 @@ export class Simulation implements World {
       return [[t.acceptedAt - created, t.storeArrivedAt - t.acceptedAt, t.pickedUpAt - t.storeArrivedAt, t.completedAt - t.pickedUpAt]];
     });
     const completed = this.trips.filter((t) => t.completedAt !== undefined).length;
-    const base = { completed, deliveryFailed, responseLost: this.apiErrors, delivering, searching, dispatchFailed: failed, timeBasis: 'sim' as const, apiErrors: this.apiErrors };
+    const base = { completed, deliveryFailed, responseLost: this.apiErrors, delivering, searching, dispatchFailed: failed, timeBasis: 'sim' as const, apiErrors: this.apiErrors, incidents: { ...this.incidents } };
     if (!full.length) return { ...base, phases: null };
     const avg = (i: number) => full.reduce((a, r) => a + (r[i] as number), 0) / full.length;
     const segments: PhaseSegment[] = [

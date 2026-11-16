@@ -27,6 +27,8 @@ export const CONTRACT = {
   locationBatchMax: 200,
   /** 배달 중 위치가 3분 끊기면 RiderLocationStale [확정] services/delivery-tracking-service/CLAUDE.md */
   locationStaleSec: 180,
+  /** 끊김 확인 간격 30초 [확정] 같은 문서 stale-check-interval */
+  locationStaleCheckSec: 30,
   /** 증빙 사진 JPEG·PNG·WEBP, 10MB 이하 [확정] execution 0.5.0 */
   evidencePhotoMaxBytes: 10 * 1024 * 1024,
   /** 시험 라이더 ID 접두어 [확정] RR-01 회신 조건 3 */
@@ -61,6 +63,14 @@ export interface SimParams {
   acceptProbability: number;
   /** 고객 부재 확률 [시뮬] — 고객 도착 뒤 이 확률로 연락 2번·사진 → 전달 실패 등록(MOCK 조절 바, 실서버는 늘 0) */
   customerAbsentRate: number;
+  /** 라이더 배정 취소 확률 [시뮬] — 수락 뒤 가게로 가다가 이 확률로 픽업 전 취소(RIDER_UNABLE, 재배차). MOCK 조절 바, 실서버는 늘 0 */
+  riderCancelRate: number;
+  /** 위치 끊김 확률 [시뮬] — 고객에게 가는 중 이 확률로 locationOutageSec 동안 위치를 못 올림(앱 위치 전송 멈춤). MOCK 조절 바, 실서버는 늘 0 */
+  locationOutageRate: number;
+  /** 위치 끊김 길이(초) [시뮬] — 끊김 기준 3분 + 확인 간격 30초보다 길게 */
+  locationOutageSec: number;
+  /** 가게에서 포장을 이만큼(초) 넘게 기다리면 도움요청 STORE_WAITING 한 번 [시뮬]. null = 안 함(실서버는 null — 실제 지원센터 사건이 열린다) */
+  storeWaitHelpSec: number | null;
   /** 제안을 보고 응답하기까지 걸리는 시간 범위(초) [시뮬] */
   offerResponseDelaySec: [number, number];
   /** 가게에서 출고 READY 를 기다리며 다시 볼 간격 [시뮬] */
@@ -120,6 +130,10 @@ export const DEFAULT_PARAMS: SimParams = {
   assignmentReflectWaitSec: 30,
   acceptProbability: 0.9,
   customerAbsentRate: 0,
+  riderCancelRate: 0,
+  locationOutageRate: 0,
+  locationOutageSec: 240,
+  storeWaitHelpSec: 600,
   offerResponseDelaySec: [3, 15],
   storeWaitPollSec: 5,
   tokenRenewBeforeSec: 60,

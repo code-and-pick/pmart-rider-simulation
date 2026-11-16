@@ -152,7 +152,9 @@ export class RealWorld implements World {
         this.backend.asRider(r.id),
         this.backend.observer,
         this.clock,
-        { ...this.params, customerAbsentRate: 0 }, // 실서버에는 가짜 전달 실패를 만들지 않는다(조절 바는 MOCK 만)
+        // 실서버에는 장면을 일부러 만들지 않는다(조절 바는 MOCK 만): 가짜 전달 실패·배정 취소·위치 끊김 없음,
+        // 도움요청도 안 보냄(실제 지원센터 사건이 열린다 — 보내려면 사용자 결정)
+        { ...this.params, customerAbsentRate: 0, riderCancelRate: 0, locationOutageRate: 0, storeWaitHelpSec: null },
         home,
         r.pos ?? home,
         {
@@ -176,6 +178,8 @@ export class RealWorld implements World {
       packTimeScale: 1,
       customerAbsentRate: 0,
       networkDropRate: 0,
+      riderCancelRate: 0,
+      locationOutageRate: 0,
     };
   }
 

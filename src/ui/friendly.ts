@@ -22,6 +22,7 @@ export function friendlyNote(note: string): string {
   if (m) return `제안 거절(${REJECT[m[1] as string] ?? (m[1] || '사유 없음')})`;
   if (note.startsWith('제안을 받을 수 없는 상태')) return '지금은 제안을 받을 수 없음';
   if (note.startsWith('제안 응답 거절됨')) return '응답하려 했지만 제안이 이미 닫힘(다른 라이더 배정 등)';
+  if (note.startsWith('배정 취소 — ')) return '배정 취소 — 다른 라이더에게 재배차';
   if (note.startsWith('응답 없음 — 같은 키로 다시 보냄')) return '응답이 끊김 — 같은 요청을 다시 보내는 중(중복 처리 안 됨)';
   m = /^포장 대기\(출고 ([A-Z_]+)\)/.exec(note);
   if (m) return m[1] === 'PREPARING' ? '포장이 끝나길 기다리는 중' : `포장 대기(출고 ${m[1]})`;

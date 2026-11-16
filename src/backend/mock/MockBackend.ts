@@ -92,6 +92,10 @@ interface MRider {
   settings: { oneAtATime: boolean; dispatchMode: 'NORMAL' | 'AI_RECOMMENDED'; version: number };
   restriction: AccountRestriction;
   location?: { lat: number; lng: number; accuracyM?: number; recordedAt: string; receivedAt: number };
+  /** 마지막 업로드 받은 시각(점 품질·순서 무관 — tracking rider_signal.last_received_at) */
+  lastReceivedAt?: number;
+  /** 이 기준 시각의 끊김은 이미 알렸다(끊김 한 번에 한 번 — tracking alerted_for) */
+  staleAlertedFor?: number;
   consecutiveRejections: number;
   /** 탈퇴 완료 [시뮬] — 계약은 탈퇴 뒤 모습을 정하지 않음(RR-07 질문) */
   withdrawn: boolean;
@@ -311,6 +315,31 @@ export class MockBackend implements RiderPort {
     this.expireOffers();
     for (const del of this.deliveries.values()) if (del.d.state === 'DISPATCHING') this.dispatchStep(del);
     this.expireFences();
+    if (now - this.lastStaleCheckAt >= CONTRACT.locationStaleCheckSec) {
+      this.lastStaleCheckAt = now;
+      this.checkStale();
+    }
+  }
+
+  private lastStaleCheckAt = -Infinity;
+
+  /**
+   * 위치 끊김(MOCK 이 tracking 대신 — services/delivery-tracking-service/CLAUDE.md RiderWatch.checkStale):
+   * 진행 중 배송(배정~픽업)이 있고 기준 = 마지막 수신·배정 시각 중 늦은 것이 3분 지났으면 RiderLocationStale.
+   * 끊김 한 번에 한 번만, 알림만 하고 배송 상태는 바꾸지 않는다(계약 — 위치는 배송 상태를 바꾸지 않음).
+   */
+  private checkStale() {
+    const now = this.clock.now;
+    for (const del of this.deliveries.values()) {
+      const a = del.d.assignment;
+      if (!a || (del.d.state !== 'ASSIGNED' && del.d.state !== 'PICKED_UP')) continue;
+      const r = this.riders.get(a.riderId);
+      if (!r) continue;
+      const base = Math.max(r.lastReceivedAt ?? -Infinity, a.assignedAt);
+      if (now - base < CONTRACT.locationStaleSec || r.staleAlertedFor === base) continue;
+      r.staleAlertedFor = base;
+      this.emit('RiderLocationStale', `${a.riderId} 위치 ${Math.floor(now - base)}초 끊김 (${del.deliveryId})`, { deliveryId: del.deliveryId, riderId: a.riderId });
+    }
   }
 
   private generateOrders() {
@@ -1233,6 +1262,7 @@ export class MockBackend implements RiderPort {
             const pts = body.points ?? [];
             if (pts.length < 1 || pts.length > CONTRACT.locationBatchMax) fail(400, 'VALIDATION_FAILED');
             const r = b.rider(me);
+            r.lastReceivedAt = now();
             for (const p of pts) {
               if (!r.location || p.recordedAt >= r.location.recordedAt) {
                 r.location = { lat: p.lat, lng: p.lng, accuracyM: p.accuracyM, recordedAt: p.recordedAt, receivedAt: now() };

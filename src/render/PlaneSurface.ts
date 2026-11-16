@@ -104,7 +104,7 @@ export class PlaneSurface implements MapSurface {
     }
     r.pos = s.pos;
     r.el.style.zIndex = s.selected ? '20' : '10';
-    updateRiderEl(r.el, s.color, s.label, s.heading, s.selected, s.title);
+    updateRiderEl(r.el, s.color, s.label, s.heading, s.selected, s.title, s.offline);
   }
 
   removeRider(id: string): void {

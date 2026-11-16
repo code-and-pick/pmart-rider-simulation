@@ -31,6 +31,19 @@ export function Metrics({ m }: { m: MetricsSummary }) {
           hint="응답이 오지 않은 요청 수 — 라이더가 같은 키로 다시 보내 중복 없이 이어진다(재전송 횟수)"
         />
       </div>
+      {m.incidents && m.incidents.assignmentCancelled + m.incidents.locationStale + m.incidents.helpRequests > 0 && (
+        <div className="incidents" title="지금까지 난 사건 수(MOCK 사건 기록 — 사건 탭에서 하나씩 볼 수 있다)">
+          <span title="라이더가 픽업 전 배정을 취소해 다른 라이더에게 재배차(DeliveryAssignmentChanged)">
+            배정 취소 <b>{m.incidents.assignmentCancelled}</b>
+          </span>
+          <span title="진행 중 배송의 라이더 위치가 3분 넘게 안 들어옴(RiderLocationStale — 알림만, 배송 상태는 그대로)">
+            위치 끊김 <b>{m.incidents.locationStale}</b>
+          </span>
+          <span title="라이더 도움요청(DeliveryIncidentRaised → 지원센터)">
+            도움요청 <b>{m.incidents.helpRequests}</b>
+          </span>
+        </div>
+      )}
       <div className="phases">
         {m.phases ? (
           <>

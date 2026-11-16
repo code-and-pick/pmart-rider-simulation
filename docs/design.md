@@ -56,7 +56,7 @@
 
 - 실제 흐름 전례: `pmart-backend/deploy/lan/checks/rider_e2e.py` 가 2026-11-16 LAN 에서 가입 → 운행 → 제안 수락 → 가게 도착 → QR 인계 → 픽업 → 전달지 → 고객 도착 → 사진 → 완료를 끝까지 돌렸다. 실서버 호출 순서는 이 스크립트를 기준으로 맞춘다.
 
-## 3. 백엔드 계약 요약 (읽은 날 2026-11-16, `cb2bf317` → 다시 `347ea90d`: dispatch 0.4.1·fulfillment 0.5.0)
+## 3. 백엔드 계약 요약 (읽은 날 2026-11-16, `cb2bf317` → `347ea90d` → 다시 `6df1e842`: dispatch 0.4.4·execution 0.5.1)
 
 모든 경로는 게이트웨이 `/api/v1` 아래. POST 는 `Idempotency-Key`·`X-Source-System` 필수, 상태 전이는 `X-Expected-Version`(낙관적 잠금) 사용.
 
@@ -64,8 +64,8 @@
 |---|---|---|
 | **rider-service** 0.4.0 | 가입 `POST /riders/signups`, 내 정보 `GET /riders/me`(404 = 미가입), 운행 상태 `PUT·GET /riders/me/state`(OFF_DUTY / 운행 중·신규배차 ON / 운행 중·신규배차 OFF), 배차 설정 `PUT·GET /riders/me/settings`(하나씩 배달하기, 배차 모드 일반/AI 추천) | 구현(탈퇴만 501). 변경마다 `RiderStateChanged` |
 | **rider-auth-service** 0.1.0 | — (Google ID 토큰 로그인만. 시험 라이더 토큰은 RR-01) | 구현 |
-| **delivery-dispatch** 0.4.1 (0.4.1: purpose `MISDELIVERY_RESHIPMENT`·type RESHIPMENT·`caseId` — 오배송 재발송) | 내 제안 `GET /offers`(SENT·미만료, `pollAfterSec` 잠정 5초, null 이면 조회 멈춤), 제안 조회 `GET /offers/{id}`(viewedAt 기록), 응답 `POST /offers/{id}/responses`(ACCEPT/REJECT, 결과 ASSIGNED/REJECTED/LATE), 배달리스트 `GET /delivery-list` + 수락 `POST /delivery-list/{deliveryId}/acceptances`, 배차 조회 `GET /deliveries/{id}/dispatch`(shipmentId·`purpose`·회수면 `recovery` 포함), 배차 취소 `POST /deliveries/{id}/assignment-cancellations`(픽업 전만) | 구현(DD-1 2026-11-13, DD-2 오배송 회수 2026-11-16). `POST /dispatch-requests`·`POST /internal/deliveries` 는 501 — 배송 생성·배차 시작은 MFC 사건(회수는 case `MisdeliveryConfirmed`)으로만. 0.4.0: `Offer.deliveryType`·`purpose`, `Delivery.purpose`·`recovery` |
-| **delivery-execution** 0.5.0 | 수행 조회 `GET /deliveries/{id}`, 가게 도착 `…/store-arrivals`, 픽업 확인 `…/pickups`(handoverIds — 상태는 안 바꾸고 확인만), 전달지 `…/drop-info`(PICKED_UP 뒤, 개인정보 — 저장·로그 금지), 고객 도착 `…/customer-arrivals`, 증빙 사진 `…/evidence-photos`(multipart, JPEG·PNG·WEBP ≤10MB), 전달 완료 `…/completions`(FACE/CONTACTLESS + photoRefs), 전달 실패 `…/failures`, 도움요청 `…/help-requests`, 내 배송 `GET /riders/me/deliveries`. 회수 배송이면 `…/returns/pickups`·`…/returns/store-deliveries`(§3-1) | 구현. 0.5.0: 오배송 회수 수행 구현, 고객 반품 회수 422 RETURN_NOT_SUPPORTED, 운영자 정정 501 |
+| **delivery-dispatch** 0.4.4 (0.4.1: purpose `MISDELIVERY_RESHIPMENT`·type RESHIPMENT·`caseId` — 오배송 재발송. 0.4.2~0.4.4: 고객 잘못 다시 배송 purpose `MISDELIVERY_REDELIVERY`(type RESHIPMENT)·결제 대기·내부 경로 — 라이더 API 그대로) | 내 제안 `GET /offers`(SENT·미만료, `pollAfterSec` 잠정 5초, null 이면 조회 멈춤), 제안 조회 `GET /offers/{id}`(viewedAt 기록), 응답 `POST /offers/{id}/responses`(ACCEPT/REJECT, 결과 ASSIGNED/REJECTED/LATE), 배달리스트 `GET /delivery-list` + 수락 `POST /delivery-list/{deliveryId}/acceptances`, 배차 조회 `GET /deliveries/{id}/dispatch`(shipmentId·`purpose`·회수면 `recovery` 포함), 배차 취소 `POST /deliveries/{id}/assignment-cancellations`(픽업 전만) | 구현(DD-1 2026-11-13, DD-2 오배송 회수 2026-11-16). `POST /dispatch-requests`·`POST /internal/deliveries` 는 501 — 배송 생성·배차 시작은 MFC 사건(회수는 case `MisdeliveryConfirmed`)으로만. 0.4.0: `Offer.deliveryType`·`purpose`, `Delivery.purpose`·`recovery` |
+| **delivery-execution** 0.5.1 (0.5.1: 도움요청이 사건함 사건을 따라감 — 라이더 쪽 그대로) | 수행 조회 `GET /deliveries/{id}`, 가게 도착 `…/store-arrivals`, 픽업 확인 `…/pickups`(handoverIds — 상태는 안 바꾸고 확인만), 전달지 `…/drop-info`(PICKED_UP 뒤, 개인정보 — 저장·로그 금지), 고객 도착 `…/customer-arrivals`, 증빙 사진 `…/evidence-photos`(multipart, JPEG·PNG·WEBP ≤10MB), 전달 완료 `…/completions`(FACE/CONTACTLESS + photoRefs), 전달 실패 `…/failures`, 도움요청 `…/help-requests`, 내 배송 `GET /riders/me/deliveries`. 회수 배송이면 `…/returns/pickups`·`…/returns/store-deliveries`(§3-1) | 구현. 0.5.0: 오배송 회수 수행 구현, 고객 반품 회수 422 RETURN_NOT_SUPPORTED, 운영자 정정 501 |
 | **delivery-tracking** 0.4.0 | 위치 올리기 `POST /riders/me/locations`(1~200점, `lat·lng·recordedAt` 필수, `deliveryId` 선택), 내 마지막 위치 `GET /riders/me/locations/latest` | 위치 수신·마지막 위치·거리 행렬 구현. **ETA·실시간 stream 501**. 배달 중 3분 끊기면 `RiderLocationStale`(알림만). 0.4.0: 내부 `GET /internal/riders/{id}/location-at`(회수지 계산용 — 시뮬레이터는 안 부름) |
 | **mfc-fulfillment** 0.5.0 (인계만 — 0.5.0 변경은 ConfirmOrder `kind`·사건 필드라 인계 API 그대로) | 인계 허가 `POST /packages/{id}/handover-authorizations`(scannedCode = 포장 qrCode `PKG:<id>:<버전>`, fence), 인계 확정 `POST /packages/{id}/handover-commits` → `PackageHandedOver` | 구현. 라이더 토큰 주체 = riderId 여야 함 |
 
@@ -82,7 +82,8 @@
 - 회수지 좌표는 `GET /deliveries/{id}/dispatch` 의 `recovery.pickup`(배정된 라이더·운영자만, 제안만 받은 라이더에게는 비움). 원래 배송의 완료 증빙(놓은 곳·사진 참조)은 execution `GET /deliveries/{id}` 의 `recoveryOrigin`.
 - 수행: `ASSIGNED` → 회수지에서 사진(`…/evidence-photos`, RETURN 은 ASSIGNED·RETURN_PICKED_UP 에서) → `POST …/returns/pickups`(evidenceRefs 1장 이상, items 빈 배열) → `RETURN_PICKED_UP` + `ReturnPickedUp` → MFC 도착 = `POST …/returns/store-deliveries` → `RETURNED_TO_STORE` + `ReturnDelivered`(mfc-inbound 점원 수령 확인이 생기기 전까지 MFC 도착을 반납으로 봄).
 - 회수 배송에는 일반 단계(가게 도착·픽업·고객 도착·완료·실패 등록)가 409, 전달지(`drop-info`)는 409 `NO_CUSTOMER_DROP`. 회수 실패(부재·거부)는 도움요청 → 운영자 배차 취소(reassign=false).
-- **오배송 재발송(dispatch 0.4.1, 2026-11-16)**: MFC 재발송 출고로 생긴 배송은 type RESHIPMENT·purpose `MISDELIVERY_RESHIPMENT`·`caseId`, "배차는 일반 배송과 같다". 다만 execution 이 같은 단계(가게 도착 → 인계 → 고객 → 완료)로 처리하는지 계약(0.5.0)·서비스 문서에 없어서 **가상 라이더는 지금 거절**한다 — P4 에서 확인 뒤 받는다.
+- **오배송 재발송(dispatch 0.4.1, 2026-11-16)**: MFC 재발송 출고로 생긴 배송은 type RESHIPMENT·purpose `MISDELIVERY_RESHIPMENT`·`caseId`, "배차는 일반 배송과 같다". execution 0.5.1 목적값 설명 "수행은 일반 배송과 같다" + 서비스 코드(`ExecutionStore.redelivery()`·`recovery()` 만 따로 — `6df1e842`)로 확인해 **가상 라이더가 받는다**(2026-11-16 19:58).
+- **고객 잘못 다시 배송(dispatch 0.4.2, ADR-0065)**: purpose `MISDELIVERY_REDELIVERY`(type RESHIPMENT) — 가게 대신 잘못 둔 곳에서 사진 → `returns/pickups`(→ PICKED_UP) → 실제 집. 가게 도착·MFC 픽업은 409. 일반 흐름이 아니라 **가상 라이더는 거절**(회수 흐름과 함께 P4).
 - 이 시뮬레이터: 가상 라이더 상태기계에 **회수 분기**가 필요하다(배송 `purpose` 로 분기). 시작 사건(오배송 확인)은 case 쪽이라 실서버에서 만들려면 운영자 화면이 필요 — P4 시나리오 후보로 둔다. 다만 실서버에서 회수 제안이 가상 라이더에게 올 수 있으므로 **P3 부터 `purpose` 가 DELIVERY 가 아닌 제안은 수락하지 않거나 회수 흐름으로 처리**해야 한다.
 
 ## 4. 같은 배송, 두 서비스의 두 상태
@@ -230,7 +231,7 @@ PMart-Delivery-Test 는 **배송 기능(배차·인계·위치 추적·경로 �
 | P1 | MOCK 백엔드 + 가상 라이더 상태기계 + 카카오 지도 화면(§6 — 키 없으면 좌표 평면 대체, MFC·고객·라이더 마커·경로선) | 화면 없이 도는 vitest(배차→완료 1건, 동시 수락 1명, 픽업 전 사진 완료 거부 등) — **완료 2026-11-16**(시험 25건). 카카오 지도 화면은 콘솔 카카오맵 사용 설정 뒤 실제로 띄워 확인 필요(좌표 평면으로만 확인) |
 | P2 | 실서버 읽기: 라이더 토큰(RR-01), 관찰 계정 토큰, 배차 대기 배송·제안 조회 표시, 다른 기기 조회 경로(§6-4), dispatch `shipmentId` 실측(§5) | LAN 에서 실제 PDA 배차 요청이 화면에 뜸 — **구현·LAN 읽기 확인 2026-11-16**(기존 배송 4건·토큰 두 종류·다른 기기 경로). 진행 중인 배차 요청이 없어 "새 배차 요청이 뜨는 것"은 아직 못 봄 |
 | P3 | 실서버 쓰기: 가상 라이더 수락 → 인계 → 완료 | 실제 PDA 주문 1건이 DeliveryCompleted 까지 — **실서버 가입·운행 확인 2026-11-16**(RD-sim-01·02 가입 201 → ON_DUTY → 위치·제안 조회 → 운행 종료 OFF_DUTY). 완료 기준(실제 주문 1건 완료)은 진행 중 주문이 없어 아직 |
-| P4 | 시나리오: 거절·만료·재배차·전달 실패·도움요청·위치 끊김(장애 주입) | 시나리오별 기대 결과 기록 — **일부 2026-11-16**: MOCK 시나리오 조절 바(주문량·수락률·포장 시간·고객 부재 → 전달 실패·응답 끊김 → 같은 키 재전송) + 시험(`test/scenario.test.ts`). 남은 것: 도움요청·위치 끊김(RiderLocationStale)·배차 취소·회수(DD-2)·재발송 |
+| P4 | 시나리오: 거절·만료·재배차·전달 실패·도움요청·위치 끊김(장애 주입) | 시나리오별 기대 결과 기록 — **일부 2026-11-16**: MOCK 시나리오 조절 바(주문량·수락률·포장 시간·고객 부재 → 전달 실패·응답 끊김 → 같은 키 재전송) + 시험(`test/scenario.test.ts`). + 라이더 배정 취소 → 재배차, 위치 끊김 → RiderLocationStale(MOCK tracking 감시 3분·30초), 포장 10분 넘으면 도움요청 STORE_WAITING, 재발송 받기. 남은 것: 회수(DD-2)·고객 잘못 다시 배송(가게 대신 잘못 둔 곳에서 받는 흐름), 실서버에서 장면 확인 |
 
 ## 10. 결정 이력
 
@@ -263,12 +264,13 @@ PMart-Delivery-Test 는 **배송 기능(배차·인계·위치 추적·경로 �
 | 2026-11-16 | **실서버 잠금 풀기**: 운행·가입 허용, 시뮬레이터 라이더 2명(RD-sim-01·02), 전화 `010-0000-00NN` — RR-02 를 사용자가 정함. 백엔드도 사용자가 맡으므로 RR 전달(PR·handoff)은 하지 않는다 | 사용자 "백엔드도 내가 하니까 PR 전달할 필요 없어. 시험 번호로 시작" |
 | 2026-11-16 | 운행 종료 = OFF_DUTY(진행 중 배송은 끝낸 뒤, 반영 지연 409 는 5초 간격 다시). 운행 중 탭 닫기는 브라우저가 묻는다 — ON_DUTY 로 남은 라이더에게 실제 제안이 가지 않게 | 설계 |
 | 2026-11-16 | 개발 서버가 `/api` 요청의 `Origin`·`Referer` 를 지운다 — 브라우저가 POST 에 붙이는 Origin 을 게이트웨이 CORS 가 본문 없는 403 으로 막음(실측) | 설계 |
-| 2026-11-16 | 재발송 배송(purpose MISDELIVERY_RESHIPMENT)은 지금 거절(§3-1) — execution 처리 확인 뒤(P4) | 설계 |
+| 2026-11-16 | 재발송 배송(purpose MISDELIVERY_RESHIPMENT)은 지금 거절(§3-1) — execution 처리 확인 뒤(P4) → **같은 날 받기로 바꿈**(execution 0.5.1·서비스 코드 확인). 고객 잘못 다시 배송(MISDELIVERY_REDELIVERY)은 거절 | 설계 |
 | 2026-11-16 | **도로 경로 = 카카오모빌리티**(개발 서버 `/sim-route`, 시뮬레이터 전용 REST 키 `.env.local` `KAKAO_MOBILITY_REST_KEY`, 저장·하루 상한, 못 받으면 직선). 지도: 도로 실선 / 직선 점선 | 사용자(RR-04 — 키 따로), 구현 설계 |
 | 2026-11-16 | 라이더별 보기 = 칸을 늘리지 않고 **선택한 라이더로 오른쪽 탭을 거른다**("○○ 만 보는 중 ✕"), "기록" 탭 추가. 사건 기록에 riderId·deliveryId(화면 거르기용 — 계약 사건 본문 아님) | 사용자 "응"(제안 승인) |
 | 2026-11-16 | MFC 위치 = 실서버는 center-master 에서 읽음(인계 위치 우선, 못 읽으면 운행 막음), MOCK 은 부산진구지점 실제 주소. 백엔드 시험 MFC 를 실제 주소로 바꾸는 건 백엔드 쪽 | 사용자 "1번"(백엔드 시험 MFC 를 실제 주소로) |
 | 2026-11-16 | 화면 업그레이드: 배송 단계 막대(화면용 계산은 `src/domain/displayStage.ts` 한 곳), 라이더 카드·쉬운 말, 따라가기·배송 눌러 지도 맞춤. 지도 바탕 정리(바탕 흐리게·대기 라이더 흩기)는 이번에 안 함 | 사용자 선택(배송 진행 막대·라이더 목록 카드화·따라가기) |
 | 2026-11-16 | 지표 다시 정의: 옛 "제안→수락"(라이더 고민 시간 [시뮬] 3~15초라 뜻이 약함)·칸마다 다른 표본을 버리고, 같은 완료 n 건의 구간 평균(합 = 배차 요청→완료) + 진행 중을 "배송 중/라이더 찾는 중"으로 나눔 | 사용자 "정확히 뭘 한 시간과 숫자이지? 보기 쉽게 바꿔" |
+| 2026-11-16 | 조절 바에 라이더 취소·위치 끊김 추가, 포장 10분 넘으면 도움요청. **실서버는 셋 다 안 함**(배정 취소·위치 끊김은 일부러 만들 이유가 없고, 도움요청은 실제 지원센터 사건이 열린다 — 보내려면 사용자 결정) | 설계 |
 | 2026-11-16 | MOCK 시나리오 조절 바(⚙ 시나리오) — 실패를 보려고 값을 바꾼다. 실서버는 조절 안 함·실서버 라이더 고객 부재는 늘 0(가짜 실패를 쓰지 않음). 전달 실패 확정은 MOCK 이 운영자 대신 | 사용자 "실패도 볼 수 있게 조절할 수 있는 바" |
 | 2026-11-16 | **재전송 본문 고정**(결함 수정): 응답 없음 → 같은 키로 다시 보낼 때 본문(occurredAt·location·scannedAt, 위치 묶음)을 처음 것 그대로. 전에는 다시 만들어 같은 키·다른 본문 409 IDEMPOTENCY_CONFLICT 로 라이더가 멈췄다(응답 끊김 시험에서 발견 — 실서버에서도 같은 일이 난다) | 설계(결함) |
 | 2026-11-16 | 진행 박자는 전용 Worker 타이머(Blob 한 줄, 안 되면 setInterval). 실서버는 벽시계로 따라잡기(최대 600초) — 가려진 탭에서 위치 업로드가 끊기지 않게 `[미검증: 가려진 탭 실측 안 함]` | 설계 |

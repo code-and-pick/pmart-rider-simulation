@@ -7,7 +7,7 @@
 //  - 응답 없음(ResultUnknown)은 실패가 아니다 — 같은 Idempotency-Key 로 다시 보낸다.
 //  - 사건 반영 지연을 기다린다(수락 직후 execution UNASSIGNED 등 — "반영 대기").
 //  - 전달지(drop-info)는 좌표만 쓰고 나머지는 버린다(저장·로그·화면 금지).
-//  - purpose 가 DELIVERY 가 아닌 제안(오배송 회수 등)은 지금은 거절한다(docs/design.md §3-1 — 회수 흐름은 P4).
+//  - 일반 배송·재발송(MISDELIVERY_RESHIPMENT)만 받고, 회수·반품·고객 잘못 다시 배송은 거절한다(docs/design.md §3-1 — 회수 흐름은 P4).
 
 import type { ObserverApi, RiderApi, WriteOptions } from '../backend/port';
 import { CONTRACT, simRiderPhone, type SimParams } from '../config';
@@ -66,11 +66,16 @@ export const PHASE_LABEL: Record<RiderPhase, string> = {
 /** 제안을 어떻게 할지 — 순수 함수(시험용). */
 export type OfferDecision = { kind: 'ACCEPT' } | { kind: 'REJECT'; reason: 'OTHER' | 'TOO_FAR' } | { kind: 'IGNORE' };
 
+/** 가상 라이더가 받는 배송 목적 — 일반 흐름(가게 도착 → 인계 → 고객 → 완료)인 것만 */
+const ACCEPTED_PURPOSES: ReadonlySet<string> = new Set(['DELIVERY', 'MISDELIVERY_RESHIPMENT']);
+
 export function decideOffer(offer: Offer, roll: number, acceptProbability: number): OfferDecision {
-  // 회수(MISDELIVERY_RECOVERY)·고객 반품·재발송(MISDELIVERY_RESHIPMENT — dispatch 0.4.1)은 받지 않는다(§3-1).
-  // 재발송은 "배차는 일반 배송과 같다"지만 execution 이 같은 단계로 처리하는지 계약·서비스 문서에 없다 — P4 에서 확인 뒤 받는다.
-  if (offer.purpose !== undefined && offer.purpose !== 'DELIVERY') return { kind: 'REJECT', reason: 'OTHER' };
-  if (offer.deliveryType !== undefined && offer.deliveryType !== 'FORWARD') return { kind: 'REJECT', reason: 'OTHER' };
+  // 회수(MISDELIVERY_RECOVERY)·고객 반품·재발송(MISDELIVERY_RESHIPMENT — dispatch 0.4.1)·고객 잘못 다시 배송(MISDELIVERY_REDELIVERY — 0.4.2, 가게 대신 잘못 둔 곳에서 받음)은 받지 않는다(§3-1).
+  // 재발송(MISDELIVERY_RESHIPMENT, type RESHIPMENT)은 받는다 — execution 0.5.1 "수행은 일반 배송과 같다", 서비스 코드도 다시 배송(purpose)·회수(type RETURN)만 따로 처리
+  // (pmart-backend 6df1e842 ExecutionStore.redelivery·recovery, 2026-11-16 확인). 목적이 없으면 종류로만 본다(FORWARD 만).
+  if (offer.purpose !== undefined) {
+    if (!ACCEPTED_PURPOSES.has(offer.purpose)) return { kind: 'REJECT', reason: 'OTHER' };
+  } else if (offer.deliveryType !== undefined && offer.deliveryType !== 'FORWARD') return { kind: 'REJECT', reason: 'OTHER' };
   if (roll < acceptProbability) return { kind: 'ACCEPT' };
   // 나머지 절반은 거절, 절반은 무응답으로 만료 [시뮬]
   return roll < acceptProbability + (1 - acceptProbability) / 2 ? { kind: 'REJECT', reason: 'TOO_FAR' } : { kind: 'IGNORE' };
@@ -87,6 +92,8 @@ export interface RiderTrip {
   completedAt?: number;
   /** 전달 실패 등록 시각(완료 대신) */
   failedAt?: number;
+  /** 라이더가 픽업 전 배정을 취소한 시각(다른 라이더에게 재배차) */
+  cancelledAt?: number;
 }
 
 export interface RiderHooks {
@@ -128,6 +135,12 @@ export class VirtualRider {
   /** 보내는 중인 위치 묶음 — 응답이 끊기면 이 키·이 점 그대로 다시 보낸다 */
   private pendingUpload: { key: string; points: { lat: number; lng: number; recordedAt: string; deliveryId?: string; accuracyM: number }[] } | null = null;
   private readonly api: RiderApi;
+  /** 이 시각까지 위치를 못 올림(위치 끊김 장면) — 점은 모아 두었다가 풀리면 한꺼번에 */
+  private offlineUntil = -Infinity;
+  /** 위치 끊김 중인가(화면 표시) */
+  get locationOffline(): boolean {
+    return this.clock.now < this.offlineUntil;
+  }
 
   constructor(
     readonly index: number,
@@ -197,6 +210,7 @@ export class VirtualRider {
       this.trail.push({ lat: this.pos.lat, lng: this.pos.lng, recordedAt: this.clock.iso(now), deliveryId: this.deliveryId ?? undefined });
       if (this.trail.length > CONTRACT.locationBatchMax) this.trail.splice(0, this.trail.length - CONTRACT.locationBatchMax);
     }
+    if (now < this.offlineUntil) return; // 위치 끊김 — 올리지 않는다(점은 위에서 계속 모은다, 최근 200점)
     if (this.uploading || now - this.lastUploadAt < this.params.locationUploadIntervalSec) return;
     // 보내는 중인 묶음이 있으면(앞서 응답이 끊김) 그 묶음을 같은 키·같은 점으로 다시 — 새 점을 붙이면 같은 키·다른 본문(409 IDEMPOTENCY_CONFLICT)
     if (!this.pendingUpload) {
@@ -437,7 +451,12 @@ export class VirtualRider {
     // 4. MFC 로
     this.phase = 'TO_STORE';
     this.say('MFC 로 이동');
-    await this.moveTo(this.home, this.params.riderSpeedMps, true);
+    // 라이더 배정 취소(조절 바 riderCancelRate) — 0 이면 난수를 쓰지 않는다
+    if (this.params.riderCancelRate > 0 && this.rng.next() < this.params.riderCancelRate) {
+      if (await this.cancelOnTheWay(deliveryId, trip)) return;
+    } else {
+      await this.moveTo(this.home, this.params.riderSpeedMps, true);
+    }
 
     // execution 에 배정이 보일 때까지(사건 반영 대기)
     this.phase = 'WAIT_ASSIGN_REFLECT';
@@ -456,7 +475,7 @@ export class VirtualRider {
     this.phase = 'AT_STORE_WAIT_READY';
     const dispatch = await this.api.getDispatch(deliveryId);
     if (!dispatch.shipmentId) throw new Error(`배차 조회에 shipmentId 없음 (${deliveryId}) — §5 orderId 로 잇기 필요`);
-    const ship = await this.waitShipmentReady(dispatch.shipmentId);
+    const ship = await this.waitShipmentReady(dispatch.shipmentId, deliveryId);
     trip.readyAt = this.clock.now;
     this.phase = 'HANDOVER';
     for (const pk of ship.packages ?? []) {
@@ -483,6 +502,11 @@ export class VirtualRider {
     this.dropPoint = { lat: drop.lat, lng: drop.lng };
     this.phase = 'TO_CUSTOMER';
     this.say('고객으로 이동');
+    // 위치 끊김(조절 바 locationOutageRate) — 배송 상태는 그대로, tracking 이 3분 뒤 RiderLocationStale 만 낸다
+    if (this.params.locationOutageRate > 0 && this.rng.next() < this.params.locationOutageRate) {
+      this.offlineUntil = this.clock.now + this.params.locationOutageSec;
+      this.say(`위치 전송 끊김 ${Math.round(this.params.locationOutageSec / 60)}분(앱 위치 전송 멈춤) — 배송은 계속`);
+    }
     await this.moveTo(this.dropPoint, this.params.riderSpeedMps, true);
 
     // 8. 도착 → 사진 → 완료
@@ -511,6 +535,37 @@ export class VirtualRider {
     this.hooks.onTripDone(trip);
     this.dropPoint = null;
     this.target = null;
+  }
+
+  /**
+   * 배정 취소(픽업 전): 가게로 가다가 사정이 생겨 취소 → dispatch 가 이 라이더를 빼고 재배차(reassign 기본 true).
+   * 인계 전이라 상품은 가게에 남는다(dispatch 계약). 취소가 거절되면(409 등 — 이미 픽업·상태 바뀜) 그대로 배송한다.
+   * 돌려주는 값: 취소됐으면 true.
+   */
+  private async cancelOnTheWay(deliveryId: string, trip: RiderTrip): Promise<boolean> {
+    const going = this.moveTo(this.home, this.params.riderSpeedMps, true);
+    await this.wait(this.rng.range(30, 90)); // 가다가 사정이 생김 [시뮬]
+    this.say('사정이 생겨 배정 취소 요청(픽업 전)');
+    try {
+      const disp = await this.api.getDispatch(deliveryId);
+      await this.write(this.opts('cancel', disp.version), (o) =>
+        this.api.cancelAssignment(deliveryId, { requestedBy: 'RIDER', reason: 'RIDER_UNABLE', reasonDetail: '개인 사정(시뮬레이터)', reassign: true }, o),
+      );
+    } catch (e) {
+      if (!(e instanceof ApiProblem)) throw e;
+      this.say(`배정 취소 거절(${e.status} ${e.code ?? ''}) — 그대로 배송`);
+      await going;
+      return false;
+    }
+    // 이동을 멈춘다(가던 경로 버림) — 대기로 돌아가면 MFC 근처로 천천히 다가간다
+    this.moveResolve = null;
+    this.path = null;
+    this.pathKind = null;
+    this.target = null;
+    trip.cancelledAt = this.clock.now;
+    this.say(`배정 취소 — ${deliveryId} 다른 라이더에게 재배차`);
+    this.hooks.onTripDone(trip);
+    return true;
   }
 
   /**
@@ -569,8 +624,24 @@ export class VirtualRider {
     }
   }
 
-  private async waitShipmentReady(shipmentId: string): Promise<Shipment> {
+  /** 출고 READY 까지 기다린다. 오래 걸리면(storeWaitHelpSec) 도움요청 STORE_WAITING 을 한 번 보낸다. */
+  private async waitShipmentReady(shipmentId: string, deliveryId: string): Promise<Shipment> {
+    const since = this.clock.now;
+    let helped = false;
     for (;;) {
+      const helpAfter = this.params.storeWaitHelpSec;
+      if (!helped && helpAfter !== null && this.clock.now - since >= helpAfter) {
+        helped = true;
+        try {
+          await this.write(this.opts('help'), (o) =>
+            this.api.createHelpRequest(deliveryId, { category: 'STORE_WAITING', detail: `포장 대기 ${Math.round((this.clock.now - since) / 60)}분 넘음(시뮬레이터)` }, o),
+          );
+          this.say('포장이 늦어 도움요청(STORE_WAITING) — 계속 기다림');
+        } catch (e) {
+          if (!(e instanceof ApiProblem)) throw e;
+          this.say(`도움요청 거절(${e.status} ${e.code ?? ''}) — 계속 기다림`);
+        }
+      }
       const s = await this.observer.getShipment(shipmentId);
       if (s.state === 'READY' || s.state === 'PARTIALLY_HANDED_OVER') return s;
       if (s.state === 'HANDED_OVER' || s.state === 'CANCELLED' || s.state === 'CLOSED_PARTIAL') {

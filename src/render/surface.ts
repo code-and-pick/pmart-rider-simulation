@@ -11,6 +11,8 @@ export interface RiderMarkerState {
   selected: boolean;
   /** 마우스를 올리면 보이는 설명(단계·배송) */
   title: string;
+  /** 위치 끊김 장면 중 — 흐리게 */
+  offline?: boolean;
 }
 
 export interface CustomerPinState {

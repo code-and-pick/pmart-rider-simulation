@@ -20,6 +20,8 @@ export interface RiderView {
   readonly path: LatLng[] | null;
   /** ROAD = 도로 경로(실선), STRAIGHT = 직선(점선, 도로 경로 아님) */
   readonly pathKind: 'ROAD' | 'STRAIGHT' | null;
+  /** 위치 끊김 장면 중(MOCK) — 지도 표시가 실제 위치보다 늦다는 뜻은 아니고, 백엔드가 이 라이더 위치를 못 받는 중 */
+  readonly locationOffline?: boolean;
 }
 
 /** 화면 배송 카드 — 두 서비스의 두 상태를 출처와 함께(docs/design.md §4). */
@@ -62,6 +64,20 @@ export interface ScenarioKnobs {
   customerAbsentRate: number;
   /** 쓰기 응답이 사라질 확률(0~1) → 같은 키 재전송 */
   networkDropRate: number;
+  /** 라이더가 픽업 전 배정을 취소할 확률(0~1) → 재배차 */
+  riderCancelRate: number;
+  /** 고객에게 가는 중 위치 전송이 4분 끊길 확률(0~1) → RiderLocationStale */
+  locationOutageRate: number;
+}
+
+/** 지금까지 일어난 사건 수(MOCK — 실서버는 사건을 구독하지 못해 없음) */
+export interface IncidentCounts {
+  /** 배정 취소 → 재배차(DeliveryAssignmentChanged) */
+  assignmentCancelled: number;
+  /** 위치 끊김(RiderLocationStale) */
+  locationStale: number;
+  /** 도움요청(DeliveryIncidentRaised) */
+  helpRequests: number;
 }
 
 export interface MetricsSummary {
@@ -71,6 +87,8 @@ export interface MetricsSummary {
   deliveryFailed: number;
   /** 응답이 끊긴 요청 수(재전송으로 이어짐) */
   responseLost: number;
+  /** 사건 수 — MOCK 만 */
+  incidents?: IncidentCounts;
   /** 배정돼 배송 중(가게로·가게에서·고객에게) */
   delivering: number;
   /** 배차 요청 뒤 라이더를 찾는 중 */

@@ -38,7 +38,14 @@ export function LeftPanel() {
                     완료 {done}
                   </span>
                 </div>
-                <div className="rc-phase">{PHASE_LABEL[r.phase]}</div>
+                <div className="rc-phase">
+                  {PHASE_LABEL[r.phase]}
+                  {r.locationOffline && (
+                    <span className="rc-offline" title="위치 전송이 끊긴 중 — 3분 넘으면 백엔드가 위치 끊김(RiderLocationStale)을 낸다. 배송 상태는 그대로">
+                      📡 위치 끊김
+                    </span>
+                  )}
+                </div>
                 {card && stage && (
                   <div className="rc-delivery">
                     <span className="rc-dl">{card.deliveryId}</span>

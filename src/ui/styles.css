@@ -866,3 +866,27 @@ code {
   width: 150px;
   accent-color: var(--accent);
 }
+
+/* 사건 수(MOCK) — 지표 칸 아래 한 줄 */
+.incidents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 2px 0;
+}
+.incidents b {
+  color: #e09b1a;
+  font-variant-numeric: tabular-nums;
+}
+/* 위치 끊김 중인 라이더 */
+.rc-offline {
+  color: #e09b1a;
+  font-size: 11px;
+  margin-left: 6px;
+}
+.mk-rider.offline {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}

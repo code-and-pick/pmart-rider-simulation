@@ -1,9 +1,9 @@
 // 백엔드 계약의 부분 사본 — 이 시뮬레이터(가상 라이더)가 부르거나 읽는 부분만.
 // 이름·상태값·필드는 계약을 그대로 따른다. 계약이 바뀌면 여기를 먼저 맞추고 docs/design.md §3 표를 고친다.
 //
-// 기준: pmart-backend origin/main 347ea90d (2026-11-16 다시 읽음 — 516e7cf5 뒤 dispatch 0.4.1·fulfillment 0.5.0)
-//   contracts/openapi/delivery-dispatch-service.yaml   0.4.1
-//   contracts/openapi/delivery-execution-service.yaml  0.5.0 (recovery-contact·사진 보기 추가분은 아직 안 씀 — 회수 흐름 P4)
+// 기준: pmart-backend origin/main 6df1e842 (2026-11-16 다시 읽음 — 347ea90d 뒤 dispatch 0.4.4·execution 0.5.1)
+//   contracts/openapi/delivery-dispatch-service.yaml   0.4.4 (0.4.2~0.4.4 는 고객 잘못 다시 배송 MISDELIVERY_REDELIVERY·내부 경로만 — 라이더 쪽은 목적값 하나)
+//   contracts/openapi/delivery-execution-service.yaml  0.5.1 (0.5.1 은 도움요청이 사건함 사건을 따라감 — 직원 닫기 409 HELP_REQUEST_HAS_CASE. recovery-contact·사진 보기는 아직 안 씀 — 회수 흐름 P4)
 //   contracts/openapi/delivery-tracking-service.yaml   0.4.0
 //   contracts/openapi/rider-service.yaml               0.4.0
 //   contracts/openapi/mfc-fulfillment-service.yaml     0.5.0 (출고 조회·포장 인계 부분만 — 0.5.0 변경은 ConfirmOrder·사건 필드라 여기 영향 없음)
@@ -77,7 +77,7 @@ export class ResultUnknown extends Error {
   }
 }
 
-// ───────────────────────── delivery-dispatch 0.4.1 ─────────────────────────
+// ───────────────────────── delivery-dispatch 0.4.4 ─────────────────────────
 
 export type DeliveryType = 'FORWARD' | 'RETURN' | 'RESHIPMENT';
 
@@ -92,8 +92,8 @@ export type DispatchState =
   | 'CLOSED'
   | 'BLOCKED';
 
-/** DELIVERY 일반, CLAIM_RETURN 고객 반품 회수(아직 없음), MISDELIVERY_RECOVERY 오배송 회수(DD-2), MISDELIVERY_RESHIPMENT 오배송 재발송(0.4.1 — type RESHIPMENT). */
-export type DeliveryPurpose = 'DELIVERY' | 'CLAIM_RETURN' | 'MISDELIVERY_RECOVERY' | 'MISDELIVERY_RESHIPMENT';
+/** DELIVERY 일반, CLAIM_RETURN 고객 반품 회수(아직 없음), MISDELIVERY_RECOVERY 오배송 회수(DD-2), MISDELIVERY_RESHIPMENT 오배송 재발송(0.4.1 — type RESHIPMENT), MISDELIVERY_REDELIVERY 고객 잘못 다시 배송(0.4.2 — type RESHIPMENT, 잘못 둔 곳 → 실제 집). */
+export type DeliveryPurpose = 'DELIVERY' | 'CLAIM_RETURN' | 'MISDELIVERY_RECOVERY' | 'MISDELIVERY_RESHIPMENT' | 'MISDELIVERY_REDELIVERY';
 
 export type OfferState = 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'LATE' | 'SEND_FAILED' | 'SUPERSEDED';
 export type OfferSource = 'AI_RECOMMENDED' | 'DELIVERY_LIST';
@@ -283,7 +283,7 @@ export interface AssignmentCancellationRequest {
   approvalRef?: string;
 }
 
-// ───────────────────────── delivery-execution 0.5.0 ─────────────────────────
+// ───────────────────────── delivery-execution 0.5.1 ─────────────────────────
 
 /** 수행 관점 상태 — dispatch 의 DispatchState 와 다른 값이다(docs/design.md §4). */
 export type ExecutionState =

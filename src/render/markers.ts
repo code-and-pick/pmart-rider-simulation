@@ -19,8 +19,9 @@ export function createRiderEl(): HTMLElement {
   return el;
 }
 
-export function updateRiderEl(el: HTMLElement, color: string, label: string, heading: number, selected: boolean, title = ''): void {
+export function updateRiderEl(el: HTMLElement, color: string, label: string, heading: number, selected: boolean, title = '', offline = false): void {
   el.style.setProperty('--rider-color', color);
+  el.classList.toggle('offline', offline);
   if (el.title !== title) el.title = title;
   // 진행 방향이 서쪽이면 그림을 좌우로 뒤집는다
   el.classList.toggle('mk-west', heading > 180 && heading < 360);

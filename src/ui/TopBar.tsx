@@ -54,7 +54,7 @@ export function TopBar() {
         className={`btn ${app.scenarioOpen ? 'on' : ''}`}
         aria-pressed={app.scenarioOpen}
         disabled={!sim.tunable}
-        title={sim.tunable ? '주문량·수락률·포장 시간·고객 부재·응답 끊김을 바꿔 실패 장면을 본다' : '실서버는 실제 결과만 — 조절하지 않는다'}
+        title={sim.tunable ? '주문량·수락률·포장 시간·고객 부재·라이더 취소·위치 끊김·응답 끊김을 바꿔 실패 장면을 본다' : '실서버는 실제 결과만 — 조절하지 않는다'}
         onClick={() => app.toggleScenario()}
       >
         ⚙ 시나리오
