@@ -14,6 +14,7 @@ import { mockStartEpochMs, SimClock } from './clock';
 import { VirtualRider, type RiderTrip } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
 import type { DeliveryCard, IncidentCounts, MetricsSummary, NoteRecord, PhaseSegment, ScenarioKnobs, World } from './world';
+import { mockLocator } from './geocode';
 
 const SUBSTEP = 0.25;
 const RING = 300;
@@ -82,7 +83,7 @@ export class Simulation implements World {
           onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }, NOTE_RING),
         },
         // 다시 배송 전달지(핀 없음)는 MOCK 주소록으로 찾는다 — 실서버에는 이 길이 없다
-        { allowSignup: true, routes: this.routes, locateAddress: (a) => this.backend.locateAddress(a) },
+        { allowSignup: true, routes: this.routes, locator: mockLocator((a) => this.backend.locateAddress(a)) },
       );
       this.riders.push(r);
       made.push(r);

@@ -8,7 +8,8 @@
 //  - 사건 반영 지연을 기다린다(수락 직후 execution UNASSIGNED 등 — "반영 대기").
 //  - 전달지(drop-info)는 좌표만 쓰고 나머지는 버린다(저장·로그·화면 금지).
 //  - 일반 배송·재발송(MISDELIVERY_RESHIPMENT)·오배송 회수(MISDELIVERY_RECOVERY)를 받는다. 고객 잘못 다시 배송(MISDELIVERY_REDELIVERY)은
-//    전달지에 지도 핀이 없어 주소로 찾을 수단(locateAddress — MOCK 만)이 있을 때만 받는다. 고객 반품(CLAIM_RETURN)은 거절(docs/design.md §3-1).
+//    전달지에 지도 핀이 없어 주소로 찾을 수단(AddressLocator — MOCK 주소록, 실서버 개발 서버 카카오 주소 검색)이 준비됐을 때만 받는다.
+//    고객 반품(CLAIM_RETURN)은 거절(docs/design.md §3-1).
 
 import type { ObserverApi, RiderApi, WriteOptions } from '../backend/port';
 import { CONTRACT, simRiderPhone, type SimParams } from '../config';
@@ -16,6 +17,7 @@ import { ApiProblem, ResultUnknown, type DeliveryPurpose, type Offer, type Shipm
 import { bearingDeg, distanceM, moveToward, type LatLng } from '../util/geo';
 import { IdGen, Rng } from '../util/rng';
 import { RiderRestrictedError, STOP_RESTRICTIONS, withAuthRecovery } from './authGuard';
+import type { AddressLocator } from './geocode';
 import { straightRoutes, type Route, type RouteKind, type RouteProvider } from './route';
 import type { SimClock } from './clock';
 
@@ -169,8 +171,8 @@ export class VirtualRider {
     private readonly options: {
       allowSignup: boolean;
       routes?: RouteProvider;
-      /** 주소 → 좌표(다시 배송 전달지는 핀이 없다). MOCK 만 — 실서버는 없음(주소를 밖으로 보내는 일은 사용자 결정) */
-      locateAddress?: (roadAddress: string) => LatLng | null;
+      /** 주소 → 좌표(다시 배송 전달지는 핀이 없다). MOCK 주소록 / 실서버 개발 서버 카카오 주소 검색(사용자 2026-11-16 "그렇게 해") */
+      locator?: AddressLocator;
     } = { allowSignup: true },
   ) {
     this.id = api.riderId;
@@ -425,7 +427,7 @@ export class VirtualRider {
     const offerId = offer.offerId as string;
     this.phase = 'DECIDING';
     const detail = await this.api.getOffer(offerId);
-    const decision = decideOffer(detail, this.rng.next(), this.params.acceptProbability, this.options.locateAddress !== undefined);
+    const decision = decideOffer(detail, this.rng.next(), this.params.acceptProbability, this.options.locator?.ready === true);
     const [lo, hi] = this.params.offerResponseDelaySec;
     const delay = Math.min(this.rng.range(lo, hi), Math.max(0, (detail.remainingSec ?? CONTRACT.offerResponseWindowSec) - 2));
     this.trip = { deliveryId: detail.deliveryId ?? '', purpose: detail.purpose, offeredAt: this.clock.now };
@@ -524,7 +526,8 @@ export class VirtualRider {
   private async toCustomerAndHandOff(deliveryId: string, trip: RiderTrip) {
     const drop = await this.api.getDropInfo(deliveryId);
     const pin = drop.lat !== null && drop.lat !== undefined && drop.lng !== null && drop.lng !== undefined ? { lat: drop.lat, lng: drop.lng } : null;
-    const point = pin ?? this.options.locateAddress?.(drop.roadAddress) ?? null;
+    // 핀이 없으면 도로명 주소만으로 찾는다(상세 주소·수령인·전화는 쓰지 않음). 주소는 메모·기록에 남기지 않는다
+    const point = pin ?? (this.options.locator ? await this.options.locator.locate(drop.roadAddress) : null);
     if (!point) {
       this.say('전달지 위치를 못 찾음 — 도움요청(주소)');
       await this.write(this.opts('help'), (o) =>

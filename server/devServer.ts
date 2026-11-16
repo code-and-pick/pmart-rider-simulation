@@ -7,12 +7,14 @@
 //     개발 서버가 시험 라이더 토큰을 서명하거나(조건 3·4) 관찰 계정으로 로그인해 Authorization 을 붙인 뒤 X-Sim-* 를 지운다.
 //  3. 401 이면 그 토큰을 버린다 → 다음 요청에서 새로(조건 7 의 앞부분. 정지 라이더 멈춤은 엔진 몫 — P3).
 //  4. GET /sim-auth/status(루프백만) — 비밀 파일이 있는지만(값 없음).
+//  5. /sim-route(도로 경로)·/sim-geocode(주소 → 좌표, POST 본문 — 다시 배송 전달지에 핀이 없어서)(루프백만). 주소·좌표는 로그에 남기지 않는다.
 // 로그에는 라이더 ID·경로·상태 코드만(조건 6). 토큰·비밀번호·고객 정보는 남기지 않는다.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HttpProxy, Plugin } from 'vite';
 import { decideLanRequest, isListedSimRider, isLoopback } from './lanPolicy';
 import { makeSigner, NotSimRiderError, RiderTokenCache } from './riderToken';
+import { GeocodeService, parseAddressBody } from './geocode';
 import { parsePoint, RouteService } from './routing';
 import { Secrets, SECRET_FILES, secretsDir } from './secrets';
 import { fetchStaffToken, OBSERVER_ACCOUNT, staffAuthEndpoints, StaffTokenCache } from './staffToken';
@@ -25,12 +27,13 @@ interface AuthDeps {
   riders: RiderTokenCache | null;
   staff: StaffTokenCache | null;
   routes: RouteService;
+  geocoder: GeocodeService;
 }
 
 const ACTOR = Symbol('simActor');
 let deps: AuthDeps | null = null;
 
-function initDeps(root: string, kakaoRestKey: string | null): AuthDeps {
+function initDeps(root: string, kakaoRestKey: string | null, kakaoLocalKey: string | null): AuthDeps {
   const secrets = new Secrets(secretsDir(root));
   const st = secrets.status();
   const riders = st.riderSigning
@@ -45,7 +48,9 @@ function initDeps(root: string, kakaoRestKey: string | null): AuthDeps {
     })`,
   );
   console.info(`[sim-route] 카카오모빌리티 REST 키 ${kakaoRestKey ? '있음 — 도로 경로' : '없음 — 직선으로'}`);
-  return { secrets, riders, staff, routes: new RouteService(kakaoRestKey) };
+  const localKey = kakaoLocalKey ?? kakaoRestKey;
+  console.info(`[sim-geocode] 카카오 주소 검색 키 ${localKey ? (kakaoLocalKey ? '있음(KAKAO_LOCAL_REST_KEY)' : '있음(모빌리티 키와 같은 앱 키)') : '없음 — 실서버 다시 배송은 거절'}`);
+  return { secrets, riders, staff, routes: new RouteService(kakaoRestKey), geocoder: new GeocodeService(localKey) };
 }
 
 function problem(res: ServerResponse, status: number, code: string, title: string) {
@@ -86,6 +91,25 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
     res.end(JSON.stringify(result));
     return;
   }
+  if (path === '/sim-geocode/status') {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(JSON.stringify(deps ? deps.geocoder.status() : { ready: false, reason: 'NO_KEY' }));
+    return;
+  }
+  if (path === '/sim-geocode') {
+    // 주소 → 좌표(이 PC 만 — lanPolicy). 주소는 POST 본문으로만 받고, 주소·좌표를 로그에 남기지 않는다.
+    if (method !== 'POST') return problem(res, 405, 'METHOD_NOT_ALLOWED', 'POST 만');
+    const raw = await readBody(req, 2048);
+    const address = raw === null ? null : parseAddressBody(raw);
+    if (!address) return problem(res, 400, 'VALIDATION_FAILED', '{"address": 도로명 주소}');
+    const result = deps ? await deps.geocoder.geocode(address) : { kind: 'NONE', reason: 'NO_KEY' };
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(JSON.stringify(result));
+    return;
+  }
+  if (path === '/sim-geocode/' || path.startsWith('/sim-geocode/')) return problem(res, 404, 'NOT_FOUND', '없는 경로');
   if (path !== '/api' && !path.startsWith('/api/')) return next();
 
   const loopback = isLoopback(req.socket.remoteAddress);
@@ -136,6 +160,20 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
   next();
 }
 
+/** 요청 본문(작은 JSON) — 넘치면 null */
+function readBody(req: IncomingMessage, max: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size <= max) chunks.push(c);
+    });
+    req.on('end', () => resolve(size > max ? null : Buffer.concat(chunks).toString('utf8')));
+    req.on('error', () => resolve(null));
+  });
+}
+
 function apiMiddleware(req: IncomingMessage, res: ServerResponse, next: Next): void {
   handle(req, res, next).catch((e: unknown) => {
     console.warn(`[sim-auth] 처리 오류: ${e instanceof Error ? e.name : 'unknown'}`);
@@ -156,18 +194,19 @@ export function configureApiProxy(proxy: HttpProxy.Server): void {
   });
 }
 
-export function pmartDevServer(opts: { kakaoRestKey?: string | null } = {}): Plugin {
+export function pmartDevServer(opts: { kakaoRestKey?: string | null; kakaoLocalKey?: string | null } = {}): Plugin {
   const restKey = opts.kakaoRestKey?.trim() || null;
+  const localKey = opts.kakaoLocalKey?.trim() || null;
   return {
     name: 'pmart-rider-dev-server',
     configureServer(server) {
       if (process.env.VITEST) return; // 시험은 실제 비밀 파일·키를 읽지 않는다
-      deps ??= initDeps(server.config.root, restKey);
+      deps ??= initDeps(server.config.root, restKey, localKey);
       server.middlewares.use(apiMiddleware);
     },
     configurePreviewServer(server) {
       // vite preview 도 server.host·server.proxy 를 물려받으므로 같은 가드·토큰 붙이기
-      deps ??= initDeps(server.config.root, restKey);
+      deps ??= initDeps(server.config.root, restKey, localKey);
       server.middlewares.use(apiMiddleware);
     },
   };

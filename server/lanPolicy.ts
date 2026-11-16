@@ -11,6 +11,8 @@ export const API_PREFIX = '/api/v1';
 export const SIM_AUTH_PREFIX = '/sim-auth';
 /** 도로 경로(카카오모빌리티 — 사용량이 있는 외부 호출) — 이 PC 만. 다른 기기는 라이더를 움직이지 않는다 */
 export const SIM_ROUTE_PATH = '/sim-route';
+/** 주소 → 좌표(카카오 주소 검색 — 고객 주소를 다룬다) — 이 PC 만. /sim-geocode(POST 찾기)·/sim-geocode/status */
+export const SIM_GEOCODE_PATH = '/sim-geocode';
 
 /** 다른 기기 요청에 개발 서버가 붙일 토큰 종류. P0 에서는 아직 붙이지 않는다(백엔드가 401 로 답한다). */
 export type LanTokenKind = 'OBSERVER' | 'SIM_RIDER';
@@ -79,7 +81,13 @@ export function decideLanRequest(method: string, url: string, remoteAddress: str
   const path = url.split('?')[0] ?? '';
   const loopback = isLoopback(remoteAddress);
 
-  if (path === SIM_AUTH_PREFIX || path.startsWith(`${SIM_AUTH_PREFIX}/`) || path === SIM_ROUTE_PATH) {
+  if (
+    path === SIM_AUTH_PREFIX ||
+    path.startsWith(`${SIM_AUTH_PREFIX}/`) ||
+    path === SIM_ROUTE_PATH ||
+    path === SIM_GEOCODE_PATH ||
+    path.startsWith(`${SIM_GEOCODE_PATH}/`)
+  ) {
     return loopback ? { allow: true, stripAuthorization: false, token: null } : { allow: false, status: 403, code: 'LOOPBACK_ONLY' };
   }
   if (path !== '/api' && !path.startsWith('/api/')) return { allow: true, stripAuthorization: false, token: null };

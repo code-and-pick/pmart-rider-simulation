@@ -4,6 +4,7 @@ import { App } from './app/App';
 import { AppController } from './app/controller';
 import { DEFAULT_PARAMS, REAL_RIDER_GATE } from './config';
 import { RealWorld } from './sim/realWorld';
+import { DevServerGeocoder } from './sim/geocode';
 import { DevServerRoutes } from './sim/route';
 import { Simulation } from './sim/simulation';
 import type { World } from './sim/world';
@@ -18,7 +19,10 @@ const mode = new URLSearchParams(window.location.search).get('mode') === 'http' 
 const routes = new DevServerRoutes();
 let world: World;
 if (mode === 'http') {
-  world = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, REAL_RIDER_GATE, routes);
+  // 다시 배송 전달지(핀 없음)는 개발 서버 카카오 주소 검색으로 찾는다(이 PC 만 — 다른 기기는 운행하지 않음)
+  const geocoder = new DevServerGeocoder();
+  void geocoder.refresh();
+  world = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, REAL_RIDER_GATE, routes, { locator: geocoder });
 } else {
   const sim = new Simulation({ ...DEFAULT_PARAMS }, { routes });
   sim.startRiders();

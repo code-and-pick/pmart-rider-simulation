@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    plugins: [react(), pmartDevServer({ kakaoRestKey: env.KAKAO_MOBILITY_REST_KEY ?? null })],
+    plugins: [react(), pmartDevServer({ kakaoRestKey: env.KAKAO_MOBILITY_REST_KEY ?? null, kakaoLocalKey: env.KAKAO_LOCAL_REST_KEY ?? null })],
     server: {
       port: 5181, // MFC 시뮬레이터 5180 과 겹치지 않게
       strictPort: true, // 카카오 콘솔 Web 플랫폼에 등록한 주소와 포트가 달라지지 않게

@@ -17,6 +17,7 @@ import { VirtualRider } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
 import type { LatLng } from '../util/geo';
 import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, RiderView, ScenarioKnobs, World } from './world';
+import type { AddressLocator } from './geocode';
 
 const RING = 300;
 const SUBSTEP = 0.25;
@@ -70,16 +71,19 @@ export class RealWorld implements World {
   private centerError: string | null = null;
   private readonly doFetch: typeof fetch;
 
+  private readonly locator: AddressLocator | null;
+
   constructor(
     readonly params: SimParams = DEFAULT_PARAMS,
     /** 시험에서 바꿔 넣을 수 있게 — 화면은 늘 config 값 */
     private readonly gate: typeof REAL_RIDER_GATE = REAL_RIDER_GATE,
     /** MFC·고객 이동 경로(기본 직선 — 시험, 화면은 DevServerRoutes) */
     private readonly routes: RouteProvider = straightRoutes,
-    /** 시험용 fetch */
-    opts: { fetch?: typeof fetch } = {},
+    /** 시험용 fetch · 다시 배송 전달지(핀 없음) 주소 → 좌표(없거나 준비 안 되면 다시 배송 제안을 거절한다) */
+    opts: { fetch?: typeof fetch; locator?: AddressLocator } = {},
   ) {
     this.doFetch = opts.fetch ?? ((...a) => fetch(...a));
+    this.locator = opts.locator ?? null;
     this.clock = new SimClock(this.startWall);
     this.backend = new HttpBackend({
       apiBase: params.apiBase,
@@ -161,7 +165,7 @@ export class RealWorld implements World {
           onTripDone: () => undefined,
           onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }, 1500),
         },
-        { allowSignup: this.gate.signupAllowed, routes: this.routes },
+        { allowSignup: this.gate.signupAllowed, routes: this.routes, locator: this.locator ?? undefined },
       );
       this.driven.set(r.id, v);
       void v.run();
@@ -394,6 +398,12 @@ export class RealWorld implements World {
     if (withD.length) lines.push(`dispatch shipmentId 실측(§5): 채워짐 ${filled} / 읽은 배송 ${withD.length}`);
     if (errs.length) lines.push(`배차 조회 실패 ${errs.length}건 — 예: ${errs[0]}`);
     lines.push(this.operationLock ?? '실서버 가상 라이더 운행 가능(잠금 풀림)');
+    const loc = this.locator as { ready: boolean; reason?: string | null } | null;
+    lines.push(
+      loc?.ready
+        ? '오배송 다시 배송: 받음 — 전달지 주소는 개발 서버 카카오 주소 검색으로 찾음(도로명 주소만, 기록 안 함)'
+        : `오배송 다시 배송: 거절 — 주소 검색 준비 안 됨(${loc?.reason ?? '없음'})`,
+    );
     return lines;
   }
 }
