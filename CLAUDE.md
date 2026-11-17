@@ -28,6 +28,7 @@ MFC 쪽 시뮬레이터(`../pmart-mfc-simulation`)의 짝이다. MFC 에서 점�
 
 ## 다른 PC 에서 이어서 작업할 때
 - **작업 PC 는 PC 5**(사용자 2026-11-16 — 백엔드 delivery 영역·라이더 앱과 같은 PC). 2026-11-16 설계 문서는 다른 PC(`ds603-13`)에서 썼고, P0 골격부터 PC 5 가 맡는다.
+0. **세션 인수인계 `docs/session-handoff.md` 를 먼저 읽는다**(지금 상태·맨 먼저 할 일·남은 일 요약).
 1. 이 파일 → `docs/design.md`(설계·계약 요약·단계 계획) → `docs/worklog/` 최신 일지 → `docs/backend-requests.md` 순서로 읽는다.
 2. 형제 폴더가 같은 위치에 있어야 한다: `../pmart-backend`, `../pmart-mfc-simulation`, `../pmart-clients`, `../PMart-Delivery-Test`. 백엔드는 `git pull` 만 하고 고치지 않는다.
 3. 일지의 "백엔드 확인" 커밋과 지금 백엔드 커밋이 다르면 계약 버전(`contracts/openapi/delivery-*.yaml` 의 `info.version`)과 `services/delivery-*/CLAUDE.md` "상태" 절을 다시 읽고 `docs/design.md` §3 표를 고친다.
