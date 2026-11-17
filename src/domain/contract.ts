@@ -1,13 +1,13 @@
 // 백엔드 계약의 부분 사본 — 이 시뮬레이터(가상 라이더)가 부르거나 읽는 부분만.
 // 이름·상태값·필드는 계약을 그대로 따른다. 계약이 바뀌면 여기를 먼저 맞추고 docs/design.md §3 표를 고친다.
 //
-// 기준: pmart-backend origin/main 6df1e842 (2026-11-16 다시 읽음 — 347ea90d 뒤 dispatch 0.4.4·execution 0.5.1)
-//   contracts/openapi/delivery-dispatch-service.yaml   0.4.4 (0.4.2~0.4.4 는 고객 잘못 다시 배송 MISDELIVERY_REDELIVERY·내부 경로만 — 라이더 쪽은 목적값 하나)
-//   contracts/openapi/delivery-execution-service.yaml  0.5.1 (0.5.1 은 도움요청이 사건함 사건을 따라감 — 직원 닫기 409 HELP_REQUEST_HAS_CASE. recovery-contact·사진 보기는 아직 안 씀 — 회수 흐름 P4)
+// 기준: pmart-backend origin/main c475ff94 (2026-11-17 다시 읽음 — 6df1e842 뒤 바뀐 것은 모두 추가뿐, 시뮬레이터가 부르는 길·값 그대로)
+//   contracts/openapi/delivery-dispatch-service.yaml   0.4.7 (0.4.5~0.4.7: 제안 요약에 dropEtaSeconds·pickupPoint·dropAreaPoint·order(주문 요약) 추가 — 아직 안 씀)
+//   contracts/openapi/delivery-execution-service.yaml  0.7.2 (0.6.0~0.7.2: 도움요청 대화 messages·배송별 도움요청 목록 GET·수행 조회 orderSummary 추가 — 아직 안 씀)
 //   contracts/openapi/delivery-tracking-service.yaml   0.4.0
-//   contracts/openapi/rider-service.yaml               0.4.0
-//   contracts/openapi/mfc-fulfillment-service.yaml     0.5.0 (출고 조회·포장 인계 부분만 — 0.5.0 변경은 ConfirmOrder·사건 필드라 여기 영향 없음)
-//   contracts/openapi/center-master-service.yaml       0.1.1 (센터 조회 GET /centers/{centerId} 만 — MFC 위치 정본)
+//   contracts/openapi/rider-service.yaml               0.5.0 (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
+//   contracts/openapi/mfc-fulfillment-service.yaml     0.7.0 (출고 조회·포장 인계 부분만 — 0.6~0.7 변경은 작업 줄 바코드 등이라 인계 API 그대로)
+//   contracts/openapi/center-master-service.yaml       0.2.0 (센터 조회 GET /centers/{centerId} 만 — MFC 위치 정본. 0.2.0 라이더용 GET /mfc-pickup-points 추가 — 아직 안 씀)
 //   contracts/openapi/_common.yaml                     0.1.0
 // 모든 경로는 게이트웨이 /api/v1 아래. POST·PUT 은 Idempotency-Key·X-Source-System 필수, 상태 전이는 X-Expected-Version(선택).
 // 이름이 서비스 사이에서 겹치는 스키마만 이름을 바꿨다(주석에 계약 이름).
@@ -577,7 +577,7 @@ export interface RiderLocation {
 
 // ───────────────────────── rider-service 0.4.0 ─────────────────────────
 
-export type VehicleType = 'MOTORCYCLE' | 'BICYCLE' | 'CAR' | 'WALK';
+export type VehicleType = 'MOTORCYCLE' | 'BICYCLE' | 'E_BIKE' | 'KICKBOARD' | 'CAR' | 'WALK';
 export type OperatingStatus = 'OFF_DUTY' | 'ON_DUTY';
 export type AccountRestriction = 'NORMAL' | 'DISPATCH_RESTRICTED' | 'SUSPENDED' | 'TERMINATED';
 export type DispatchMode = 'NORMAL' | 'AI_RECOMMENDED';
