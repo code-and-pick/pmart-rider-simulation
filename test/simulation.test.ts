@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS, type SimParams } from '../src/config';
 import { mockStartEpochMs } from '../src/sim/clock';
-import { decideOffer } from '../src/sim/rider';
+import { decideOffer, jobOf } from '../src/sim/rider';
 import { Simulation } from '../src/sim/simulation';
 import { offsetM } from '../src/util/geo';
 
@@ -93,5 +93,29 @@ describe('가상 라이더 (MOCK, 화면 없이)', () => {
     expect(decideOffer({ purpose: 'MISDELIVERY_REDELIVERY', deliveryType: 'RESHIPMENT' }, 0, 1)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
     expect(decideOffer({ purpose: 'CLAIM_RETURN', deliveryType: 'RETURN' }, 0, 1)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
     expect(decideOffer({ deliveryType: 'RESHIPMENT' }, 0, 1)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
+  });
+
+  it('제안 판단: 예상 소요 합(pickupEta + dropEta)이 상한을 넘으면 TOO_FAR, 하나라도 없거나 상한 null 이면 보지 않음', () => {
+    const far = { purpose: 'DELIVERY' as const, summary: { pickupEtaSeconds: 1500, dropEtaSeconds: 1000 } };
+    const near = { purpose: 'DELIVERY' as const, summary: { pickupEtaSeconds: 600, dropEtaSeconds: 900 } };
+    expect(decideOffer(far, 0, 1, false, 2400)).toEqual({ kind: 'REJECT', reason: 'TOO_FAR' });
+    expect(decideOffer(near, 0, 1, false, 2400)).toEqual({ kind: 'ACCEPT' });
+    expect(decideOffer(far, 0, 1, false, null)).toEqual({ kind: 'ACCEPT' });
+    expect(decideOffer({ purpose: 'DELIVERY', summary: { pickupEtaSeconds: 5000 } }, 0, 1, false, 2400)).toEqual({ kind: 'ACCEPT' });
+    // 목적 거절이 먼저
+    expect(decideOffer({ ...far, purpose: 'CLAIM_RETURN' }, 0, 1, false, 2400)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
+  });
+
+  it('라이더 카드 주문 요약: 주문번호·품목 수·금액·예상 소요만', () => {
+    expect(
+      jobOf({
+        summary: {
+          pickupEtaSeconds: 120,
+          dropEtaSeconds: 300,
+          order: { orderNumber: '12345678', items: [{ name: 'a', qty: 1, lineAmount: 1000 }, { name: 'b', qty: 2, lineAmount: 4000 }], itemAmount: 5000, deliveryNote: '문 앞' },
+        },
+      }),
+    ).toEqual({ orderNumber: '12345678', lines: 2, itemAmount: 5000, etaSec: 420 });
+    expect(jobOf({ summary: {} })).toBeNull();
   });
 });

@@ -78,8 +78,17 @@ export type OfferDecision = { kind: 'ACCEPT' } | { kind: 'REJECT'; reason: 'OTHE
 /** 가상 라이더가 받는 배송 목적 — 일반·재발송(가게 → 고객)과 오배송 회수(잘못 둔 곳 → MFC) */
 const ACCEPTED_PURPOSES: ReadonlySet<string> = new Set(['DELIVERY', 'MISDELIVERY_RESHIPMENT', 'MISDELIVERY_RECOVERY']);
 
-/** canRedeliver: 다시 배송 전달지(주소만, 핀 없음)를 좌표로 찾을 수 있나 — MOCK 만 true */
-export function decideOffer(offer: Offer, roll: number, acceptProbability: number, canRedeliver = false): OfferDecision {
+/**
+ * canRedeliver: 다시 배송 전달지(주소만, 핀 없음)를 좌표로 찾을 수 있나.
+ * maxTripEtaSec: 제안 예상 소요 합(pickupEtaSeconds + dropEtaSeconds — dispatch 0.4.5)이 이보다 길면 TOO_FAR. 둘 중 하나라도 없거나 null 이면 보지 않는다.
+ */
+export function decideOffer(
+  offer: Offer,
+  roll: number,
+  acceptProbability: number,
+  canRedeliver = false,
+  maxTripEtaSec: number | null = null,
+): OfferDecision {
   // 회수(MISDELIVERY_RECOVERY)·고객 반품·재발송(MISDELIVERY_RESHIPMENT — dispatch 0.4.1)·고객 잘못 다시 배송(MISDELIVERY_REDELIVERY — 0.4.2, 가게 대신 잘못 둔 곳에서 받음)은 받지 않는다(§3-1).
   // 재발송(MISDELIVERY_RESHIPMENT, type RESHIPMENT)은 받는다 — execution 0.5.1 "수행은 일반 배송과 같다", 서비스 코드도 다시 배송(purpose)·회수(type RETURN)만 따로 처리
   // (pmart-backend 6df1e842 ExecutionStore.redelivery·recovery, 2026-11-16 확인). 목적이 없으면 종류로만 본다(FORWARD 만).
@@ -87,9 +96,35 @@ export function decideOffer(offer: Offer, roll: number, acceptProbability: numbe
     const ok = offer.purpose === 'MISDELIVERY_REDELIVERY' ? canRedeliver : ACCEPTED_PURPOSES.has(offer.purpose);
     if (!ok) return { kind: 'REJECT', reason: 'OTHER' };
   } else if (offer.deliveryType !== undefined && offer.deliveryType !== 'FORWARD') return { kind: 'REJECT', reason: 'OTHER' };
+  const eta = tripEtaSec(offer);
+  if (maxTripEtaSec !== null && eta !== null && eta > maxTripEtaSec) return { kind: 'REJECT', reason: 'TOO_FAR' };
   if (roll < acceptProbability) return { kind: 'ACCEPT' };
   // 나머지 절반은 거절, 절반은 무응답으로 만료 [시뮬]
   return roll < acceptProbability + (1 - acceptProbability) / 2 ? { kind: 'REJECT', reason: 'TOO_FAR' } : { kind: 'IGNORE' };
+}
+
+/** 제안 예상 소요 합(초) — 라이더 → 픽업지 + 픽업지 → 전달지. 둘 중 하나라도 없으면 null */
+export function tripEtaSec(offer: Offer): number | null {
+  const s = offer.summary;
+  if (s?.pickupEtaSeconds === undefined || s.dropEtaSeconds === undefined) return null;
+  return s.pickupEtaSeconds + s.dropEtaSeconds;
+}
+
+/** 화면 라이더 카드에 보일 진행 중 주문 요약 — 주문번호·품목 수·금액·예상 소요만(고객 요청사항·주소는 넣지 않는다) */
+export interface RiderJob {
+  orderNumber: string | null;
+  /** 품목 줄 수 */
+  lines: number | null;
+  itemAmount: number | null;
+  /** 수락 때 제안의 예상 소요 합(초) */
+  etaSec: number | null;
+}
+
+export function jobOf(offer: Offer): RiderJob | null {
+  const o = offer.summary?.order;
+  const etaSec = tripEtaSec(offer);
+  if (!o && etaSec === null) return null;
+  return { orderNumber: o?.orderNumber ?? null, lines: o?.items?.length ?? null, itemAmount: o?.itemAmount ?? null, etaSec };
 }
 
 /** 시뮬레이터가 지표·화면에 쓰는 한 배송의 엔진 기록. */
@@ -132,6 +167,8 @@ export class VirtualRider {
   private pathIdx = 0;
   /** 진행 중 배송의 고객 좌표(drop-info 에서 lat·lng 만) */
   dropPoint: LatLng | null = null;
+  /** 진행 중 배송의 주문 요약(화면) — 수락한 제안에서 */
+  job: RiderJob | null = null;
   trip: RiderTrip | null = null;
   done = false;
 
@@ -399,6 +436,7 @@ export class VirtualRider {
     this.phase = 'IDLE';
     this.deliveryId = null;
     this.dropPoint = null;
+    this.job = null;
     this.trip = null;
     const handled = new Set<string>();
     for (;;) {
@@ -427,7 +465,7 @@ export class VirtualRider {
     const offerId = offer.offerId as string;
     this.phase = 'DECIDING';
     const detail = await this.api.getOffer(offerId);
-    const decision = decideOffer(detail, this.rng.next(), this.params.acceptProbability, this.options.locator?.ready === true);
+    const decision = decideOffer(detail, this.rng.next(), this.params.acceptProbability, this.options.locator?.ready === true, this.params.maxTripEtaSec);
     const [lo, hi] = this.params.offerResponseDelaySec;
     const delay = Math.min(this.rng.range(lo, hi), Math.max(0, (detail.remainingSec ?? CONTRACT.offerResponseWindowSec) - 2));
     this.trip = { deliveryId: detail.deliveryId ?? '', purpose: detail.purpose, offeredAt: this.clock.now };
@@ -452,10 +490,13 @@ export class VirtualRider {
     }
     if (res.outcome === 'ASSIGNED') {
       this.trip.acceptedAt = this.clock.now;
+      this.job = jobOf(detail);
       this.say(`수락 → 배정 ${res.deliveryId}`);
       return detail;
     }
-    this.say(res.outcome === 'LATE' ? `늦은 수락: ${res.lateReason}` : `거절(${decision.kind === 'REJECT' ? decision.reason : ''})`);
+    const eta = tripEtaSec(detail);
+    const why = decision.kind === 'REJECT' ? decision.reason + (decision.reason === 'TOO_FAR' && eta !== null ? ` — 예상 ${Math.round(eta / 60)}분` : '') : '';
+    this.say(res.outcome === 'LATE' ? `늦은 수락: ${res.lateReason}` : `거절(${why})`);
     return null;
   }
 

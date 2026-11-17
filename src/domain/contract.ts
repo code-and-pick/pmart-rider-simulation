@@ -119,6 +119,32 @@ export interface ArrivalWindow {
   end?: string;
 }
 
+/** dispatch LatLng */
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
+/** 주문 요약 줄(dispatch OfferOrderInfo.items · execution orderSummary.items) */
+export interface OrderSummaryItem {
+  name?: string;
+  optionLabel?: string | null;
+  qty?: number;
+  lineAmount?: number;
+}
+
+/** dispatch OfferOrderInfo (0.4.6 — 라이더 앱 요청 §1, 수락 전부터). deliveryNote 는 고객이 쓴 글이라 화면·로그에 옮기지 않는다. */
+export interface OfferOrderInfo {
+  orderId?: string;
+  /** 화면용 주문번호(숫자 8자리) */
+  orderNumber?: string | null;
+  mfcName?: string | null;
+  mfcAddress?: string | null;
+  items?: OrderSummaryItem[];
+  itemAmount?: number;
+  deliveryNote?: string | null;
+}
+
 /** 라이더 표시용 요약. 회수 배송이면 distanceKm = 회수지 → MFC, pickup* = 라이더 → 회수지. */
 export interface OfferSummary {
   mfcId?: string;
@@ -129,6 +155,14 @@ export interface OfferSummary {
   /** 라이더 → MFC 도로 거리 */
   pickupDistanceKm?: number;
   pickupEtaSeconds?: number;
+  /** 픽업지 → 전달지 예상 소요(초, 도로) — 0.4.5 */
+  dropEtaSeconds?: number;
+  /** 픽업지 좌표 — MFC 는 정확, 회수·다시 배송은 약 1km 격자 반올림 — 0.4.5 */
+  pickupPoint?: GeoPoint;
+  /** 전달지 대략 좌표(소수 둘째 자리 반올림, 약 1km 격자) — 0.4.5 */
+  dropAreaPoint?: GeoPoint;
+  /** 주문 요약 — 0.4.6. 못 받았으면 없음, 회수 배송은 없음 */
+  order?: OfferOrderInfo;
   weightG?: number;
   bagCount?: number;
   containsAlcohol?: boolean;
@@ -457,6 +491,13 @@ export interface Earning {
 
 /** GET /deliveries/{id} — 수행 관점 배송. */
 export interface DeliveryExecution {
+  /** 라이더에게 보일 주문 요약 — execution 0.7.x, order 에서 조회 때 읽음(못 읽으면 없음). deliveryNote 는 화면·로그에 옮기지 않는다 */
+  orderSummary?: {
+    orderNumber?: string | null;
+    items?: OrderSummaryItem[];
+    itemAmount?: number;
+    deliveryNote?: string | null;
+  };
   deliveryId?: string;
   version?: number;
   type?: DeliveryType;

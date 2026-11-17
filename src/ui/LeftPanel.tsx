@@ -1,9 +1,18 @@
 import { useApp } from '../app/App';
 import { displayStage } from '../domain/displayStage';
 import { PHASE_COLOR } from '../render/colors';
-import { PHASE_LABEL } from '../sim/rider';
+import { PHASE_LABEL, type RiderJob } from '../sim/rider';
 import { friendlyNote } from './friendly';
 import { Progress } from './Progress';
+
+function jobText(j: RiderJob): string {
+  const parts: string[] = [];
+  if (j.orderNumber) parts.push(`주문 ${j.orderNumber}`);
+  if (j.lines !== null) parts.push(`품목 ${j.lines}종`);
+  if (j.itemAmount !== null) parts.push(`${j.itemAmount.toLocaleString('ko-KR')}원`);
+  if (j.etaSec !== null) parts.push(`예상 ${Math.max(1, Math.round(j.etaSec / 60))}분`);
+  return parts.join(' · ');
+}
 
 export function LeftPanel() {
   const app = useApp();
@@ -51,6 +60,11 @@ export function LeftPanel() {
                     <span className="rc-dl">{card.deliveryId}</span>
                     <Progress stage={stage} compact />
                     <span className="rc-stage">{stage.text}</span>
+                  </div>
+                )}
+                {r.deliveryId && r.job && (
+                  <div className="rc-job" title="수락한 제안의 주문 요약(dispatch order)과 예상 소요(pickupEta + dropEta). 고객 요청사항·주소는 보이지 않는다">
+                    {jobText(r.job)}
                   </div>
                 )}
                 {r.note && <div className="rc-note">{friendlyNote(r.note)}</div>}

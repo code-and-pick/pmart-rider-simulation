@@ -5,7 +5,7 @@ import type { SimParams } from '../config';
 import type { DeliveryPurpose, DispatchState, ExecutionState } from '../domain/contract';
 import type { LatLng } from '../util/geo';
 import type { SimClock } from './clock';
-import type { RiderPhase } from './rider';
+import type { RiderJob, RiderPhase } from './rider';
 
 export interface RiderView {
   readonly id: string;
@@ -22,6 +22,8 @@ export interface RiderView {
   readonly pathKind: 'ROAD' | 'STRAIGHT' | null;
   /** 위치 끊김 장면 중(MOCK) — 지도 표시가 실제 위치보다 늦다는 뜻은 아니고, 백엔드가 이 라이더 위치를 못 받는 중 */
   readonly locationOffline?: boolean;
+  /** 진행 중 주문 요약(주문번호·품목 수·금액·예상 소요) — 없으면 표시 안 함 */
+  readonly job?: RiderJob | null;
 }
 
 /** 화면 배송 카드 — 두 서비스의 두 상태를 출처와 함께(docs/design.md §4). */

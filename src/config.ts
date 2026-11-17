@@ -75,6 +75,11 @@ export interface SimParams {
   storeWaitHelpSec: number | null;
   /** 제안을 보고 응답하기까지 걸리는 시간 범위(초) [시뮬] */
   offerResponseDelaySec: [number, number];
+  /**
+   * 제안의 예상 소요 합(pickupEtaSeconds + dropEtaSeconds — dispatch 0.4.5)이 이 초를 넘으면 TOO_FAR 로 거절 [시뮬].
+   * 둘 중 하나라도 없으면 보지 않는다(수락 확률만). 실서버 가상 라이더도 같은 기준. null = 보지 않음.
+   */
+  maxTripEtaSec: number | null;
   /** 가게에서 출고 READY 를 기다리며 다시 볼 간격 [시뮬] */
   storeWaitPollSec: number;
   /** 시험 토큰을 만료 몇 초 전에 새로 만들지 [시뮬] — 연장이 아니라 새 토큰(RR-01 조건 4) */
@@ -130,6 +135,14 @@ export interface MockParams {
   redeliveryPayProbability: number;
   /** 결제 대기 → 결제(또는 거절)까지 초 [시뮬](order-orchestration·고객 앱 대신) */
   redeliveryPaySec: number;
+  /** 제안 예상 소요(pickupEtaSeconds·dropEtaSeconds) = 직선 km × 이 초 [시뮬] — 도로 배율 1.3 ÷ 라이더 속도 7m/s ≈ 186초/km. MOCK 에는 길찾기가 없다(실서버는 카카오모빌리티) */
+  etaSecPerStraightKm: number;
+  /** 주문 한 건의 품목 줄 수 범위 [시뮬] — 제안·수행 조회 주문 요약(order 대신) */
+  orderLines: [number, number];
+  /** 품목 한 줄 수량 범위 [시뮬] */
+  lineQty: [number, number];
+  /** 품목 단가 범위(원) [시뮬] */
+  unitPriceWon: [number, number];
 }
 
 export const DEFAULT_PARAMS: SimParams = {
@@ -149,6 +162,7 @@ export const DEFAULT_PARAMS: SimParams = {
   locationOutageSec: 240,
   storeWaitHelpSec: 600,
   offerResponseDelaySec: [3, 15],
+  maxTripEtaSec: 2400,
   storeWaitPollSec: 5,
   tokenRenewBeforeSec: 60,
   lanObserverPollSec: 5,
@@ -174,6 +188,10 @@ export const DEFAULT_PARAMS: SimParams = {
     redeliveryDistanceM: [60, 450],
     redeliveryPayProbability: 0.7,
     redeliveryPaySec: 180,
+    etaSecPerStraightKm: 186,
+    orderLines: [1, 4],
+    lineQty: [1, 3],
+    unitPriceWon: [1500, 15000],
   },
   seed: 1,
 };

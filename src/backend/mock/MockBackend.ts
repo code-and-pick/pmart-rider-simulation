@@ -267,6 +267,16 @@ export interface MockOrderOptions {
   caseId?: string;
 }
 
+/** MOCK 주문 요약 — 실서버는 order `rider-summary`. 고객 요청사항은 만들지 않는다(화면·로그에 옮기지 않는 값) */
+interface MOrderSummary {
+  orderNumber: string;
+  items: { name: string; optionLabel: string | null; qty: number; lineAmount: number }[];
+  itemAmount: number;
+}
+
+/** MOCK 품목 이름(가짜) */
+const MOCK_ITEM_NAMES = ['우유 1L', '계란 10구', '두부', '바나나', '생수 2L', '식빵', '양파 1.5kg', '닭가슴살', '요거트', '감자 1kg', '사과 4입', '라면 5입'];
+
 export class MockBackend implements RiderPort {
   readonly mode = 'mock' as const;
   readonly observer: ObserverApi;
@@ -284,6 +294,10 @@ export class MockBackend implements RiderPort {
   private readonly eventListeners = new Set<EventListener>();
   private readonly ids = new IdGen('m');
   private readonly rng: Rng;
+  /** 주문 요약 전용 난수 — 기존 난수 순서(시험 기대값)를 흔들지 않게 따로 */
+  private readonly orderRng: Rng;
+  /** MOCK 이 order-service 대신 갖는 주문 요약(dispatch 제안 order · execution orderSummary) */
+  private readonly orderSummaries = new Map<string, MOrderSummary>();
   private readonly riderApis = new Map<string, RiderApi>();
 
   /** false 면 주문을 스스로 만들지 않는다(시험에서 createOrder 로 직접 넣을 때) */
@@ -298,6 +312,7 @@ export class MockBackend implements RiderPort {
     seed: number,
   ) {
     this.rng = new Rng(seed ^ 0x5eed);
+    this.orderRng = new Rng(seed ^ 0x0dde);
     this.nextOrderAt = this.rng.exp(3600 / Math.max(0.1, params.ordersPerHour));
     this.observer = this.makeObserver();
   }
@@ -530,6 +545,7 @@ export class MockBackend implements RiderPort {
   createOrder(opts: MockOrderOptions = {}): { orderId: string; shipmentId: string } {
     const p = this.params;
     const orderId = opts.orderId ?? this.ids.next('OR');
+    if (!this.orderSummaries.has(orderId)) this.orderSummaries.set(orderId, this.makeOrderSummary());
     const shipmentId = this.ids.next('SH');
     const n = opts.packages ?? this.rng.int(p.packagesPerShipment[0], p.packagesPerShipment[1]);
     const packages: MPackage[] = [];
@@ -567,6 +583,30 @@ export class MockBackend implements RiderPort {
     const pickSec = opts.pickSec ?? this.rng.range(p.pickSec[0], p.pickSec[1]);
     this.schedule(pickSec, () => this.dispatchRequest(ship, customer, packMinutes));
     return { orderId, shipmentId };
+  }
+
+  private makeOrderSummary(): MOrderSummary {
+    const p = this.params;
+    const r = this.orderRng;
+    const lines = r.int(p.orderLines[0], p.orderLines[1]);
+    const names = [...MOCK_ITEM_NAMES];
+    const items: MOrderSummary['items'] = [];
+    for (let i = 0; i < lines && names.length > 0; i++) {
+      const name = names.splice(r.int(0, names.length - 1), 1)[0] as string;
+      const qty = r.int(p.lineQty[0], p.lineQty[1]);
+      const unit = Math.round(r.range(p.unitPriceWon[0], p.unitPriceWon[1]) / 100) * 100;
+      items.push({ name, optionLabel: null, qty, lineAmount: unit * qty });
+    }
+    return {
+      orderNumber: String(r.int(10_000_000, 99_999_999)),
+      items,
+      itemAmount: items.reduce((s, it) => s + it.lineAmount, 0),
+    };
+  }
+
+  /** 직선 거리(m) → 예상 소요(초) [시뮬] — 실서버는 도로(카카오모빌리티) */
+  private etaSec(m: number): number {
+    return Math.round((m / 1000) * this.params.etaSecPerStraightKm);
   }
 
   /** 점원 배차 요청(패킹 시작) — DispatchRequested → 배송 생성·배차 시작 */
@@ -1166,6 +1206,12 @@ export class MockBackend implements RiderPort {
     const del = this.deliveries.get(o.deliveryId);
     const r = this.riders.get(o.riderId);
     const ship = del ? this.shipments.get(del.shipmentId) : undefined;
+    // 픽업지: MFC 는 정확, 회수·다시 배송(잘못 둔 곳 — 고객이 있는 곳)은 약 1km 격자 반올림(dispatch 0.4.5)
+    const from = del?.pickup?.at ?? this.mfcLocation;
+    const fromMfc = !del?.pickup;
+    const toPickupM = r?.location ? distanceM(r.location, from) : undefined;
+    const dropM = del ? distanceM(from, del.customer) : undefined;
+    const sum = del && del.purpose !== 'MISDELIVERY_RECOVERY' ? this.orderSummaries.get(del.orderId) : undefined;
     return {
       offerId: o.offerId,
       attemptId: o.attemptId,
@@ -1187,8 +1233,23 @@ export class MockBackend implements RiderPort {
         mfcId: this.mfcId,
         dropAreaLabel: del?.purpose === 'MISDELIVERY_RECOVERY' ? '(MFC 반납)' : '(MOCK 동)',
         // 픽업지(회수·다시 배송은 잘못 둔 곳) → 도착지. 도로 거리 대신 직선 [시뮬] — MOCK 에는 길찾기가 없다
-        distanceKm: del ? round2(distanceM(del.pickup?.at ?? this.mfcLocation, del.customer) / 1000) : undefined,
-        pickupDistanceKm: r?.location ? round2(distanceM(r.location, del?.pickup?.at ?? this.mfcLocation) / 1000) : undefined,
+        distanceKm: dropM !== undefined ? round2(dropM / 1000) : undefined,
+        pickupDistanceKm: toPickupM !== undefined ? round2(toPickupM / 1000) : undefined,
+        pickupEtaSeconds: toPickupM !== undefined ? this.etaSec(toPickupM) : undefined,
+        dropEtaSeconds: dropM !== undefined ? this.etaSec(dropM) : undefined,
+        pickupPoint: fromMfc ? { lat: from.lat, lng: from.lng } : roundPoint(from),
+        dropAreaPoint: del ? roundPoint(del.customer) : undefined,
+        order: sum
+          ? {
+              orderId: del?.orderId,
+              orderNumber: sum.orderNumber,
+              mfcName: `(MOCK) ${this.mfcId}`,
+              mfcAddress: null,
+              items: sum.items.map((it) => ({ ...it })),
+              itemAmount: sum.itemAmount,
+              deliveryNote: null,
+            }
+          : undefined,
         estimatedFee: del?.feeZero ? 0 : undefined,
         bagCount: ship?.packages.length,
         containsAlcohol: false,
@@ -1253,7 +1314,11 @@ export class MockBackend implements RiderPort {
   private execView(del: MDelivery): DeliveryExecution {
     const x = del.x;
     const origin = del.originDeliveryId ? this.deliveries.get(del.originDeliveryId) : undefined;
+    const sum = this.orderSummaries.get(del.orderId);
     return {
+      orderSummary: sum
+        ? { orderNumber: sum.orderNumber, items: sum.items.map((it) => ({ ...it })), itemAmount: sum.itemAmount, deliveryNote: null }
+        : undefined,
       deliveryId: del.deliveryId,
       version: x.version,
       type: del.type,
@@ -1944,4 +2009,9 @@ function statusOf(e: unknown): number | 'ERR' {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** 약 1km 격자(소수 둘째 자리) — dispatch DispatchViews.rounded 와 같은 뜻 */
+function roundPoint(p: LatLng): { lat: number; lng: number } {
+  return { lat: round2(p.lat), lng: round2(p.lng) };
 }

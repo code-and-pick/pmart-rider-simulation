@@ -91,6 +91,31 @@ describe('MockBackend — 배차(dispatch 0.4.0 흉내)', () => {
     expect((await a.getDispatch(deliveryId)).state).toBe('ASSIGNED');
   });
 
+  it('제안 요약(dispatch 0.4.5~0.4.6): 예상 소요·픽업지(MFC 정확)·대략 전달지·주문 요약, 수행 조회 orderSummary 도 같은 주문', async () => {
+    const w = world();
+    const a = await w.rider(1, offsetM(MFC, 300, 0));
+    const { deliveryId } = await orderWithOffer(w);
+    const offer = (await a.listOffers()).items?.[0];
+    const s = offer?.summary;
+    // 300m × 186초/km, 고객 offsetM(1200, 800) ≈ 1442m
+    expect(s?.pickupEtaSeconds).toBe(Math.round(0.3 * DEFAULT_PARAMS.mock.etaSecPerStraightKm));
+    expect(s?.dropEtaSeconds).toBeGreaterThan(250);
+    expect(s?.dropEtaSeconds).toBeLessThan(290);
+    expect(s?.pickupPoint).toEqual({ lat: MFC.lat, lng: MFC.lng });
+    const c = offsetM(MFC, 1200, 800);
+    expect(s?.dropAreaPoint).toEqual({ lat: Math.round(c.lat * 100) / 100, lng: Math.round(c.lng * 100) / 100 });
+    const o = s?.order;
+    expect(o?.orderNumber).toMatch(/^\d{8}$/);
+    expect(o?.items?.length).toBeGreaterThanOrEqual(1);
+    expect(o?.itemAmount).toBe((o?.items ?? []).reduce((t, it) => t + (it.lineAmount ?? 0), 0));
+    expect(o?.deliveryNote).toBeNull();
+    await a.respondToOffer(offer!.offerId!, { response: 'ACCEPT' }, { idempotencyKey: w.key() });
+    await w.advance(2);
+    const x = await a.getExecution(deliveryId);
+    expect(x.orderSummary?.orderNumber).toBe(o?.orderNumber);
+    expect(x.orderSummary?.itemAmount).toBe(o?.itemAmount);
+  });
+
   it('응답 대기 1분이 지나면 EXPIRED, 그 뒤 수락은 LATE·EXPIRED', async () => {
     const w = world();
     const a = await w.rider(1, offsetM(MFC, 300, 0));

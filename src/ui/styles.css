@@ -236,6 +236,10 @@ button {
   font-size: 12px;
   color: var(--muted);
 }
+.rc-job {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
 
 /* 배송 단계 막대 */
 .progress {
