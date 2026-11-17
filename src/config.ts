@@ -223,3 +223,13 @@ export function simRiderId(index: number): string {
 export function isSimRiderId(riderId: string): boolean {
   return riderId.startsWith(CONTRACT.simRiderPrefix) && riderId.length > CONTRACT.simRiderPrefix.length;
 }
+
+
+/**
+ * 운영 화면(라이더 백오피스) 주소 — 시뮬레이터 "운영 화면" 탭이 새 탭으로 연다(사용자 2026-11-17 "백오피스에 만들고 시뮬에 탭").
+ * [확정] 개발 = pmart-clients `web/rider-backoffice` 목 모드 포트 5176, LAN = PC 4 nginx 8446(`docs/apps/rider-backoffice-web.md`).
+ */
+export const OPS_BACKOFFICE = {
+  dev: 'http://localhost:5176',
+  lan: 'https://192.168.0.40:8446',
+} as const;

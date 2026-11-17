@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { LeftPanel } from '../ui/LeftPanel';
+import { OpsPanel } from '../ui/OpsPanel';
 import { RightPanel } from '../ui/RightPanel';
 import { ScenarioBar } from '../ui/ScenarioBar';
 import { TopBar } from '../ui/TopBar';
@@ -15,17 +16,22 @@ export function useApp(): AppController {
   return c;
 }
 
+/** 위쪽 탭: 가상 현장(지도) / 운영 화면(라이더 백오피스 목록). 지도는 숨기기만 한다(떼지 않음 — 시뮬레이션은 계속 돈다). */
+export type View = 'field' | 'ops';
+
 export function App({ controller }: { controller: AppController }) {
+  const [view, setView] = useState<View>('field');
   return (
     <Ctx.Provider value={controller}>
       <div className="app">
-        <TopBar />
-        <ScenarioSlot />
-        <div className="body">
+        <TopBar view={view} onView={setView} />
+        {view === 'field' && <ScenarioSlot />}
+        <div className="body" hidden={view !== 'field'}>
           <LeftPanel />
           <MapView />
           <RightPanel />
         </div>
+        {view === 'ops' && <OpsPanel />}
       </div>
     </Ctx.Provider>
   );

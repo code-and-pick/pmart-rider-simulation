@@ -1,4 +1,4 @@
-import { useApp } from '../app/App';
+import { useApp, type View } from '../app/App';
 import { seoulTime } from './format';
 
 const SPEEDS = [1, 5, 20, 60];
@@ -12,7 +12,7 @@ function switchMode(mode: 'mock' | 'http') {
   window.location.search = s ? `?${s}` : '';
 }
 
-export function TopBar() {
+export function TopBar({ view, onView }: { view: View; onView: (v: View) => void }) {
   const app = useApp();
   const { sim } = app;
   const st = app.mapStatus;
@@ -20,6 +20,14 @@ export function TopBar() {
   return (
     <header className="topbar">
       <h1>PMart 배송·라이더 가상 현장</h1>
+      <div className="seg" role="tablist" aria-label="보기">
+        <button role="tab" className={view === 'field' ? 'on' : ''} aria-selected={view === 'field'} onClick={() => onView('field')}>
+          가상 현장
+        </button>
+        <button role="tab" className={view === 'ops' ? 'on' : ''} aria-selected={view === 'ops'} onClick={() => onView('ops')} title="라이더 운영 화면(라이더 백오피스) 목록">
+          운영 화면
+        </button>
+      </div>
       <div className="seg" role="group" aria-label="모드">
         <button className={real ? '' : 'on'} aria-pressed={!real} onClick={() => real && switchMode('mock')}>
           MOCK
