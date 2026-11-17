@@ -16,12 +16,20 @@
 
 ## 열린 요청
 
-### RR-03 포장 QR 값을 라이더 쪽에서 얻는 방법 — 중간
+### RR-03 포장 QR 값을 라이더 쪽에서 얻는 방법 — 해소 2026-11-18
+- 회신: 백엔드 `docs/handoff/simulator/rider/2026-11-18-backend-reply-rr03-rr05-rr07.md`(보낸 영역 delivery, 사용자 2026-11-18 "응 전부 진행해") — **그 방식으로 괜찮다**. 관찰용 직원 계정(읽기만)으로 `GET /shipments/{shipmentId}` 의 qrCode = "라벨을 본다". 백엔드 변경 없음, 쓰기(인계 허가·확정)는 라이더 토큰으로만. 시뮬레이터는 이미 이 방식(`HttpBackend.getShipment`·`server/lanPolicy.ts` OBSERVER) — 바꿀 것 없음.
 인계 허가에는 포장 `qrCode`(`PKG:<id>:<버전>`)가 필요하다. 실제로는 포장 라벨을 찍지만, 라이더 토큰으로는 출고·포장을 조회할 수 없다(`GET /shipments/{id}` 는 OPERATOR, execution 응답 `packageIds` 는 인계된 것만 — `rider_e2e.py` 주석). `rider_e2e.py` 는 execution DB 를 읽어 대신한다.
 - 계획: 관찰용 직원 계정(MFC 시뮬레이터와 같은 `claude-mfc-wrk`, 읽기만)으로 `GET /shipments/{shipmentId}` 를 읽어 qrCode 를 얻는다 = "라벨을 본다"는 시뮬레이터 가정.
 - 질문: 이 방식이 괜찮은지, 아니면 시뮬레이터용으로 다른 길을 권하는지.
 
-### RR-07 시뮬레이터 라이더 정리 방법(라이더 탈퇴 구현 포함) — 중간 (작성 2026-11-16, 사용자가 백엔드에서 직접 — 전달 없음)
+### RR-07 시뮬레이터 라이더 정리 방법(라이더 탈퇴 구현 포함) — 해소 2026-11-18 (작성 2026-11-16)
+- 회신: 백엔드 `docs/handoff/simulator/rider/2026-11-18-backend-reply-rr03-rr05-rr07.md`(보낸 영역 delivery, 사용자 2026-11-18 "응 전부 진행해").
+  - 탈퇴 **구현·LAN 배포**(rider 0.6.0): `POST /riders/me/withdrawals` → 막는 것이 없으면 202 APPLIED·nextAction LOGOUT(이름·전화·계좌·거주지·면허 지움, 세션 끊음), `GET …/{requestId}`.
+  - 막는 것(409 INVALID_STATE, details `blockers`): 진행 중 배송·확정 전 수행료(완료 5시간 안)·산정 불가 조정 대기·열린 도움요청·제한 검토 중. **이미 걸린 계정 제한은 막지 않는다.** → 배송한 시뮬레이터 라이더도 마지막 완료 5시간 뒤면 탈퇴 가능.
+  - 같은 라이더 ID 로 다시 가입 **안 됨**(409 RIDER_WITHDRAWN). 새 ID 로는 같은 전화번호 가입 가능. `RD-sim-01` 을 다시 쓰려면 탈퇴하지 말고 두거나 새 번호(`RD-sim-03` …).
+  - `RD-sim-` 전용 즉시 정리 경로는 **만들지 않음**(사용자 결정). 막아 두려면 운영자 TERMINATED 또는 탈퇴.
+- 반영(2026-11-18): MOCK 탈퇴를 계약대로(막는 것 목록·계정 제한은 안 막음·APPLIED·LOGOUT·같은 ID 재가입 RIDER_WITHDRAWN·전화번호 지움), 주석 갱신. 실서버 라이더를 탈퇴시키는 화면 버튼은 만들지 않았다(되돌릴 수 없는 쓰기 — 필요하면 사용자 결정).
+- 아래는 원래 요청(기록):
 - **2026-11-16 실서버에 가입된 시뮬레이터 라이더(정리 대상)**: `RD-sim-01`(010-0000-0001), `RD-sim-02`(010-0000-0002) — 지금 OFF_DUTY.
 실서버에서 가상 라이더를 돌리려면(P3) `POST /riders/signups` 로 실제 가입해야 하는데, **가입한 라이더를 지울 길이 없다**. 그래서 사용자 결정으로 P3 실제 가입·운행을 잠가 두었다(`src/config.ts` `REAL_RIDER_GATE`).
 - 지금 상태(rider-service 0.4.0, `services/rider-service/CLAUDE.md` 24행): 탈퇴 `POST /riders/me/withdrawals`·`GET …/{requestId}` 는 **501**.
@@ -33,7 +41,8 @@
   3. 탈퇴 뒤 같은 라이더 ID·같은 전화번호로 다시 가입할 수 있는지(계약에 없음 — MOCK 은 둘 다 409 로 흉내 [시뮬]).
 - 시뮬레이터 쪽 준비(2026-11-16): `RiderPort.withdraw`·`getWithdrawal`(계약 경로 그대로), MockBackend 흉내.
 
-### RR-05 ETA·실시간 stream — 낮음, 지금은 요청 아님
+### RR-05 ETA·실시간 stream — 해소 2026-11-18 (요청 아님이었음)
+- 회신: 백엔드 `docs/handoff/simulator/rider/2026-11-18-backend-reply-rr03-rr05-rr07.md`(보낸 영역 delivery, 사용자 2026-11-18 "응 전부 진행해") — tracking `GET /deliveries/{id}/eta`·`/stream`(SSE) **구현·배포됨**(라이더 본인도 자기 배송 조회 가능). 다만 ETA 계산(카카오 길찾기)은 꺼져 있어 값은 `ETA_PENDING` — 단계·라이더 위치는 온다. 시뮬레이터는 쓰지 않는다(값이 ETA_PENDING 이라 볼 것이 없음 — 켜지면 다시 본다).
 tracking `GET /deliveries/{id}/eta`·`/stream` 은 501(TR-1, 사용자 "필요 없음/선택"). 고객 화면 ETA 는 그리지 않는다. 기록만 남긴다.
 
 ## 시뮬레이터가 정한 값 (MOCK 흉내 — 서버 값이 아님)

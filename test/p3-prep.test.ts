@@ -89,8 +89,8 @@ describe('가상 라이더 — 가입 잠금·정지 라이더', () => {
   });
 });
 
-describe('탈퇴(rider-service 계약 흉내 — 실서버는 501, RR-07)', () => {
-  it('진행 중 배송이 있으면 409, 없으면 접수·조회 COMPLETED, 뒤로는 미가입 취급·같은 ID 재가입 409', async () => {
+describe('탈퇴(rider-service 0.6.0 계약 흉내 — 백엔드 회신 RR-07)', () => {
+  it('진행 중 배송·확정 전 수행료(완료 5시간 안)면 409 + blockers, 5시간 뒤 바로 완료(APPLIED·LOGOUT), 같은 ID 재가입은 RIDER_WITHDRAWN', async () => {
     const sim = new Simulation({ ...DEFAULT_PARAMS, acceptProbability: 1 }, { startEpochMs: START });
     sim.backend.autoOrders = false;
     sim.startRiders(1, () => offsetM(MFC, 300, 0));
@@ -100,16 +100,26 @@ describe('탈퇴(rider-service 계약 흉내 — 실서버는 501, RR-07)', () =
     await sim.runFor(60);
     expect(sim.backend.activeDeliveryCount('RD-sim-01')).toBe(1);
     await expect(api.withdraw({}, { idempotencyKey: 'w1' })).rejects.toMatchObject({ status: 409, code: 'INVALID_STATE' });
+    expect(sim.backend.withdrawalBlockers('RD-sim-01')).toContain('ACTIVE_DELIVERY');
+    expect(await api.getWithdrawal('w1')).toMatchObject({ state: 'REJECTED', blockers: ['ACTIVE_DELIVERY'] });
     await sim.runFor(40 * 60); // 배송을 끝낸다
     expect(sim.backend.activeDeliveryCount('RD-sim-01')).toBe(0);
     sim.riders[0]!.done = true;
+    // 완료 5시간 안 — 확정 전 수행료가 막는다
+    await expect(api.withdraw({}, { idempotencyKey: 'w1b' })).rejects.toMatchObject({ status: 409, problem: { details: [{ field: 'blockers', reason: 'UNCONFIRMED_EARNING' }] } });
+    await sim.runFor(5 * 3600);
+    expect(sim.backend.withdrawalBlockers('RD-sim-01')).toEqual([]);
     const res = await api.withdraw({ reason: '시험 정리' }, { idempotencyKey: 'w2' });
-    expect(res.status).toBe('ACCEPTED');
+    expect(res).toMatchObject({ status: 'APPLIED', nextAction: 'LOGOUT' });
     expect(await api.getWithdrawal('w2')).toMatchObject({ state: 'COMPLETED' });
     await expect(api.getMe()).rejects.toMatchObject({ status: 404 });
     await expect(
       api.signup({ phone: '01099990001', vehicleType: 'MOTORCYCLE', deliveryAreas: [{ mfcId: 'MFC-SEED-01' }], consents: [] }, { idempotencyKey: 's' }),
-    ).rejects.toMatchObject({ status: 409, code: 'DUPLICATE_RIDER' });
+    ).rejects.toMatchObject({ status: 409, code: 'RIDER_WITHDRAWN' });
+    // 전화번호는 지워졌다 — 같은 전화로 새 ID 는 가입된다
+    await expect(
+      sim.backend.asRider('RD-sim-09').signup({ phone: '01000000001', vehicleType: 'MOTORCYCLE', deliveryAreas: [{ mfcId: 'MFC-SEED-01' }], consents: [] }, { idempotencyKey: 's9' }),
+    ).resolves.toMatchObject({ riderId: 'RD-sim-09' });
   });
 });
 

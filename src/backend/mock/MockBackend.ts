@@ -250,8 +250,8 @@ type IdemOutcome = { ok: unknown } | { err: unknown };
 const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 const CUSTOMER_REASONS = new Set(['CUSTOMER_ABSENT', 'UNREACHABLE', 'ADDRESS_ERROR', 'REFUSED']);
 
-function fail(status: number, code: string, title?: string): never {
-  throw new ApiProblem(status, { status, code, title: title ?? code, type: 'about:blank', traceId: 'mock' });
+function fail(status: number, code: string, title?: string, details?: ReadonlyArray<{ field: string; reason: string }>): never {
+  throw new ApiProblem(status, { status, code, title: title ?? code, type: 'about:blank', traceId: 'mock', ...(details ? { details: [...details] } : {}) });
 }
 
 export interface MockOrderOptions {
@@ -288,7 +288,7 @@ export class MockBackend implements RiderPort {
   readonly offers = new Map<string, MOffer>();
   private readonly photos = new Map<string, MPhoto>();
   private readonly involved = new Map<string, Set<string>>();
-  private readonly withdrawals = new Map<string, { riderId: string; state: 'PENDING' | 'COMPLETED' | 'REJECTED' }>();
+  private readonly withdrawals = new Map<string, { riderId: string; state: 'PENDING' | 'COMPLETED' | 'REJECTED'; blockers: string[] }>();
   private readonly idem = new Map<string, { fp: string; outcome: IdemOutcome }>();
   private readonly later: { at: number; fn: () => void }[] = [];
   private readonly apiListeners = new Set<ApiListener>();
@@ -900,6 +900,20 @@ export class MockBackend implements RiderPort {
     return r;
   }
 
+  /** 탈퇴를 막는 것(rider 0.6.0 WithdrawalBlocker) — MOCK 이 아는 것만 */
+  withdrawalBlockers(riderId: string): string[] {
+    const out = new Set<string>();
+    if (this.activeDeliveryCount(riderId) > 0) out.add('ACTIVE_DELIVERY');
+    const confirmAfterSec = 5 * 3600; // 완료 5시간 뒤 수행료 확정(execution). 시계는 초
+    for (const d of this.deliveries.values()) {
+      if (d.x.riderId !== riderId) continue;
+      if (d.x.state === 'COMPLETED' && d.x.completedAt !== undefined && this.clock.now - d.x.completedAt < confirmAfterSec) out.add('UNCONFIRMED_EARNING');
+      // MOCK 에는 지원센터(처리함)가 없다 — 배송이 끝나면 그 도움요청도 닫힌 것으로 본다 [시뮬]
+      if (d.x.helps.length > 0 && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(d.x.state)) out.add('OPEN_HELP_REQUEST');
+    }
+    return [...out];
+  }
+
   activeDeliveryCount(riderId: string): number {
     let n = 0;
     for (const d of this.deliveries.values()) {
@@ -1442,9 +1456,11 @@ export class MockBackend implements RiderPort {
           '/riders/signups',
           () => {
             const r = b.rider(me);
-            if (r.signedUp || r.withdrawn) fail(409, 'DUPLICATE_RIDER'); // 탈퇴한 ID 재가입 불가 [시뮬]
+            if (r.withdrawn) fail(409, 'RIDER_WITHDRAWN'); // 탈퇴한 ID 는 다시 가입 못 함(rider 0.6.0 — 백엔드 회신 RR-07)
+            if (r.signedUp) fail(409, 'DUPLICATE_RIDER');
             if (!/^01[0-9]{8,9}$/.test(body.phone) || !body.deliveryAreas?.length) fail(400, 'VALIDATION_FAILED');
-            for (const other of b.riders.values()) if ((other.signedUp || other.withdrawn) && other.phone === body.phone) fail(409, 'DUPLICATE_RIDER');
+            // 탈퇴하면 전화번호를 지운다 — 같은 전화로 새 ID 가입은 된다(백엔드 회신 RR-07)
+            for (const other of b.riders.values()) if (other.signedUp && other.phone === body.phone) fail(409, 'DUPLICATE_RIDER');
             r.signedUp = true;
             r.phone = body.phone;
             r.name = body.name;
@@ -1490,15 +1506,21 @@ export class MockBackend implements RiderPort {
           '/riders/me/withdrawals',
           () => {
             const r = b.signedRider(me);
-            // 계약: 진행 중 배송·미정산 수행료·제한 조사 중이면 409. MOCK 에는 수행료 정산이 없어 앞의 둘만 본다 [시뮬]
-            if (b.activeDeliveryCount(me) > 0 || r.restriction !== 'NORMAL') fail(409, 'INVALID_STATE');
+            // rider 0.6.0 막는 것(WithdrawalBlocker): 진행 중 배송·확정 전 수행료(완료 5시간 안)·열린 도움요청(MOCK 은 배송이 끝나면 닫힌 것으로 봄)·제한 검토 중(MOCK 없음).
+            // 산정 불가 조정 대기는 MOCK 에 수행료 산정이 없어 보지 않는다 [시뮬]. 이미 걸린 계정 제한은 막지 않는다(계약).
             const requestId = o.idempotencyKey;
-            b.withdrawals.set(requestId, { riderId: me, state: 'COMPLETED' });
+            const blockers = b.withdrawalBlockers(me);
+            if (blockers.length > 0) {
+              b.withdrawals.set(requestId, { riderId: me, state: 'REJECTED', blockers });
+              fail(409, 'INVALID_STATE', '탈퇴를 막는 것이 있음', blockers.map((reason) => ({ field: 'blockers', reason })));
+            }
+            b.withdrawals.set(requestId, { riderId: me, state: 'COMPLETED', blockers: [] });
             r.signedUp = false;
             r.withdrawn = true;
             r.operating = { ...r.operating, status: 'OFF_DUTY', newDispatchEnabled: false, version: r.operating.version + 1 };
             b.emit('RiderStateChanged', `${me} 탈퇴`, { riderId: me });
-            return b.cmd(requestId, { status: 'ACCEPTED', resultId: requestId });
+            r.phone = '';
+            return b.cmd(requestId, { status: 'APPLIED', resultId: requestId, nextAction: 'LOGOUT' });
           },
           { key: o.idempotencyKey, body: body ?? {} },
           202,
@@ -1507,7 +1529,7 @@ export class MockBackend implements RiderPort {
         b.call(me, 'GET', `/riders/me/withdrawals/${requestId}`, (): Withdrawal => {
           const w = b.withdrawals.get(requestId);
           if (!w || w.riderId !== me) fail(404, 'NOT_FOUND');
-          return { requestId, state: w.state, blockers: [] };
+          return { requestId, state: w.state, blockers: [...w.blockers] };
         }),
       getDispatchSettings: () => b.call(me, 'GET', '/riders/me/settings', () => ({ ...b.signedRider(me).settings }) as DispatchSettings),
       setDispatchSettings: (body: DispatchSettings, o: WriteOptions) =>

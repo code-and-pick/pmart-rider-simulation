@@ -686,7 +686,7 @@ export interface RiderProfile {
   joinedAt?: string;
 }
 
-/** POST /riders/me/withdrawals 본문(선택). 진행 중 배송·미정산 수행료·제한 조사 중이면 409 INVALID_STATE. 백엔드는 아직 501(RR-07). */
+/** POST /riders/me/withdrawals 본문(선택) — rider 0.6.0 구현·LAN 배포(RR-07 회신 2026-11-18). 막는 것(WithdrawalBlocker)이 있으면 409 INVALID_STATE(details field blockers), 없으면 202 APPLIED·nextAction LOGOUT. 같은 ID 재가입은 409 RIDER_WITHDRAWN. */
 export interface WithdrawalRequest {
   reason?: string;
 }
@@ -748,7 +748,7 @@ export interface ShipmentDispatchRequest {
   requestedBy?: string | null;
 }
 
-/** GET /shipments/{id} — OPERATOR 전용(라이더 토큰 불가). 관찰 계정으로 읽는 방식은 RR-03 회신 대기. */
+/** GET /shipments/{id} — OPERATOR 전용(라이더 토큰 불가). 관찰 계정(읽기만)으로 읽어 qrCode 를 얻는다 = "라벨을 본다" — 백엔드 RR-03 회신 2026-11-18 "그 방식으로 괜찮다". */
 export interface Shipment {
   shipmentId?: string;
   fulfillmentId?: string;
