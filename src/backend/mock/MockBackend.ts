@@ -42,6 +42,7 @@ import {
   type HandoverCommitRequest,
   type HandoverCommitResult,
   type HandoverResolution,
+  type PickupPointList,
   type HelpRequest,
   type HelpRequestCreate,
   type LocationBatch,
@@ -1950,6 +1951,19 @@ export class MockBackend implements RiderPort {
             riderId: pk.fence.riderId,
           };
         }),
+      listMfcPickupPoints: () =>
+        b.call(me, 'GET', '/mfc-pickup-points', (): PickupPointList => ({
+          items: [
+            {
+              centerId: b.mfcId,
+              name: `(MOCK) ${b.mfcId}`,
+              address: null,
+              phone: null,
+              coordinates: { ...b.mfcLocation },
+              handoverPoint: null,
+            },
+          ],
+        })),
     };
     return api;
   }

@@ -106,20 +106,40 @@ export class RealWorld implements World {
     return this.center?.location ?? this.params.mfcLocation;
   }
 
-  /** center-master 센터 조회 → MFC 위치. 배차 반경이 이 좌표 기준이라 시뮬레이터도 같아야 한다(docs/design.md §6-2). */
+  /**
+   * center-master → MFC 위치. 배차 반경이 이 좌표 기준이라 시뮬레이터도 같아야 한다(docs/design.md §6-2).
+   * 1) 라이더용 픽업지 목록 `GET /mfc-pickup-points`(0.2.0 — 라이더 앱과 같은 길, 첫 시뮬레이터 라이더 토큰) — 인계 위치가 있으면 그것.
+   * 2) 못 읽으면(아직 배포 안 됨 404·목록에 없음 등) 관찰 계정 `GET /centers/{id}`(accessPoints 의 HANDOVER_POINT 우선).
+   */
   async loadCenter(): Promise<void> {
+    const okPoint = (p: { lat?: number; lng?: number } | null | undefined): p is { lat: number; lng: number } =>
+      p?.lat !== undefined && p?.lng !== undefined;
+    let listError: string;
+    try {
+      const list = await this.backend.asRider(simRiderId(0)).listMfcPickupPoints();
+      const pp = (list.items ?? []).find((x) => x.centerId === this.params.mfcId);
+      if (!pp) throw new Error(`목록에 ${this.params.mfcId} 없음`);
+      const hp = pp.handoverPoint?.coordinates;
+      const p = okPoint(hp) ? hp : pp.coordinates;
+      if (!okPoint(p)) throw new Error('좌표 없음');
+      this.center = { location: { lat: p.lat, lng: p.lng }, label: `${pp.name}${okPoint(hp) ? ' — 인계 위치' : ''} (라이더용 픽업지 목록)` };
+      this.centerError = null;
+      return;
+    } catch (e) {
+      listError = describe(e);
+    }
     try {
       const c = await this.backend.observer.getCenter(this.params.mfcId);
-      const hp = (c.accessPoints ?? []).find((a) => a.kind === 'HANDOVER_POINT' && a.coordinates?.lat !== undefined && a.coordinates?.lng !== undefined);
+      const hp = (c.accessPoints ?? []).find((a) => a.kind === 'HANDOVER_POINT' && okPoint(a.coordinates));
       const p = hp?.coordinates ?? c.coordinates;
-      if (p?.lat === undefined || p?.lng === undefined) throw new Error('센터 좌표 없음');
+      if (!okPoint(p)) throw new Error('센터 좌표 없음');
       this.center = {
         location: { lat: p.lat, lng: p.lng },
-        label: `${c.name ?? c.centerId ?? this.params.mfcId} v${c.version ?? '?'}${hp ? ' — 인계 위치' : ''}`,
+        label: `${c.name ?? c.centerId ?? this.params.mfcId} v${c.version ?? '?'}${hp ? ' — 인계 위치' : ''} (센터 조회 — 픽업지 목록 못 읽음: ${listError})`,
       };
       this.centerError = null;
     } catch (e) {
-      this.centerError = describe(e);
+      this.centerError = `픽업지 목록 ${listError} / 센터 조회 ${describe(e)}`;
     }
   }
 

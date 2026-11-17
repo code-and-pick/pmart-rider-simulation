@@ -65,6 +65,59 @@ describe('MFC 위치 — center-master', () => {
     expect(noKey.operationLock).toContain('서명키');
   });
 
+  it('라이더용 픽업지 목록(center-master 0.2.0)을 먼저 — 첫 시뮬레이터 라이더로, 인계 위치가 있으면 그것', async () => {
+    const calls: { url: string; headers: Record<string, string> }[] = [];
+    const fake = (async (url: string, init: RequestInit) => {
+      calls.push({ url, headers: init.headers as Record<string, string> });
+      if (url.endsWith('/mfc-pickup-points'))
+        return json(200, {
+          items: [
+            { centerId: 'MFC-OTHER', name: '다른 지점', coordinates: { lat: 1, lng: 1 } },
+            {
+              centerId: 'MFC-SEED-01',
+              name: '부산진구 MFC',
+              coordinates: { lat: 35.1585, lng: 129.062 },
+              handoverPoint: { label: '라이더 인계', coordinates: { lat: 35.1587, lng: 129.0623 } },
+            },
+          ],
+        });
+      return json(500, {});
+    }) as unknown as typeof fetch;
+    const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
+    await w.loadCenter();
+    expect(w.mfcLocation).toEqual({ lat: 35.1587, lng: 129.0623 });
+    expect(calls.find((c) => c.url.endsWith('/mfc-pickup-points'))?.headers).toMatchObject({ 'X-Sim-Rider': 'RD-sim-01' });
+    expect(calls.some((c) => c.url.includes('/centers/'))).toBe(false);
+    expect(w.diagnostics().some((d) => d.includes('라이더용 픽업지 목록') && d.includes('인계 위치'))).toBe(true);
+  });
+
+  it('픽업지 목록이 404(아직 배포 안 됨)거나 목록에 없으면 센터 조회로, 둘 다 못 읽으면 운행 막음', async () => {
+    let list: Response = json(404, { title: 'Not Found' });
+    let center: Response = json(200, { centerId: 'MFC-SEED-01', version: 2, coordinates: { lat: 35.1578, lng: 129.0597 } });
+    const fake = (async (url: string) => {
+      if (url.endsWith('/mfc-pickup-points')) return list.clone();
+      if (url.includes('/centers/')) return center.clone();
+      if (url.includes('/sim-auth/status')) return json(200, { riderSigning: true, observer: true });
+      return json(404, {});
+    }) as unknown as typeof fetch;
+    const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
+    await flush();
+    await w.loadCenter();
+    expect(w.mfcLocation).toEqual({ lat: 35.1578, lng: 129.0597 });
+    expect(w.diagnostics().some((d) => d.includes('센터 조회') && d.includes('픽업지 목록 못 읽음'))).toBe(true);
+
+    list = json(200, { items: [{ centerId: 'MFC-OTHER', name: 'x', coordinates: { lat: 1, lng: 1 } }] });
+    await w.loadCenter();
+    expect(w.mfcLocation).toEqual({ lat: 35.1578, lng: 129.0597 });
+
+    const w2 = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
+    list = json(404, {});
+    center = json(503, { code: 'DEPENDENCY_UNAVAILABLE' });
+    await flush();
+    await w2.loadCenter();
+    expect(w2.operationLock).toContain('center-master');
+  });
+
   it('인계 위치가 없으면 센터 좌표', async () => {
     const fake = (async () =>
       json(200, { centerId: 'MFC-SEED-01', version: 2, coordinates: { lat: 35.1578, lng: 129.0597 }, accessPoints: null })) as unknown as typeof fetch;

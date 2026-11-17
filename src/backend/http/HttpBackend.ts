@@ -26,6 +26,7 @@ import {
   type OfferListResponse,
   type OfferResponseResult,
   type OperatingState,
+  type PickupPointList,
   type Problem,
   type RiderLocation,
   type RiderProfile,
@@ -206,6 +207,8 @@ export class HttpBackend implements RiderPort {
       reportReturnPickup: (id, body, w) => r<CommandResponse>('POST', `/deliveries/${enc(id)}/returns/pickups`, { body, write: w }),
       reportReturnStoreDelivery: (id, body, w) =>
         r<CommandResponse>('POST', `/deliveries/${enc(id)}/returns/store-deliveries`, { body, write: w }),
+      // center-master 0.2.0
+      listMfcPickupPoints: () => r<PickupPointList>('GET', '/mfc-pickup-points'),
       // mfc-fulfillment 0.4.11 인계
       authorizeHandover: (pkg, body, w) => r<HandoverAuthorization>('POST', `/packages/${enc(pkg)}/handover-authorizations`, { body, write: w }),
       commitHandover: (pkg, body, w) => r<HandoverCommitResult>('POST', `/packages/${enc(pkg)}/handover-commits`, { body, write: w }),

@@ -38,6 +38,7 @@ export const LAN_READ_ROUTES: readonly LanRoute[] = [
   { pattern: /^\/riders\/me\/locations\/latest$/, token: 'SIM_RIDER' },
   { pattern: /^\/riders\/me\/deliveries$/, token: 'SIM_RIDER' },
   { pattern: /^\/offers$/, token: 'SIM_RIDER' },
+  { pattern: /^\/mfc-pickup-points$/, token: 'SIM_RIDER' }, // center-master 라이더용 픽업지 목록(MFC 위치 — 지점 공개 정보)
 ];
 
 export type LanDecision =

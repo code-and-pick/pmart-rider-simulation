@@ -28,6 +28,7 @@ import type {
   OperatingState,
   OperatingStateRequest,
   OfferState,
+  PickupPointList,
   PickupRequest,
   ReturnPickupRequest,
   ReturnStoreDeliveryRequest,
@@ -127,6 +128,10 @@ export interface RiderApi {
   /** 오배송 회수(MISDELIVERY_RECOVERY)만 — docs/design.md §3-1 */
   reportReturnPickup(deliveryId: string, body: ReturnPickupRequest, opts: WriteOptions): Promise<CommandResponse>;
   reportReturnStoreDelivery(deliveryId: string, body: ReturnStoreDeliveryRequest, opts: WriteOptions): Promise<CommandResponse>;
+
+  // ── center-master 0.2.0 ──
+  /** 라이더용 MFC 픽업지 목록(ACTIVE 만, 인계 위치 포함) — MFC 위치를 라이더 앱과 같은 길로 */
+  listMfcPickupPoints(): Promise<PickupPointList>;
 
   // ── mfc-fulfillment 0.4.11 (인계) ──
   authorizeHandover(packageId: string, body: HandoverAuthorizationRequest, opts: WriteOptions): Promise<HandoverAuthorization>;

@@ -7,7 +7,7 @@
 //   contracts/openapi/delivery-tracking-service.yaml   0.4.0
 //   contracts/openapi/rider-service.yaml               0.5.0 (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
 //   contracts/openapi/mfc-fulfillment-service.yaml     0.7.0 (출고 조회·포장 인계 부분만 — 0.6~0.7 변경은 작업 줄 바코드 등이라 인계 API 그대로)
-//   contracts/openapi/center-master-service.yaml       0.2.0 (센터 조회 GET /centers/{centerId} 만 — MFC 위치 정본. 0.2.0 라이더용 GET /mfc-pickup-points 추가 — 아직 안 씀)
+//   contracts/openapi/center-master-service.yaml       0.2.0 (MFC 위치: 라이더용 GET /mfc-pickup-points 먼저, 실패하면 관찰 계정 GET /centers/{centerId})
 //   contracts/openapi/_common.yaml                     0.1.0
 // 모든 경로는 게이트웨이 /api/v1 아래. POST·PUT 은 Idempotency-Key·X-Source-System 필수, 상태 전이는 X-Expected-Version(선택).
 // 이름이 서비스 사이에서 겹치는 스키마만 이름을 바꿨다(주석에 계약 이름).
@@ -835,7 +835,7 @@ export interface HandoverResolution {
   asOf?: AsOf;
 }
 
-// ───────────────────────── center-master 0.1.1 (센터 조회만) ─────────────────────────
+// ───────────────────────── center-master 0.2.0 (센터 조회·라이더용 픽업지 목록) ─────────────────────────
 
 export type CenterAccessKind = 'VEHICLE_ENTRY' | 'UNLOADING_BAY' | 'HANDOVER_POINT' | 'STAFF_ENTRY';
 
@@ -851,6 +851,20 @@ export interface Center {
   /** 진입·하차·인계 위치 — HANDOVER_POINT 가 있으면 라이더는 그리로 간다 */
   accessPoints?: { kind?: CenterAccessKind; label?: string; coordinates?: { lat?: number; lng?: number }; note?: string }[] | null;
   floors?: number;
+}
+
+/** GET /mfc-pickup-points 항목(center-master 0.2.0 — 라이더용, ACTIVE MFC 만). 인계 위치 = accessPoints 의 HANDOVER_POINT 첫 항목 */
+export interface PickupPoint {
+  centerId: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+  coordinates?: { lat?: number; lng?: number } | null;
+  handoverPoint?: { label?: string; note?: string | null; coordinates?: { lat?: number; lng?: number } | null } | null;
+}
+
+export interface PickupPointList {
+  items: PickupPoint[];
 }
 
 // ───────────────────────── 사건 이름 (contracts/events/*.v1.json) ─────────────────────────
