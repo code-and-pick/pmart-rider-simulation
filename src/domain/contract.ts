@@ -691,11 +691,14 @@ export interface WithdrawalRequest {
   reason?: string;
 }
 
+/** rider 0.6.0 WithdrawalBlocker — 진행 중 배송·확정 전 수행료(완료 5시간 안)·산정 불가 조정 대기·열린 도움요청·제한 검토 중 */
+export type WithdrawalBlocker = 'ACTIVE_DELIVERY' | 'UNCONFIRMED_EARNING' | 'EARNING_ADJUSTMENT_PENDING' | 'OPEN_HELP_REQUEST' | 'RESTRICTION_REVIEW';
+
 /** GET /riders/me/withdrawals/{requestId} */
 export interface Withdrawal {
   requestId?: string;
   state?: 'PENDING' | 'COMPLETED' | 'REJECTED';
-  blockers?: string[];
+  blockers?: WithdrawalBlocker[];
 }
 
 // ───────────────────────── mfc-fulfillment 0.5.0 (출고 조회·인계) ─────────────────────────

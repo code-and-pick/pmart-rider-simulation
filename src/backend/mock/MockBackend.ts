@@ -67,6 +67,7 @@ import {
   type TransitionRequest,
   type VehicleType,
   type Withdrawal,
+  type WithdrawalBlocker,
 } from '../../domain/contract';
 import type { SimClock } from '../../sim/clock';
 import { destination, distanceM, type LatLng } from '../../util/geo';
@@ -288,7 +289,7 @@ export class MockBackend implements RiderPort {
   readonly offers = new Map<string, MOffer>();
   private readonly photos = new Map<string, MPhoto>();
   private readonly involved = new Map<string, Set<string>>();
-  private readonly withdrawals = new Map<string, { riderId: string; state: 'PENDING' | 'COMPLETED' | 'REJECTED'; blockers: string[] }>();
+  private readonly withdrawals = new Map<string, { riderId: string; state: 'PENDING' | 'COMPLETED' | 'REJECTED'; blockers: WithdrawalBlocker[] }>();
   private readonly idem = new Map<string, { fp: string; outcome: IdemOutcome }>();
   private readonly later: { at: number; fn: () => void }[] = [];
   private readonly apiListeners = new Set<ApiListener>();
@@ -900,9 +901,9 @@ export class MockBackend implements RiderPort {
     return r;
   }
 
-  /** 탈퇴를 막는 것(rider 0.6.0 WithdrawalBlocker) — MOCK 이 아는 것만 */
-  withdrawalBlockers(riderId: string): string[] {
-    const out = new Set<string>();
+  /** 탈퇴를 막는 것(rider 0.6.0 WithdrawalBlocker 5종). RESTRICTION_REVIEW(라이더가 낸 제한 검토가 결정 전)는 MOCK 에 제한 검토가 없어 생기지 않는다 [시뮬]. */
+  withdrawalBlockers(riderId: string): WithdrawalBlocker[] {
+    const out = new Set<WithdrawalBlocker>();
     if (this.activeDeliveryCount(riderId) > 0) out.add('ACTIVE_DELIVERY');
     const confirmAfterSec = 5 * 3600; // 완료 5시간 뒤 수행료 확정(execution). 시계는 초
     for (const d of this.deliveries.values()) {
@@ -910,6 +911,9 @@ export class MockBackend implements RiderPort {
       if (d.x.state === 'COMPLETED' && d.x.completedAt !== undefined && this.clock.now - d.x.completedAt < confirmAfterSec) out.add('UNCONFIRMED_EARNING');
       // MOCK 에는 지원센터(처리함)가 없다 — 배송이 끝나면 그 도움요청도 닫힌 것으로 본다 [시뮬]
       if (d.x.helps.length > 0 && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(d.x.state)) out.add('OPEN_HELP_REQUEST');
+      // 산정 불가 수행료가 지원센터 조정 대기(execution 0.13.0): 고객 사유가 아닌 전달 실패. MOCK 에는 지원센터 조정이 없어 계속 대기 [시뮬].
+      // (자동 완료(픽업 5시간)도 산정 불가지만 MOCK 은 자동 완료를 만들지 않는다)
+      if (d.x.state === 'FAILED' && d.x.failure && !CUSTOMER_REASONS.has(d.x.failure.reason)) out.add('EARNING_ADJUSTMENT_PENDING');
     }
     return [...out];
   }
@@ -1506,8 +1510,7 @@ export class MockBackend implements RiderPort {
           '/riders/me/withdrawals',
           () => {
             const r = b.signedRider(me);
-            // rider 0.6.0 막는 것(WithdrawalBlocker): 진행 중 배송·확정 전 수행료(완료 5시간 안)·열린 도움요청(MOCK 은 배송이 끝나면 닫힌 것으로 봄)·제한 검토 중(MOCK 없음).
-            // 산정 불가 조정 대기는 MOCK 에 수행료 산정이 없어 보지 않는다 [시뮬]. 이미 걸린 계정 제한은 막지 않는다(계약).
+            // rider 0.6.0 막는 것(WithdrawalBlocker 5종) — withdrawalBlockers 참고. 이미 걸린 계정 제한은 막지 않는다(계약).
             const requestId = o.idempotencyKey;
             const blockers = b.withdrawalBlockers(me);
             if (blockers.length > 0) {

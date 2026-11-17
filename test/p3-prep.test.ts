@@ -123,6 +123,25 @@ describe('탈퇴(rider-service 0.6.0 계약 흉내 — 백엔드 회신 RR-07)',
   });
 });
 
+describe('탈퇴 — 산정 불가 조정 대기(EARNING_ADJUSTMENT_PENDING)', () => {
+  it('고객 사유가 아닌 전달 실패 확정은 막고, 고객 사유(부재 등)는 막지 않는다', async () => {
+    const sim = new Simulation({ ...DEFAULT_PARAMS, acceptProbability: 1 }, { startEpochMs: START });
+    sim.backend.autoOrders = false;
+    sim.startRiders(1, () => offsetM(MFC, 300, 0));
+    await sim.runFor(5);
+    sim.backend.createOrder({ pickSec: 1, packMinutes: 20, packages: 1, customer: offsetM(MFC, 900, 0) });
+    await sim.runFor(60);
+    const del = [...sim.backend.deliveries.values()][0]!;
+    // 흐름 생략 — 확정된 실패 상태만 만든다(목 내부 상태)
+    del.x.riderId = 'RD-sim-01';
+    del.x.state = 'FAILED';
+    del.x.helps = [];
+    del.x.failure = { reason: 'GOODS_DAMAGED', photoRefs: [], contactAttempts: 0, reportedAt: sim.clock.iso() };
+    expect(sim.backend.withdrawalBlockers('RD-sim-01')).toContain('EARNING_ADJUSTMENT_PENDING');
+    del.x.failure = { reason: 'CUSTOMER_ABSENT', photoRefs: [], contactAttempts: 2, reportedAt: sim.clock.iso() };
+    expect(sim.backend.withdrawalBlockers('RD-sim-01')).not.toContain('EARNING_ADJUSTMENT_PENDING');
+  });
+});
 describe('실서버 운행 잠금(REAL_RIDER_GATE)', () => {
   it('사용자 결정(2026-11-16 "시험 번호로 시작") — 2명, 시험 번호 010-0000-00NN', () => {
     expect(REAL_RIDER_GATE).toEqual({ operationAllowed: true, signupAllowed: true, riderCount: 2 });
