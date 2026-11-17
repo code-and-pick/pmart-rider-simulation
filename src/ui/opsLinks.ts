@@ -12,14 +12,14 @@ export interface OpsScreen {
   readonly path: string | null;
 }
 
-// 라이더 백오피스 메뉴(2026-11-17 라이더 운영 화면 — pmart-clients web/rider-backoffice nav.ts 와 같은 순서·경로)
+// 라이더 백오피스 메뉴(2026-11-17 라이더 운영 화면 — pmart-clients web/rider-backoffice 와 같은 이름·경로)
 export const OPS_SCREENS: readonly OpsScreen[] = [
-  { key: 'dashboard', title: '라이더 대시보드', what: '라이더 수·제한·진행 중 배송·도움요청·운영 알림', path: '/dashboard' },
-  { key: 'control', title: '위치 모니터링', what: '센터의 운행 중 라이더 현재 위치·위치 끊김·진행 배송(10초마다)', path: '/control' },
-  { key: 'deliveries', title: '배송·배차 현황', what: '배송 찾기·수행·배차 상세, 전달 실패 확정·배차 취소·상태 정정', path: '/deliveries' },
-  { key: 'help-requests', title: '도움요청', what: '라이더 도움요청 대기열·지원센터 대화·처리', path: '/help-requests' },
+  { key: 'dashboard', title: '대시보드', what: '라이더 수·제한 단계·진행 중 배송·오늘 완료·실패·열린 도움요청', path: '/dashboard' },
+  { key: 'control', title: '라이더 관제', what: '센터의 운행 중 라이더 현재 위치·위치 끊김·진행 배송(10초마다, 지도는 카카오 키 있을 때)', path: '/control' },
+  { key: 'deliveries', title: '배송 찾기', what: '배송 상세·배차 시도·도착 예정, 전달 실패 확정·배차 취소·상태 정정', path: '/deliveries' },
+  { key: 'help-requests', title: '도움요청', what: '도움요청 대기열·대화·증빙 사진·처리함·가리기', path: '/help-requests' },
   { key: 'cases', title: '접수 건', what: '도움요청·배차 실패·위치 끊김·오배송·배송 사고(배송 쪽 사건함)', path: '/cases' },
-  { key: 'riders', title: '라이더 목록', what: '라이더 상세·계정 제한·계약 종료·배송 이력·수행료', path: '/riders' },
+  { key: 'riders', title: '라이더 찾기', what: '라이더 상세·원문 열람·계정 제한·수행료·운행시간', path: '/riders' },
   { key: 'signups', title: '가입 승인', what: '최근 가입(지금은 가입 즉시 자동 승인)', path: '/signups' },
   { key: 'restriction-reviews', title: '제한 검토', what: '컴플레인 누적 검토', path: '/restriction-reviews' },
   { key: 'inquiries', title: '라이더 문의', what: '배송 밖 문의 대화·답변·닫기', path: '/inquiries' },
