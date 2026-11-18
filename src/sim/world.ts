@@ -105,6 +105,12 @@ export type DropLocationView =
   | { state: 'ok'; address: string; postalCode: string | null; pos: LatLng | null; source: string; logId: string | null; kind: string }
   | { state: 'none'; reason: string };
 
+/** 오늘 운행·접속·대기 합(초) — 접속·대기는 백엔드가 rider 를 못 부르면 null */
+export type OperatingTimeView =
+  | { state: 'loading' }
+  | { state: 'ok'; totalSec: number; connectedSec: number | null; waitingSec: number | null }
+  | { state: 'none'; reason: string };
+
 export interface MetricsSummary {
   /** 전달 완료(지금까지) */
   completed: number;
@@ -146,6 +152,8 @@ export interface World {
    * 처음 부르면 읽기 시작(loading). 화면 메모리에만 두고 로그·저장소에 남기지 않는다. 사용자 2026-11-18 "주소까지 보이게".
    */
   dropLocation?(deliveryId: string): DropLocationView;
+  /** 오늘(서울) 라이더 운행·접속·대기 합 — 실서버 직원용 /rider-operating-time(이 PC·관제 계정, 1분마다 새로). 해당 없으면 none */
+  operatingTime?(riderId: string): OperatingTimeView;
   readonly apiLog: readonly ApiCallRecord[];
   readonly eventLog: readonly DomainEventRecord[];
   readonly notes: readonly NoteRecord[];

@@ -1310,3 +1310,17 @@
     position: static;
   }
 }
+.c-rd-today {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: -4px 0 12px;
+}
+.c-rd-today .c-rd-tile-v {
+  font-size: 14px;
+}
+.c-rd-today-none {
+  margin: -4px 0 12px;
+  font-size: 11px;
+  color: var(--c-sub);
+}

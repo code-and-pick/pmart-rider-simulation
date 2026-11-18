@@ -68,6 +68,7 @@ export function RiderDetail({ row, onShowOnMap }: { row: RiderRow | undefined; o
         <Tile label="운행 시작" value={onDuty !== null ? `${dur(onDuty)}째` : '—'} hint={row.onDutySince ? `${seoulTime(Date.parse(row.onDutySince))} 운행 시작` : '관제 응답에 있을 때만'} />
         <Tile label="완료(최근 목록)" value={`${done.length}건`} hint={done.length ? `한 건 평균 ${dur(avg)}` : '이 화면 최근 목록 기준'} />
       </div>
+      <TodayTimes riderId={row.id} />
 
       {active.length > 0 && <h4 className="c-rd-h">진행 중 배송</h4>}
       {active.map((d) => (
@@ -103,6 +104,33 @@ export function RiderDetail({ row, onShowOnMap }: { row: RiderRow | undefined; o
       )}
     </aside>
   );
+}
+
+/**
+ * 오늘(서울) 운행·접속·대기 합 — 실서버 직원용 /rider-operating-time(백엔드가 센 값, 1분마다 새로). 백오피스 상세 칸과 같은 세 칸.
+ *   운행 = 배차 수락 ~ 전달 완료(겹치면 한 번), 접속 = 운행(ON_DUTY) 켜 둔 시간, 대기 = 운행 중 + 신규배차 켬 + 맡은 배송 0건.
+ */
+function TodayTimes({ riderId }: { riderId: string }) {
+  const { sim } = useApp();
+  const t = sim.operatingTime?.(riderId);
+  if (!t || t.state === 'none') {
+    return <p className="c-rd-today-none">오늘 운행시간 — {t?.state === 'none' ? t.reason : 'MOCK 은 없음(실서버 직원용 운행시간 조회)'}</p>;
+  }
+  const v = (sec: number | null | undefined) => (t.state === 'loading' ? '…' : sec == null ? '못 읽음' : hm(sec));
+  return (
+    <div className="c-rd-today" aria-label="오늘 운행시간">
+      <Tile label="오늘 운행시간" value={v(t.state === 'ok' ? t.totalSec : null)} hint="배차 수락 ~ 전달 완료" tone="info" />
+      <Tile label="오늘 접속" value={v(t.state === 'ok' ? t.connectedSec : null)} hint="운행을 켜 둔 시간" />
+      <Tile label="오늘 대기" value={v(t.state === 'ok' ? t.waitingSec : null)} hint="배송 없이 기다린 시간" />
+    </div>
+  );
+}
+
+/** 초 → "1시간 5분" · "12분" */
+function hm(sec: number): string {
+  const m = Math.floor(sec / 60);
+  if (m < 60) return `${m}분`;
+  return `${Math.floor(m / 60)}시간 ${m % 60}분`;
 }
 
 function Tile({ label, value, hint, tone }: { label: string; value: string; hint?: string | undefined; tone?: 'ok' | 'bad' | 'info' }) {

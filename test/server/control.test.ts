@@ -8,6 +8,10 @@ describe('관제 계정 (RR-08)', () => {
     expect(isControlRead('GET', '/api/v1/rider-locations?mfcId=MFC-SEED-01')).toBe(true);
     expect(isControlRead('HEAD', '/api/v1/rider-locations')).toBe(true);
     expect(isControlRead('GET', '/api/v1/deliveries/DLV-1/drop-location')).toBe(true);
+    expect(isControlRead('GET', '/api/v1/rider-operating-time?riderId=RD-1&from=2026-11-18&to=2026-11-18')).toBe(true);
+    expect(isControlRead('POST', '/api/v1/rider-operating-time')).toBe(false);
+    expect(isControlRead('GET', '/api/v1/riders/me/operating-time')).toBe(false);
+    expect(decideLanRequest('GET', '/api/v1/rider-operating-time?riderId=RD-1', '192.168.0.55')).toMatchObject({ allow: false });
     for (const [m, u] of [
       ['POST', '/api/v1/rider-locations'],
       ['GET', '/api/v1/rider-locations/x'],

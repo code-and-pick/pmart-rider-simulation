@@ -281,3 +281,25 @@ describe('직원용 전달지(주소·좌표) — 사용자 2026-11-18 "주소�
     }
   });
 });
+
+describe('오늘 운행시간(직원용 /rider-operating-time)', () => {
+  it('이 PC 는 관제 계정으로 서울 날짜 하루를 읽고, 1분 안에는 다시 부르지 않는다', async () => {
+    const urls: { url: string; headers: Record<string, string> }[] = [];
+    const fake = (async (url: string, init: RequestInit) => {
+      urls.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
+      if (url.includes('/sim-auth/status')) return json(200, { riderSigning: true, observer: true, control: true });
+      if (url.includes('/rider-operating-time')) return json(200, { from: 'x', to: 'x', totalSeconds: 3900, connectedSeconds: 7200, waitingSeconds: null, days: [] });
+      return json(200, { items: [] });
+    }) as unknown as typeof fetch;
+    const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
+    await flush();
+    await w.advance(0);
+    expect(w.operatingTime('RD-1').state).toBe('loading');
+    await flush();
+    expect(w.operatingTime('RD-1')).toMatchObject({ state: 'ok', totalSec: 3900, connectedSec: 7200, waitingSec: null });
+    const calls = urls.filter((u) => u.url.includes('/rider-operating-time'));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toMatch(/riderId=RD-1&from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}/);
+    expect(calls[0]!.headers).toMatchObject({ 'X-Sim-Actor': 'control' });
+  });
+});
