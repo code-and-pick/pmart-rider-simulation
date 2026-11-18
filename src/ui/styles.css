@@ -236,6 +236,15 @@ button {
   font-size: 12px;
   color: var(--muted);
 }
+.rc-app {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--chip-warn);
+  color: var(--chip-warn-ink);
+}
 .rc-job {
   font-size: 12px;
   font-variant-numeric: tabular-nums;

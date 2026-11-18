@@ -21,7 +21,11 @@ export function LeftPanel() {
   return (
     <aside className="panel left" aria-label="라이더">
       <h2>
-        가상 라이더 <span className="muted">{app.sim.riders.length}명</span>
+        라이더{' '}
+        <span className="muted">
+          {app.sim.riders.filter((r) => !r.external).length}명
+          {app.sim.riders.some((r) => r.external) && ` · 라이더 앱 ${app.sim.riders.filter((r) => r.external).length}명`}
+        </span>
       </h2>
       <p className="hint">누르면 오른쪽이 그 라이더로 걸러지고 지도에서 찾는다. 단계는 엔진 기준(백엔드 상태 아님).</p>
       <ul className="riders">
@@ -39,9 +43,10 @@ export function LeftPanel() {
                 onClick={() => app.select(sel ? null : r.id)}
               >
                 <div className="rc-head">
-                  <span className="rc-id">
+                  <span className="rc-id" title={r.id}>
                     <span className="dot" />
-                    {r.id}
+                    {r.label ?? r.id}
+                    {r.external && <span className="rc-app">라이더 앱</span>}
                   </span>
                   <span className="rc-done" title="이 라이더가 완료한 배송">
                     완료 {done}

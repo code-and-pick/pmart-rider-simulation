@@ -37,7 +37,7 @@ describe('배송 흐름·시간', () => {
       'x-COMPLETED',
     ]);
     expect(t.steps.every((s, i) => i === 0 || s.atMs >= t.steps[i - 1]!.atMs)).toBe(true);
-    expect(t.steps[2]!.detail).toBe('RD-sim-01');
+    expect(t.steps[2]!.detail).toBe('sim-01'); // 짧은 번호(전체는 카드에)
     expect(t.endMs).toBe(t.steps.at(-1)!.atMs);
     // 전체 = 지표의 배송 한 건 합(같은 시작·끝)
     expect((t.endMs! - t.steps[0]!.atMs) / 1000).toBeCloseTo(sim.metrics().phases!.totalSec, 0);

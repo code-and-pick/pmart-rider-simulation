@@ -15,7 +15,9 @@ import { ApiProblem, type Delivery, type DomainEventType, type StaffDeliverySumm
 import { SimClock } from './clock';
 import { VirtualRider } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
-import type { LatLng } from '../util/geo';
+import { bearingDeg, distanceM, type LatLng } from '../util/geo';
+import type { RiderPhase } from './rider';
+import { shortRiderId } from '../domain/riderId';
 import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, RiderView, ScenarioKnobs, World } from './world';
 import type { AddressLocator } from './geocode';
 import { assemble, dispatchSteps, summarySteps, type DeliveryTimeline, type TimelineStep } from './timeline';
@@ -56,13 +58,68 @@ class RemoteRider implements RiderView {
   constructor(readonly id: string) {}
 }
 
+/** 관제 단계 → 화면 단계(지도·목록 색). 배송이 없으면 대기 */
+const STAGE_PHASE: Record<string, RiderPhase> = {
+  UNASSIGNED: 'IDLE',
+  TO_STORE: 'TO_STORE',
+  AT_STORE: 'AT_STORE_WAIT_READY',
+  TO_CUSTOMER: 'TO_CUSTOMER',
+  AT_CUSTOMER: 'AT_CUSTOMER',
+  DONE: 'IDLE',
+};
+
+/**
+ * 라이더 앱 라이더(관제로 읽음, RR-08). 위치는 10초마다 오므로 그 사이를 새 위치 쪽으로 미끄러지듯 옮겨 그린다
+ * (도착 위치는 서버 값 그대로 — 중간 점은 화면용 보간일 뿐).
+ */
+class AppRider implements RiderView {
+  phase: RiderPhase = 'IDLE';
+  note = '';
+  label: string;
+  deliveryId: string | null = null;
+  heading = 0;
+  readonly external = true;
+  readonly target = null;
+  readonly path = null;
+  readonly pathKind = null;
+  pos: LatLng | null = null;
+  private from: LatLng | null = null;
+  private to: LatLng | null = null;
+  private t0 = 0;
+  constructor(readonly id: string) {
+    this.label = shortRiderId(id);
+  }
+
+  /** 서버가 준 새 위치 — 지금 그리는 곳에서 glideSec 동안 그쪽으로 */
+  setServerPos(p: LatLng | null, now: number) {
+    if (!p) {
+      this.pos = this.from = this.to = null;
+      return;
+    }
+    if (!this.pos || distanceM(this.pos, p) > 2000) {
+      this.pos = this.from = this.to = p; // 처음이거나 너무 멀리 튀면 바로
+      return;
+    }
+    if (distanceM(this.pos, p) > 3) this.heading = bearingDeg(this.pos, p);
+    this.from = this.pos;
+    this.to = p;
+    this.t0 = now;
+  }
+
+  glide(now: number, glideSec: number) {
+    if (!this.from || !this.to) return;
+    const k = Math.min(1, (now - this.t0) / glideSec);
+    this.pos = { lat: this.from.lat + (this.to.lat - this.from.lat) * k, lng: this.from.lng + (this.to.lng - this.from.lng) * k };
+  }
+}
+
 export class RealWorld implements World {
   readonly mode = 'http' as const;
   readonly clock: SimClock;
   readonly backend: HttpBackend;
   private readonly remote: RemoteRider[] = [];
   /** 라이더 관제(RR-08)로 읽은 시뮬레이터 밖 라이더(라이더 앱) — 운행 중인 라이더만, 이 PC 만 */
-  private readonly appRiders = new Map<string, RemoteRider>();
+  private readonly appRiders = new Map<string, AppRider>();
   /** 관제 조회 상태 — null 이면 아직 안 부름 */
   private controlStatus: string | null = null;
   /** 이 PC 개발 서버에 관제 계정 비밀번호 파일이 있나(/sim-auth/status) */
@@ -251,6 +308,7 @@ export class RealWorld implements World {
       this.clock.now += dt;
       for (const v of this.driven.values()) v.tick(dt);
     }
+    for (const a of this.appRiders.values()) a.glide(wall, RealWorld.CONTROL_POLL_SEC);
     this.clock.now = wall;
     if (this.paused || this.polling) return;
     if (this.clock.now - this.lastPollAt < this.params.lanObserverPollSec) return;
@@ -367,19 +425,22 @@ export class RealWorld implements World {
         seen.add(c.riderId);
         let r = this.appRiders.get(c.riderId);
         if (!r) {
-          r = new RemoteRider(c.riderId);
+          r = new AppRider(c.riderId);
           this.appRiders.set(c.riderId, r);
         }
         const loc = c.location;
-        r.pos = loc?.lat !== undefined && loc?.lng !== undefined ? { lat: loc.lat, lng: loc.lng } : null;
-        if (r.pos) located++;
+        const p = loc?.lat !== undefined && loc?.lng !== undefined ? { lat: loc.lat, lng: loc.lng } : null;
+        r.setServerPos(p, this.clock.now);
+        if (p) located++;
+        r.label = c.nameMasked ? `${c.nameMasked} ${shortRiderId(c.riderId)}` : shortRiderId(c.riderId);
         const d = c.activeDeliveries?.[0];
         r.deliveryId = d?.deliveryId ?? null;
+        r.phase = d ? (STAGE_PHASE[d.stage ?? ''] ?? (d.pickedUp ? 'TO_CUSTOMER' : 'TO_STORE')) : 'IDLE';
         const age = c.staleSinceSeconds;
         r.note = [
-          `라이더 앱${c.nameMasked ? ` ${c.nameMasked}` : ''}`,
+          '라이더 앱',
           d ? `${STAGE_LABEL[d.stage ?? ''] ?? '진행 중'}` : '배송 없음',
-          r.pos ? `위치 ${age ?? '?'}초 전${c.stale ? ' — 끊김' : ''}` : '위치 아직 없음',
+          p ? `위치 ${age ?? '?'}초 전${c.stale ? ' — 끊김' : ''}` : '위치 아직 없음',
         ].join(' · ');
       }
       for (const id of [...this.appRiders.keys()]) if (!seen.has(id)) this.appRiders.delete(id); // 운행 끈 라이더는 목록에서 빠진다

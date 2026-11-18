@@ -25,6 +25,10 @@ export interface RiderView {
   readonly locationOffline?: boolean;
   /** 진행 중 주문 요약(주문번호·품목 수·금액·예상 소요) — 없으면 표시 안 함 */
   readonly job?: RiderJob | null;
+  /** 화면에 보이는 짧은 이름(라이더 앱 라이더: 마스킹 이름 + 번호 앞 4자리). 없으면 id — 전체 번호는 마우스 설명에 */
+  readonly label?: string;
+  /** 시뮬레이터 밖 라이더(라이더 앱 — 관제로 읽음) */
+  readonly external?: boolean;
 }
 
 /** 화면 배송 카드 — 두 서비스의 두 상태를 출처와 함께(docs/design.md §4). */

@@ -251,9 +251,9 @@ export class AppController {
         pos: r.pos,
         heading: r.heading,
         color: PHASE_COLOR[r.phase],
-        label: r.id.replace(/^RD-/, ''),
+        label: r.label ?? r.id.replace(/^RD-/, ''),
         selected: r.id === this.selected,
-        title: `${r.id} · ${PHASE_LABEL[r.phase]}${r.deliveryId ? ` · ${r.deliveryId}` : ''}${r.locationOffline ? ' · 위치 전송 끊김(백엔드가 위치를 못 받는 중)' : ''}`,
+        title: `${r.external ? '라이더 앱 ' : ''}${r.id} · ${PHASE_LABEL[r.phase]}${r.deliveryId ? ` · ${r.deliveryId}` : ''}${r.locationOffline ? ' · 위치 전송 끊김(백엔드가 위치를 못 받는 중)' : ''}`,
         offline: r.locationOffline,
       });
       // 따라가기 — 매 프레임 옮기면 지도가 흔들려서 약 1초마다

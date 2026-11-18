@@ -184,3 +184,47 @@ describe('라이더 관제(RR-08) — 라이더 앱 라이더 위치', () => {
     }
   });
 });
+
+describe('라이더 앱 라이더 표시', () => {
+  it('번호는 짧게(앞 4자리), 시뮬레이터 라이더는 sim-NN', async () => {
+    const { shortRiderId } = await import('../src/domain/riderId');
+    expect(shortRiderId('RD-5c41a0e7-2ac3-4d85-9f03-fc4af8df85e9')).toBe('5c41');
+    expect(shortRiderId('RD-sim-01')).toBe('sim-01');
+    expect(shortRiderId('RD-claude-97fb21e37325')).toBe('claude-97fb21e37325');
+  });
+
+  it('관제 단계로 색(단계)을 정하고, 새 위치로는 10초 동안 미끄러지듯 옮긴다', async () => {
+    let lat = 35.16;
+    let stage = 'TO_STORE';
+    const fake = (async (url: string) => {
+      if (url.includes('/sim-auth/status')) return json(200, { riderSigning: true, observer: true, control: true });
+      if (url.includes('/rider-locations'))
+        return json(200, {
+          asOf: 'x',
+          items: [{ riderId: 'RD-5c41a0e7-2ac3-4d85-9f03-fc4af8df85e9', nameMasked: '김*수', stale: false, location: { lat, lng: 129.06 }, activeDeliveries: [{ deliveryId: 'D', stage, pickedUp: stage === 'TO_CUSTOMER' }] }],
+        });
+      if (url.includes('/deliveries')) return json(200, { items: [] });
+      return json(404, {});
+    }) as unknown as typeof fetch;
+    const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
+    await flush();
+    await w.advance(0);
+    const app = () => w.riders.find((r) => r.external)!;
+    expect(app()).toMatchObject({ label: '김*수 5c41', phase: 'TO_STORE', pos: { lat: 35.16, lng: 129.06 } });
+
+    // 다음 관제 조회: 북쪽으로 약 111m, 고객에게 가는 중
+    lat = 35.161;
+    stage = 'TO_CUSTOMER';
+    (w as unknown as { lastControlAt: number }).lastControlAt = -Infinity;
+    (w as unknown as { lastPollAt: number }).lastPollAt = -Infinity;
+    await w.advance(0);
+    expect(app().phase).toBe('TO_CUSTOMER');
+    const start = app().pos!.lat;
+    expect(start).toBeCloseTo(35.16, 4); // 바로 튀지 않는다
+    const p = app() as unknown as { glide(now: number, s: number): void; t0: number };
+    p.glide(p.t0 + 5, 10);
+    expect(app().pos!.lat).toBeCloseTo(35.1605, 4);
+    p.glide(p.t0 + 20, 10);
+    expect(app().pos!.lat).toBeCloseTo(35.161, 6); // 끝은 서버 값 그대로
+  });
+});

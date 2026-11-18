@@ -5,6 +5,7 @@ import { Metrics } from './Metrics';
 import { displayStage, purposeLabel } from '../domain/displayStage';
 import { Progress } from './Progress';
 import { Timeline } from './Timeline';
+import { shortRiderId } from '../domain/riderId';
 import { OrdersTab } from './OrdersTab';
 import { apiFor, cardsFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
@@ -51,7 +52,7 @@ export function RightPanel() {
       {sel && (
         <div className="filter-chip" role="status">
           <span>
-            <b>{sel}</b> 만 보는 중
+            <b title={sel}>{shortRiderId(sel)}</b> 만 보는 중
           </span>
           <span className="chip-actions">
             <button className={`chip-btn ${app.follow ? 'on' : ''}`} aria-pressed={app.follow} onClick={() => app.toggleFollow()} title="지도가 이 라이더를 계속 따라간다">
@@ -95,7 +96,7 @@ export function RightPanel() {
                       {sel ? (
                         <span className={`role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
                       ) : (
-                        <span className="muted">{c.riderId ?? ''}</span>
+                        <span className="muted" title={c.riderId ?? ''}>{c.riderId ? shortRiderId(c.riderId) : ''}</span>
                       )}
                     </div>
                     <Progress stage={stage} />
@@ -116,7 +117,7 @@ export function RightPanel() {
             {cards.length === 0 && (
               <li className="empty">
                 {sel
-                  ? `${sel} 에게 온 배송이 아직 없다.`
+                  ? `${shortRiderId(sel)} 에게 온 배송이 아직 없다.`
                   : sim.mode === 'mock'
                     ? '아직 배송이 없다 — MOCK 주문이 들어오면 생긴다.'
                     : '아직 배송이 없다 — 점원 배차 요청 뒤 생긴다.'}
