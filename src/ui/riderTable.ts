@@ -84,6 +84,17 @@ export function rowsFromRiders(riders: readonly RiderView[], isSim: (id: string)
   }));
 }
 
+/**
+ * 라이더 ID → 표 줄(이름·위치 상태·도착 예정) — 실서버 이 PC 는 관제 응답, 그 밖은 화면 라이더.
+ * 관제 응답에 없는 라이더(운행을 끈 시뮬레이터 라이더 등)는 화면 라이더로 채운다.
+ */
+export function riderIndex(control: readonly ControlRider[] | null, riders: readonly RiderView[], isSim: (id: string) => boolean): Map<string, RiderRow> {
+  const m = new Map<string, RiderRow>();
+  for (const r of rowsFromRiders(riders, isSim)) m.set(r.id, r);
+  if (control) for (const r of rowsFromControl(control, isSim)) m.set(r.id, r);
+  return m;
+}
+
 export type RiderTableFilter = 'all' | 'delivering' | 'stale' | 'sim' | 'app';
 
 export function rowMatchesRider(r: RiderRow, f: RiderTableFilter): boolean {

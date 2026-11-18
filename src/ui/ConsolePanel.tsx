@@ -13,6 +13,8 @@ import { PhaseSummary } from './Metrics';
 import { Progress } from './Progress';
 import { FILTER_LABEL, rowMatches, type OpsFilter, type OpsRow } from './ops';
 import { OrdersTab } from './OrdersTab';
+import { riderIndex, type RiderRow } from './riderTable';
+import { isSimRiderId } from '../config';
 import { apiFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
 /** 한 번에 그리는 줄 수 [시뮬] — 4Hz 로 다시 그리므로 넉넉하지 않게 */
@@ -139,6 +141,7 @@ function DeliveriesView() {
   const sel = app.selected;
   const [q, setQ] = useState('');
   const needle = q.trim().toLowerCase();
+  const riders = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
   const byRider = b.rows.filter((r) => !sel || r.card.riderId === sel || r.card.riderIds.includes(sel));
   const count = (k: OpsFilter | null) => byRider.filter((r) => rowMatches(r, k)).length;
   const rows = byRider
@@ -187,7 +190,7 @@ function DeliveriesView() {
       <input className="c-search" type="search" placeholder="배송번호 · 주문번호 · 라이더 찾기" value={q} onChange={(e) => setQ(e.target.value)} aria-label="배송 찾기" />
       <ul className="c-list">
         {rows.slice(0, MAX_DELIVERIES).map((r) => (
-          <DeliveryItem key={r.card.deliveryId} r={r} sel={sel} />
+          <DeliveryItem key={r.card.deliveryId} r={r} sel={sel} rider={r.card.riderId ? riders.get(r.card.riderId) : undefined} />
         ))}
         {rows.length === 0 && <li className="c-empty">{needle ? '찾는 배송이 없습니다.' : emptyText(f, app.sim.mode)}</li>}
         {rows.length > MAX_DELIVERIES && <li className="c-empty">앞 {MAX_DELIVERIES}건만 — 찾기·상태 탭으로 좁혀 보세요.</li>}
@@ -204,7 +207,7 @@ function emptyText(f: OpsFilter | null, mode: 'mock' | 'http'): string {
 }
 
 /** 배송 카드 — 번호·상태 칩·걸린 시간 / 라이더·단계 / 지연(바로고처럼 늦으면 붉은 배경·왼쪽 띠). 누르면 지도 위 상세 */
-function DeliveryItem({ r, sel }: { r: OpsRow; sel: string | null }) {
+function DeliveryItem({ r, sel, rider }: { r: OpsRow; sel: string | null; rider: RiderRow | undefined }) {
   const app = useApp();
   const c = r.card;
   const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
@@ -234,11 +237,23 @@ function DeliveryItem({ r, sel }: { r: OpsRow; sel: string | null }) {
             <span className={`c-role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
           ) : (
             <span className="c-rider" title={c.riderId ?? ''}>
-              {c.riderId ? `🛵 ${shortRiderId(c.riderId)}` : '라이더 없음'}
+              {c.riderId ? `🛵 ${rider?.name ?? shortRiderId(c.riderId)}` : '라이더 없음'}
             </span>
           )}
-          <span className="c-stage">{stage.text}</span>
+          {/* 진행 중이면 라이더 위치 수신 상태(관제·본인 조회) — 끊기면 빨강 */}
+          {active && rider && (
+            <span className={`c-loc ${rider.loc}`} title={rider.sinceSec !== null ? `마지막 위치 ${dur(rider.sinceSec)} 전` : undefined}>
+              {rider.loc === 'ok' ? '● 수신' : rider.loc === 'stale' ? '● 끊김' : '● 위치 없음'}
+              {rider.sinceSec !== null && ` ${dur(rider.sinceSec)} 전`}
+            </span>
+          )}
           {!c.deliveryNumber && orderLabel(c) && <span className="c-muted">주문 {orderLabel(c)}</span>}
+        </div>
+        <div className="c-item-2">
+          <span className="c-stage">
+            {active && r.stepLabel ? `${r.stepLabel}` : stage.text}
+            {active && r.stepAtMs !== null && ` · ${dur(Math.max(0, (app.sim.clock.epochMs() - r.stepAtMs) / 1000))}째`}
+          </span>
         </div>
         {r.alert && (
           <div className={`c-item-al ${r.alert.level}`}>

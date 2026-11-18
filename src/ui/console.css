@@ -1324,3 +1324,27 @@
   font-size: 11px;
   color: var(--c-sub);
 }
+
+/* 진행 중 주문 표·배송 카드의 라이더 위치 수신 */
+.c-active .c-flow-cell {
+  margin-top: 4px;
+}
+.c-active td > .c-muted,
+.c-active td > div.c-muted {
+  font-size: 11px;
+}
+.c-page-h3 .c-n {
+  margin-left: 4px;
+}
+.c-loc {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.c-loc.ok {
+  color: var(--c-green);
+}
+.c-loc.stale,
+.c-loc.none {
+  color: var(--c-red);
+}

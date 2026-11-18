@@ -5,6 +5,7 @@ import { displayStage } from '../domain/displayStage';
 import { deliveryLabel, orderLabel, shortRiderId } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
 import { dur, seoulTime } from './format';
+import { ActiveOrders } from './ActiveOrders';
 import { OpsPanel } from './OpsPanel';
 import { RiderDetail } from './RiderDetail';
 import { Progress } from './Progress';
@@ -57,11 +58,16 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
       <div className="c-page-head">
         <div>
           <h2>라이더 관제</h2>
-          <p>운행 중 라이더의 지금 위치·끊김·진행 중 배송. 라이더 백오피스 "라이더 관제"와 같은 내용입니다.</p>
+          <p>진행 중 주문마다 라이더 현황, 그 아래 라이더 목록·상세. 라이더 백오피스 "라이더 관제"와 같은 내용입니다.</p>
         </div>
         <span className="c-page-src">{source}</span>
       </div>
 
+      <ActiveOrders onOpen={openOnMap} />
+
+      <h3 className="c-page-h3">
+        라이더 <span className="c-muted">위치·끊김·진행 중 배송 · 줄을 누르면 오른쪽에 상세</span>
+      </h3>
       <div className="c-page-stats">
         <button className={`c-kpi t-ink ${f === 'all' ? 'on' : ''}`} onClick={() => setF('all')}>
           <span className="c-kpi-l">{board ? '운행 중' : '라이더'}</span>
