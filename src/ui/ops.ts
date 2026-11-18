@@ -168,10 +168,25 @@ function min(sec: number): number {
 }
 
 /** 관제 거르기 — 숫자 칸·알림이 정하고 목록·지도가 따른다 */
-export type OpsFilter = Exclude<Bucket, 'closed'> | 'delayed' | 'failedCalls';
+export type OpsFilter = Exclude<Bucket, 'closed'> | 'active' | 'failed' | 'delayed' | 'failedCalls';
+
+/** 거르기 이름(화면) */
+export const FILTER_LABEL: Record<OpsFilter, string> = {
+  active: '진행 중',
+  searching: '라이더 찾는 중',
+  delivering: '배송 중',
+  delayed: '지연·이상',
+  done: '전달 완료',
+  failed: '실패',
+  dispatchFailed: '배차 실패',
+  deliveryFailed: '전달 실패',
+  failedCalls: '요청 실패',
+};
 
 export function rowMatches(r: OpsRow, f: OpsFilter | null): boolean {
   if (!f || f === 'failedCalls') return true;
   if (f === 'delayed') return r.alert !== null && (r.bucket === 'searching' || r.bucket === 'delivering');
+  if (f === 'active') return r.bucket === 'searching' || r.bucket === 'delivering';
+  if (f === 'failed') return r.bucket === 'dispatchFailed' || r.bucket === 'deliveryFailed';
   return r.bucket === f;
 }

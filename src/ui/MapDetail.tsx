@@ -71,16 +71,3 @@ export function MapDetail() {
     </aside>
   );
 }
-
-/** 지도 오른쪽 위 — 지연만 보기(지도 핀·목록이 같이 걸러진다) */
-export function MapDelayToggle() {
-  const app = useApp();
-  const on = app.filter === 'delayed';
-  const n = app.board().counts.delayed;
-  return (
-    <button className={`map-toggle ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => app.setFilter('delayed')} title="진행 중 배송 가운데 지연·이상만 지도와 목록에">
-      <span className={`switch ${on ? 'on' : ''}`} />
-      지연만 보기{n > 0 && <b className="warn-text"> {n}</b>}
-    </button>
-  );
-}

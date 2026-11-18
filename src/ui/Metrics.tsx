@@ -11,14 +11,14 @@ const SEG_COLOR: Record<string, string> = {
 };
 
 /**
- * 완료된 배송 n 건의 구간별 평균(접기) + MOCK 사건 수. 상태별 숫자는 지도 위 숫자 줄(KpiBar)로 옮겼다.
+ * 완료된 배송 n 건의 구간별 평균(접기) + MOCK 사건 수. 상태별 숫자는 위 숫자 카드(KpiCards), 이 요약은 기록 탭 "구간 평균".
  * 구간에 마우스를 올리면 어디서 어디까지 쟀는지 나온다.
  */
-export function PhaseSummary({ m }: { m: MetricsSummary }) {
+export function PhaseSummary({ m, open = false }: { m: MetricsSummary; open?: boolean }) {
   const basis = m.timeBasis === 'sim' ? '시뮬레이션 시각(배속 반영)' : '실제 시각';
   const inc = m.incidents;
   return (
-    <details className="phases-box">
+    <details className="phases-box" open={open}>
       <summary>
         구간별 평균 {m.phases ? <b>{dur(m.phases.totalSec)}</b> : <span className="muted">— 완료 배송이 생기면</span>}
         {m.phases && <span className="muted"> · 완료 {m.phases.n}건 · {m.timeBasis === 'sim' ? '시뮬 시각' : '실제 시각'}</span>}

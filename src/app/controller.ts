@@ -219,10 +219,19 @@ export class AppController {
   }
 
   /** 관제 거르기(숫자 칸·알림) — 목록이 따른다. 같은 걸 다시 고르면 풀림 */
-  filter: OpsFilter | null = null;
+  filter: OpsFilter | null = 'active';
 
-  setFilter(f: OpsFilter | null) {
-    this.filter = this.filter === f ? null : f;
+  /** 같은 걸 다시 고르면 풀림(전체) — 상태 탭처럼 그대로 두려면 keep */
+  setFilter(f: OpsFilter | null, keep = false) {
+    this.filter = !keep && this.filter === f ? null : f;
+    this.ticker.emit();
+  }
+
+  /** 오른쪽 패널 탭(배송·라이더·기록) — 위 숫자 카드에서도 옮긴다 */
+  panelTab: 'deliveries' | 'riders' | 'logs' = 'deliveries';
+
+  setPanelTab(t: 'deliveries' | 'riders' | 'logs') {
+    this.panelTab = t;
     this.ticker.emit();
   }
 
