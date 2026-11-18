@@ -99,6 +99,12 @@ export interface IncidentCounts {
   helpRequests: number;
 }
 
+/** 고른 배송 전달지 화면 값 */
+export type DropLocationView =
+  | { state: 'loading' }
+  | { state: 'ok'; address: string; postalCode: string | null; pos: LatLng | null; source: string; logId: string | null; kind: string }
+  | { state: 'none'; reason: string };
+
 export interface MetricsSummary {
   /** 전달 완료(지금까지) */
   completed: number;
@@ -135,6 +141,11 @@ export interface World {
   readonly riders: readonly RiderView[];
   /** 실서버 라이더 관제(GET /rider-locations) 마지막 응답 — 이 PC 에서 관제 계정이 있을 때만, 그 밖(MOCK·다른 기기)은 null */
   controlBoard?(): { items: ControlRider[]; asOf: string } | null;
+  /**
+   * 고른 배송의 전달지(주소·좌표) — 실서버는 직원용 drop-location(이 PC·관제 계정, 부를 때마다 백엔드 열람 기록), MOCK 은 가상 위치.
+   * 처음 부르면 읽기 시작(loading). 화면 메모리에만 두고 로그·저장소에 남기지 않는다. 사용자 2026-11-18 "주소까지 보이게".
+   */
+  dropLocation?(deliveryId: string): DropLocationView;
   readonly apiLog: readonly ApiCallRecord[];
   readonly eventLog: readonly DomainEventRecord[];
   readonly notes: readonly NoteRecord[];

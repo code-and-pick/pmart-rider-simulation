@@ -3,7 +3,7 @@
 //
 // - 이 PC(루프백)는 그대로 넘긴다(가상 라이더 운행 = 읽기·쓰기).
 // - 다른 기기는 GET·HEAD 이고 아래 허용 목록에 있는 경로만. 그 밖 메서드는 403 LAN_READ_ONLY, 목록 밖 경로는 403 LAN_PATH_BLOCKED.
-//   특히 전달지(`/deliveries/{id}/drop-info` — 고객 주소·전화)·회수 연락처·증빙 사진은 목록에 넣지 않는다.
+//   특히 전달지(`/deliveries/{id}/drop-info` — 고객 주소·전화, `/drop-location` — 직원용 주소·좌표)·회수 연락처·증빙 사진은 목록에 넣지 않는다.
 // - 토큰 경로(`/sim-auth/…`)는 루프백만(LOOPBACK_ONLY) — P2 에서 만든다.
 // - 다른 기기가 보낸 Authorization 은 지우고, 붙일 토큰(관찰 계정 / 시뮬레이터 라이더)은 P2 에서 개발 서버가 정한다.
 
@@ -104,11 +104,15 @@ export function decideLanRequest(method: string, url: string, remoteAddress: str
 }
 
 /**
- * 관제 계정(라이더 운영·관리자 권한 — RR-08)으로 붙여도 되는 요청인가: 이 PC 의 `GET /api/v1/rider-locations` 한 가지만.
+ * 관제 계정(라이더 운영·관리자 권한 — RR-08)으로 붙여도 되는 요청인가: 이 PC 의 `GET /api/v1/rider-locations`(관제)와
+ * `GET /api/v1/deliveries/{id}/drop-location`(직원용 전달지 — 주소·좌표, 열람 기록) 두 가지만.
  * 관리자 권한 토큰이라 다른 경로·쓰기에는 절대 붙이지 않는다. 다른 기기는 이 경로가 허용 목록에 없어 위에서 이미 막힌다
  * (백엔드가 라이더 위치를 라이더 운영·관리자에게만 보이므로, LAN 아무 기기에나 넘기지 않는다).
  */
 export function isControlRead(method: string, url: string): boolean {
   const m = method.toUpperCase();
-  return (m === 'GET' || m === 'HEAD') && apiSubPath(url) === '/rider-locations';
+  const sub = apiSubPath(url);
+  if (m !== 'GET' && m !== 'HEAD') return false;
+  // 라이더 관제(위치) + 직원용 전달지(주소·좌표 — 응답 전에 백엔드가 개인정보 열람 기록, 사용자 2026-11-18 "주소까지 보이게")
+  return sub === '/rider-locations' || (sub !== null && /^\/deliveries\/[^/]+\/drop-location$/.test(sub));
 }

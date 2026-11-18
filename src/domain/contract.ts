@@ -562,6 +562,22 @@ export interface MyDeliveriesResponse {
   page?: Page;
 }
 
+/**
+ * (execution 0.24.0) 직원용 전달지 GET /deliveries/{id}/drop-location — RIDER_OPS·OPERATOR_ADMIN, 배정 ~ 전달 전만(그 밖 409 DROP_LOCATION_CLOSED).
+ * 주소·좌표만(수령인·전화·출입 메모 없음). 응답 전에 백엔드가 개인정보 열람 기록을 남긴다(같은 직원·배송 10분 안 한 번). no-store, 로그 금지.
+ */
+export interface StaffDropLocation {
+  deliveryId: string;
+  kind: 'DELIVERY_DROP' | 'RETURN_PICKUP' | 'REDELIVERY_DROP';
+  roadAddress: string;
+  detailAddress: string;
+  postalCode?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  coordinateSource?: 'ORDER_PIN' | 'ADDRESS_GEOCODE' | null;
+  piiAccessLogId: string;
+}
+
 /** GET /deliveries (직원 배송 찾기) 목록 한 줄 — 개인정보 없음. */
 export interface StaffDeliverySummary {
   deliveryId?: string;

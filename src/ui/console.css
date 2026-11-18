@@ -1135,3 +1135,18 @@
 .c-main[hidden] {
   display: none;
 }
+
+/* 상세 카드 — 전달지 주소 */
+.md-addr {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.md-addr-kind {
+  font-size: 11px;
+  color: var(--c-sub);
+}
+.md-addr-meta {
+  font-size: 11px;
+  color: var(--c-sub);
+}

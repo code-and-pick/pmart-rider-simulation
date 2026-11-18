@@ -18,7 +18,7 @@ import { straightRoutes, type RouteProvider } from './route';
 import { bearingDeg, distanceM, type LatLng } from '../util/geo';
 import type { RiderPhase } from './rider';
 import { shortRiderId } from '../domain/riderId';
-import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, RiderView, ScenarioKnobs, World } from './world';
+import type { DeliveryCard, DropLocationView, MetricsSummary, NoteRecord, PhaseSegment, RiderView, ScenarioKnobs, World } from './world';
 import type { AddressLocator } from './geocode';
 import { assemble, dispatchSteps, summarySteps, type DeliveryTimeline, type TimelineStep } from './timeline';
 import type { RiderTrip } from './rider';
@@ -130,6 +130,49 @@ export class RealWorld implements World {
   private controlAvailable = false;
   private lastControlAt = -Infinity;
   private lastControl: { items: ControlRider[]; asOf: string } | null = null;
+
+  /** 직원용 전달지 — 배송마다 한 번(열람 기록이 남으므로 박자마다 부르지 않는다). 화면 메모리에만 */
+  private readonly drops = new Map<string, DropLocationView & { at: number }>();
+
+  dropLocation(deliveryId: string): DropLocationView {
+    if (this.writeAccess === 'remote') return { state: 'none', reason: '다른 기기에서는 전달지를 보지 않음 — 개발 서버가 있는 PC 에서만(관제 계정)' };
+    if (!this.controlAvailable) return { state: 'none', reason: '이 PC 에 관제 계정 비밀번호 파일이 없어 전달지를 못 읽음' };
+    const cur = this.drops.get(deliveryId);
+    // 서버 오류(none + 5xx 등)는 30초 뒤 다시, 나머지는 한 번 읽은 값 그대로
+    if (cur && !(cur.state === 'none' && cur.reason.startsWith('잠시') && this.clock.now - cur.at > 30)) return cur;
+    this.drops.set(deliveryId, { state: 'loading', at: this.clock.now });
+    this.backend
+      .getStaffDropLocation(deliveryId)
+      .then((d) => {
+        const pos = d.lat != null && d.lng != null ? { lat: d.lat, lng: d.lng } : null;
+        this.drops.set(deliveryId, {
+          state: 'ok',
+          address: [d.roadAddress, d.detailAddress].filter(Boolean).join(' '),
+          postalCode: d.postalCode ?? null,
+          pos,
+          source: d.coordinateSource === 'ORDER_PIN' ? '주문 핀' : d.coordinateSource === 'ADDRESS_GEOCODE' ? '주소로 찾은 좌표' : '좌표 없음',
+          logId: d.piiAccessLogId ?? null,
+          kind: d.kind === 'RETURN_PICKUP' ? '반품 회수지(고객 집)' : d.kind === 'REDELIVERY_DROP' ? '다시 배송 실제 집' : '전달지',
+          at: this.clock.now,
+        });
+      })
+      .catch((e: unknown) => {
+        const code = e instanceof ApiProblem ? e.code : undefined;
+        const st = e instanceof ApiProblem ? e.status : undefined;
+        const reason =
+          code === 'DROP_LOCATION_CLOSED'
+            ? '배정 전이거나 이미 끝난 배송 — 전달지는 배정 ~ 전달 전에만 열림'
+            : code === 'NO_CUSTOMER_DROP'
+              ? '고객 전달지가 없는 배송(오배송 회수·실패 반납)'
+              : st === 403
+                ? '권한 없음(라이더 운영·관리자만)'
+                : st === 404
+                  ? '주문 당시 전달지 사본이 없음'
+                  : `잠시 못 읽음(${describe(e)}) — 열람 기록이 안 되면 백엔드가 주소를 주지 않는다`;
+        this.drops.set(deliveryId, { state: 'none', reason, at: this.clock.now });
+      });
+    return { state: 'loading' };
+  }
 
   controlBoard(): { items: ControlRider[]; asOf: string } | null {
     return this.lastControl;
@@ -510,7 +553,8 @@ export class RealWorld implements World {
         riderId: d?.assignment?.riderId ?? s.riderId ?? null,
         riderIds: involvedRiders(r),
         radiusKm: d?.state === 'DISPATCHING' ? (at?.currentRadiusKm ?? null) : null,
-        customer: null,
+        // 직원용 전달지를 읽은 배송만 지도에 전달지 핀(고른 배송 — 사용자 결정 2026-11-18)
+        customer: dropPos(this.drops.get(s.deliveryId as string)),
         purpose: d?.purpose ?? null,
         pickup: null,
         createdAt: s.createdAt ? (Date.parse(s.createdAt) - this.startWall) / 1000 : 0,
@@ -609,6 +653,10 @@ function involvedRiders(r: Row): string[] {
   const a = r.dispatch?.assignment?.riderId ?? r.summary.riderId;
   if (a) set.add(a);
   return [...set];
+}
+
+function dropPos(d: DropLocationView | undefined): LatLng | null {
+  return d && d.state === 'ok' ? d.pos : null;
 }
 
 function describe(e: unknown): string {

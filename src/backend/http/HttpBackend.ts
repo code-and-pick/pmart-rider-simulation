@@ -12,6 +12,7 @@ import {
   type Center,
   type CommandResponse,
   type ControlRiderList,
+  type StaffDropLocation,
   type Delivery,
   type DeliveryExecution,
   type DeliveryListResponse,
@@ -77,6 +78,11 @@ export class HttpBackend implements RiderPort {
   constructor(private readonly o: HttpBackendOptions) {
     this.doFetch = o.fetch ?? ((...a) => fetch(...a));
     this.observer = this.makeObserver();
+  }
+
+  /** execution 0.24.0 직원용 전달지(주소·좌표, 열람 기록) — 관제 계정, 이 PC 만. 응답은 화면 메모리에만(로그에는 경로·상태만) */
+  getStaffDropLocation(deliveryId: string): Promise<StaffDropLocation> {
+    return this.request<StaffDropLocation>('control', 'GET', `/deliveries/${enc(deliveryId)}/drop-location`);
   }
 
   /** tracking 0.8.0 라이더 관제 — 운행 중 라이더(라이더 앱 포함)의 현재 위치. RIDER_OPS·OPERATOR_ADMIN 만(관제 계정, 이 PC 만) */

@@ -228,3 +228,56 @@ describe('라이더 앱 라이더 표시', () => {
     expect(app().pos!.lat).toBeCloseTo(35.161, 6); // 끝은 서버 값 그대로
   });
 });
+
+describe('직원용 전달지(주소·좌표) — 사용자 2026-11-18 "주소까지 보이게"', () => {
+  const summary = { deliveryId: 'DLV-1', state: 'ASSIGNED', createdAt: '2026-11-18T08:00:00Z' };
+  it('이 PC(관제 계정)는 X-Sim-Actor control 로 한 번만 읽어 주소·핀, 409 는 이유, 다른 기기는 부르지 않음', async () => {
+    const calls: { url: string; headers: Record<string, string> }[] = [];
+    let mode: 'ok' | '409' = 'ok';
+    const fake = (async (url: string, init: RequestInit) => {
+      calls.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
+      if (url.includes('/sim-auth/status')) return json(200, { riderSigning: true, observer: true, control: true });
+      if (url.includes('/drop-location'))
+        return mode === 'ok'
+          ? json(200, { deliveryId: 'DLV-1', kind: 'DELIVERY_DROP', roadAddress: '부산 시험로 1', detailAddress: '101호', postalCode: '47000', lat: 35.16, lng: 129.06, coordinateSource: 'ORDER_PIN', piiAccessLogId: 'PII-1' })
+          : json(409, { code: 'DROP_LOCATION_CLOSED' });
+      if (url.endsWith('/dispatch')) return json(200, { state: 'ASSIGNED' });
+      if (url.includes('/deliveries')) return json(200, { items: [summary] });
+      return json(404, {});
+    }) as unknown as typeof fetch;
+    const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
+    await flush();
+    await w.advance(0);
+    expect(w.dropLocation('DLV-1')).toEqual({ state: 'loading' });
+    await flush();
+    const d = w.dropLocation('DLV-1');
+    expect(d).toMatchObject({ state: 'ok', address: '부산 시험로 1 101호', postalCode: '47000', pos: { lat: 35.16, lng: 129.06 }, logId: 'PII-1' });
+    w.dropLocation('DLV-1');
+    const drops = calls.filter((c) => c.url.includes('/drop-location'));
+    expect(drops).toHaveLength(1); // 열람 기록이 남으므로 한 번만
+    expect(drops[0]!.headers).toMatchObject({ 'X-Sim-Actor': 'control' });
+    expect(w.deliveryCards().find((c) => c.deliveryId === 'DLV-1')?.customer).toEqual({ lat: 35.16, lng: 129.06 });
+
+    mode = '409';
+    w.dropLocation('DLV-2');
+    await flush();
+    expect(w.dropLocation('DLV-2')).toMatchObject({ state: 'none' });
+    expect((w.dropLocation('DLV-2') as { reason: string }).reason).toContain('배정 ~ 전달 전');
+  });
+
+  it('다른 기기·관제 계정 없는 PC 는 부르지 않는다', async () => {
+    for (const status of [json(403, { code: 'LOOPBACK_ONLY' }), json(200, { riderSigning: true, observer: true, control: false })]) {
+      const urls: string[] = [];
+      const fake = (async (url: string) => {
+        urls.push(url);
+        if (url.includes('/sim-auth/status')) return status.clone();
+        return json(200, { items: [] });
+      }) as unknown as typeof fetch;
+      const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
+      await flush();
+      expect(w.dropLocation('DLV-1').state).toBe('none');
+      await flush();
+      expect(urls.some((u) => u.includes('/drop-location'))).toBe(false);
+    }
+  });
+});

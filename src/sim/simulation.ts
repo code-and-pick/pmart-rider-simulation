@@ -13,7 +13,7 @@ import { Rng } from '../util/rng';
 import { mockStartEpochMs, SimClock } from './clock';
 import { VirtualRider, type RiderTrip } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
-import type { DeliveryCard, IncidentCounts, MetricsSummary, NoteRecord, PhaseSegment, ScenarioKnobs, World } from './world';
+import type { DeliveryCard, DropLocationView, IncidentCounts, MetricsSummary, NoteRecord, PhaseSegment, ScenarioKnobs, World } from './world';
 import { mockLocator } from './geocode';
 import { assemble, dispatchSteps, executionSteps, type DeliveryTimeline } from './timeline';
 
@@ -125,6 +125,23 @@ export class Simulation implements World {
   /** MOCK 세계의 배송 카드. 실서버(P2)는 관찰 계정 조회로 같은 모양을 만든다. */
   deliveryCards(): DeliveryCard[] {
     return [...this.backend.deliveries.values()].map((d) => card(d, this.backend.ridersOf(d.deliveryId), this.backend.displayNumbers(d))).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  /** MOCK 전달지 — 가상 좌표·가상 주소(실서버 직원용 drop-location 흉내, 열람 기록 없음) */
+  dropLocation(deliveryId: string): DropLocationView {
+    const del = this.backend.deliveries.get(deliveryId);
+    if (!del) return { state: 'none', reason: '없는 배송' };
+    if (del.purpose === 'MISDELIVERY_RECOVERY') return { state: 'none', reason: '고객 전달지가 없는 배송(오배송 회수 — MFC 로)' };
+    const redeliver = del.purpose === 'MISDELIVERY_REDELIVERY';
+    return {
+      state: 'ok',
+      address: redeliver ? (del.homeAddress ?? '(MOCK 실제 집)') : '(MOCK 가상 주소 — 실제 주소 아님)',
+      postalCode: null,
+      pos: { ...del.customer },
+      source: 'MOCK 가상 좌표',
+      logId: null,
+      kind: redeliver ? '다시 배송 실제 집' : '전달지',
+    };
   }
 
   /** MOCK 배송 한 건의 흐름 — MockBackend 의 배차·제안·수행 기록 시각(시뮬레이션 시각) */

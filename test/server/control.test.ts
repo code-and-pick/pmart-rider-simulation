@@ -7,11 +7,15 @@ describe('관제 계정 (RR-08)', () => {
   it('붙여도 되는 요청은 GET /api/v1/rider-locations 하나', () => {
     expect(isControlRead('GET', '/api/v1/rider-locations?mfcId=MFC-SEED-01')).toBe(true);
     expect(isControlRead('HEAD', '/api/v1/rider-locations')).toBe(true);
+    expect(isControlRead('GET', '/api/v1/deliveries/DLV-1/drop-location')).toBe(true);
     for (const [m, u] of [
       ['POST', '/api/v1/rider-locations'],
       ['GET', '/api/v1/rider-locations/x'],
       ['GET', '/api/v1/riders/RD-1/restrictions'],
       ['GET', '/api/v1/deliveries/DL-1/drop-info'],
+      ['POST', '/api/v1/deliveries/DL-1/drop-location'],
+      ['GET', '/api/v1/deliveries/DL-1/drop-location/x'],
+      ['GET', '/api/v1/deliveries/DL-1/dispatch'],
       ['GET', '/api/v1/internal/rider-locations'],
       ['GET', '/rider-locations'],
     ] as const) {
@@ -21,6 +25,7 @@ describe('관제 계정 (RR-08)', () => {
 
   it('다른 기기는 라이더 관제 경로 자체가 막힌다', () => {
     expect(decideLanRequest('GET', '/api/v1/rider-locations?mfcId=MFC-SEED-01', '192.168.0.55')).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
+    expect(decideLanRequest('GET', '/api/v1/deliveries/DLV-1/drop-location', '192.168.0.55')).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
   });
 
   it('비밀번호가 거절되면(400·401) 다시 로그인하지 않는다 — 같이 쓰는 계정이 잠기지 않게', async () => {
