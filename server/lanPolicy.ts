@@ -102,3 +102,13 @@ export function decideLanRequest(method: string, url: string, remoteAddress: str
   if (!route) return { allow: false, status: 403, code: 'LAN_PATH_BLOCKED' };
   return { allow: true, stripAuthorization: true, token: route.token };
 }
+
+/**
+ * 관제 계정(라이더 운영·관리자 권한 — RR-08)으로 붙여도 되는 요청인가: 이 PC 의 `GET /api/v1/rider-locations` 한 가지만.
+ * 관리자 권한 토큰이라 다른 경로·쓰기에는 절대 붙이지 않는다. 다른 기기는 이 경로가 허용 목록에 없어 위에서 이미 막힌다
+ * (백엔드가 라이더 위치를 라이더 운영·관리자에게만 보이므로, LAN 아무 기기에나 넘기지 않는다).
+ */
+export function isControlRead(method: string, url: string): boolean {
+  const m = method.toUpperCase();
+  return (m === 'GET' || m === 'HEAD') && apiSubPath(url) === '/rider-locations';
+}

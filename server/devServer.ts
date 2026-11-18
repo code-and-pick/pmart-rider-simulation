@@ -12,20 +12,22 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HttpProxy, Plugin } from 'vite';
-import { decideLanRequest, isListedSimRider, isLoopback } from './lanPolicy';
+import { decideLanRequest, isControlRead, isListedSimRider, isLoopback } from './lanPolicy';
 import { makeSigner, NotSimRiderError, RiderTokenCache } from './riderToken';
 import { GeocodeService, parseAddressBody } from './geocode';
 import { parsePoint, RouteService } from './routing';
 import { Secrets, SECRET_FILES, secretsDir } from './secrets';
-import { fetchStaffToken, OBSERVER_ACCOUNT, staffAuthEndpoints, StaffTokenCache } from './staffToken';
+import { CONTROL_ACCOUNT, fetchStaffToken, OBSERVER_ACCOUNT, staffAuthEndpoints, StaffTokenCache } from './staffToken';
 
 type Next = (err?: unknown) => void;
-type Actor = { kind: 'rider'; riderId: string } | { kind: 'observer' };
+type Actor = { kind: 'rider'; riderId: string } | { kind: 'observer' } | { kind: 'control' };
 
 interface AuthDeps {
   secrets: Secrets;
   riders: RiderTokenCache | null;
   staff: StaffTokenCache | null;
+  /** 관제 계정(RR-08) — 이 PC 의 GET /rider-locations 에만 */
+  control: StaffTokenCache | null;
   routes: RouteService;
   geocoder: GeocodeService;
 }
@@ -42,15 +44,19 @@ function initDeps(root: string, kakaoRestKey: string | null, kakaoLocalKey: stri
   const staff = st.observer
     ? new StaffTokenCache(() => fetchStaffToken(staffAuthEndpoints(), OBSERVER_ACCOUNT, secrets.read(SECRET_FILES.observerPassword)))
     : null;
+  // 비밀번호가 거절되면 다시 시도하지 않는다(같이 쓰는 관리자 계정이 잠기지 않게)
+  const control = st.control
+    ? new StaffTokenCache(() => fetchStaffToken(staffAuthEndpoints(), CONTROL_ACCOUNT, secrets.read(SECRET_FILES.controlPassword)), 60, true)
+    : null;
   console.info(
-    `[sim-auth] 비밀 파일 — 라이더 서명키 ${st.riderSigning ? '있음' : '없음'}, 관찰 계정 ${st.observer ? '있음' : '없음'} (실서버 모드 ${
+    `[sim-auth] 비밀 파일 — 라이더 서명키 ${st.riderSigning ? '있음' : '없음'}, 관찰 계정 ${st.observer ? '있음' : '없음'}, 관제 계정 ${st.control ? '있음' : '없음'} (실서버 모드 ${
       st.riderSigning && st.observer ? '가능' : '일부/불가'
     })`,
   );
   console.info(`[sim-route] 카카오모빌리티 REST 키 ${kakaoRestKey ? '있음 — 도로 경로' : '없음 — 직선으로'}`);
   const localKey = kakaoLocalKey ?? kakaoRestKey;
   console.info(`[sim-geocode] 카카오 주소 검색 키 ${localKey ? (kakaoLocalKey ? '있음(KAKAO_LOCAL_REST_KEY)' : '있음(모빌리티 키와 같은 앱 키)') : '없음 — 실서버 다시 배송은 거절'}`);
-  return { secrets, riders, staff, routes: new RouteService(kakaoRestKey), geocoder: new GeocodeService(localKey) };
+  return { secrets, riders, staff, control, routes: new RouteService(kakaoRestKey), geocoder: new GeocodeService(localKey) };
 }
 
 function problem(res: ServerResponse, status: number, code: string, title: string) {
@@ -72,7 +78,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
 
   const path = url.split('?')[0] ?? '';
   if (path === '/sim-auth/status') {
-    const st = deps?.secrets.status() ?? { riderSigning: false, observer: false };
+    const st = deps?.secrets.status() ?? { riderSigning: false, observer: false, control: false };
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
     res.end(JSON.stringify({ ...st, secretsDir: deps ? '설정됨' : '없음' }));
@@ -136,6 +142,10 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
     actor = { kind: 'rider', riderId: riderHdr };
   } else if (actorHdr === 'observer') {
     actor = { kind: 'observer' };
+  } else if (actorHdr === 'control') {
+    // 관리자 권한 토큰 — 이 PC 의 GET /api/v1/rider-locations 한 가지만(lanPolicy.isControlRead)
+    if (!isControlRead(method, url)) return problem(res, 403, 'CONTROL_READ_ONLY', '관제 계정은 라이더 관제 조회(GET /rider-locations)에만');
+    actor = { kind: 'control' };
   }
 
   if (actor?.kind === 'rider') {
@@ -154,6 +164,15 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
       const st = (e as { status?: number }).status;
       console.warn(`[sim-auth] 관찰 계정 로그인 실패${st ? ` (HTTP ${st})` : ''}`);
       return problem(res, 502, 'OBSERVER_LOGIN_FAILED', '관찰 계정 로그인 실패');
+    }
+  } else if (actor?.kind === 'control') {
+    if (!deps?.control) return problem(res, 503, 'SIM_AUTH_UNAVAILABLE', '관제 계정 비밀번호 파일이 없는 PC');
+    try {
+      req.headers.authorization = `Bearer ${await deps.control.get()}`;
+    } catch (e) {
+      const st = (e as { status?: number }).status;
+      console.warn(`[sim-auth] 관제 계정 로그인 실패${st ? ` (HTTP ${st})` : ''} — 비밀번호 거절이면 개발 서버를 다시 켤 때까지 다시 시도하지 않음`);
+      return problem(res, 502, 'CONTROL_LOGIN_FAILED', '관제 계정 로그인 실패');
     }
   }
   (req as unknown as Record<symbol, Actor | null>)[ACTOR] = actor;
@@ -188,9 +207,10 @@ export function configureApiProxy(proxy: HttpProxy.Server): void {
     const actor = (req as unknown as Record<symbol, Actor | null>)[ACTOR];
     if (!actor || !deps) return;
     if (actor.kind === 'rider') deps.riders?.invalidate(actor.riderId);
+    else if (actor.kind === 'control') deps.control?.invalidate();
     else deps.staff?.invalidate();
     const path = (req.url ?? '').split('?')[0];
-    console.info(`[sim-auth] ${actor.kind === 'rider' ? actor.riderId : 'observer'} ${req.method} ${path} → 401, 토큰 버림(다음 요청에 새로)`);
+    console.info(`[sim-auth] ${actor.kind === 'rider' ? actor.riderId : actor.kind} ${req.method} ${path} → 401, 토큰 버림(다음 요청에 새로)`);
   });
 }
 

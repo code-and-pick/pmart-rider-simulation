@@ -6,6 +6,8 @@
 import { randomUUID } from 'node:crypto';
 
 export const OBSERVER_ACCOUNT = 'claude-mfc-wrk';
+/** 관제 계정 — OPERATOR_ADMIN. 이 PC 의 GET /rider-locations 에만 붙인다(RR-08, 사용자 2026-11-18 "claude-dev 써") */
+export const CONTROL_ACCOUNT = 'claude-dev';
 const MAIL_DOMAIN = '@pmart.com';
 const REALM = 'pmart-staff';
 
@@ -74,13 +76,17 @@ export async function fetchStaffToken(
 export class StaffTokenCache {
   private cur: { token: string; exp: number } | null = null;
   private pending: Promise<string> | null = null;
+  /** 비밀번호가 틀려 로그인이 거절됐으면 개발 서버를 다시 켤 때까지 다시 시도하지 않는다(같이 쓰는 계정이 잠기지 않게) */
+  private refused: StaffAuthError | null = null;
 
   constructor(
     private readonly login: () => Promise<{ token: string; exp: number }>,
     private readonly renewBeforeSec = 60,
+    private readonly stopOnRefusal = false,
   ) {}
 
   async get(): Promise<string> {
+    if (this.refused) throw this.refused;
     const now = Math.floor(Date.now() / 1000);
     if (this.cur && this.cur.exp - now > this.renewBeforeSec) return this.cur.token;
     if (!this.pending) {
@@ -88,6 +94,11 @@ export class StaffTokenCache {
         .then((t) => {
           this.cur = t;
           return t.token;
+        })
+        .catch((e: unknown) => {
+          // Keycloak 400·401 = 비밀번호 틀림·계정 잠김 — 되풀이하면 잠금이 길어진다
+          if (this.stopOnRefusal && e instanceof StaffAuthError && (e.status === 400 || e.status === 401)) this.refused = e;
+          throw e;
         })
         .finally(() => {
           this.pending = null;

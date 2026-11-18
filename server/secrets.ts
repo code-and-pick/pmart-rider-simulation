@@ -8,6 +8,8 @@ export const SECRET_FILES = {
   riderKey: 'rider-auth-signing-key.pem',
   riderKid: 'rider-auth-signing-kid',
   observerPassword: 'keycloak-claude-mfc-wrk-password',
+  /** 관제 계정(claude-dev, OPERATOR_ADMIN) — GET /rider-locations 한 가지에만 쓴다(RR-08, 사용자 2026-11-18 "1번으로 해") */
+  controlPassword: 'keycloak-claude-dev-password',
 } as const;
 
 export function secretsDir(projectRoot: string): string {
@@ -26,10 +28,11 @@ export class Secrets {
   }
 
   /** 실서버 모드에 필요한 파일이 있는지(값은 보지 않는다) */
-  status(): { riderSigning: boolean; observer: boolean } {
+  status(): { riderSigning: boolean; observer: boolean; control: boolean } {
     return {
       riderSigning: this.has(SECRET_FILES.riderKey) && this.has(SECRET_FILES.riderKid),
       observer: this.has(SECRET_FILES.observerPassword),
+      control: this.has(SECRET_FILES.controlPassword),
     };
   }
 }

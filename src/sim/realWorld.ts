@@ -10,7 +10,7 @@
 
 import { HttpBackend } from '../backend/http/HttpBackend';
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
-import { DEFAULT_PARAMS, REAL_RIDER_GATE, simRiderId, type SimParams } from '../config';
+import { DEFAULT_PARAMS, isSimRiderId, REAL_RIDER_GATE, simRiderId, type SimParams } from '../config';
 import { ApiProblem, type Delivery, type DomainEventType, type StaffDeliverySummary } from '../domain/contract';
 import { SimClock } from './clock';
 import { VirtualRider } from './rider';
@@ -28,6 +28,15 @@ const MAX_CATCHUP_SEC = 600;
 const TERMINAL_X = new Set(['COMPLETED', 'FAILED', 'CANCELLED', 'RETURNED_TO_STORE']);
 /** 한 번 조회에서 dispatch 를 다시 읽는 배송 수 상한 [시뮬] — 게이트웨이 처리율 제한(주체 단위)을 아끼려고 */
 const DISPATCH_READS_PER_POLL = 15;
+/** 관제 진행 중 배송 단계(tracking ControlRider.activeDeliveries.stage) → 화면 글자 */
+const STAGE_LABEL: Record<string, string> = {
+  UNASSIGNED: '배정 전',
+  TO_STORE: 'MFC 로 가는 중',
+  AT_STORE: 'MFC 도착',
+  TO_CUSTOMER: '고객에게 가는 중',
+  AT_CUSTOMER: '고객 도착',
+  DONE: '끝남',
+};
 
 interface Row {
   summary: StaffDeliverySummary;
@@ -52,6 +61,13 @@ export class RealWorld implements World {
   readonly clock: SimClock;
   readonly backend: HttpBackend;
   private readonly remote: RemoteRider[] = [];
+  /** 라이더 관제(RR-08)로 읽은 시뮬레이터 밖 라이더(라이더 앱) — 운행 중인 라이더만, 이 PC 만 */
+  private readonly appRiders = new Map<string, RemoteRider>();
+  /** 관제 조회 상태 — null 이면 아직 안 부름 */
+  private controlStatus: string | null = null;
+  /** 이 PC 개발 서버에 관제 계정 비밀번호 파일이 있나(/sim-auth/status) */
+  private controlAvailable = false;
+  private lastControlAt = -Infinity;
   /** 이 브라우저가 움직이는 가상 라이더(P3 — 잠금이 풀린 뒤에만) */
   private readonly driven = new Map<string, VirtualRider>();
   readonly apiLog: ApiCallRecord[] = [];
@@ -148,7 +164,7 @@ export class RealWorld implements World {
   }
 
   get riders(): RiderView[] {
-    return this.remote.map((r) => this.driven.get(r.id) ?? r);
+    return [...this.remote.map((r) => this.driven.get(r.id) ?? r), ...this.appRiders.values()];
   }
 
   get operationLock(): string | null {
@@ -259,8 +275,9 @@ export class RealWorld implements World {
         this.writeAccess = 'remote';
         return;
       }
-      const s = (await res.json()) as { riderSigning?: boolean; observer?: boolean };
-      this.authStatus = `개발 서버: 라이더 서명키 ${s.riderSigning ? '있음' : '없음'}, 관찰 계정 ${s.observer ? '있음' : '없음'}`;
+      const s = (await res.json()) as { riderSigning?: boolean; observer?: boolean; control?: boolean };
+      this.authStatus = `개발 서버: 라이더 서명키 ${s.riderSigning ? '있음' : '없음'}, 관찰 계정 ${s.observer ? '있음' : '없음'}, 관제 계정 ${s.control ? '있음' : '없음'}`;
+      this.controlAvailable = !!s.control;
       this.writeAccess = s.riderSigning ? 'ok' : 'no-key';
     } catch {
       this.authStatus = '개발 서버 토큰 상태를 읽지 못함';
@@ -318,6 +335,57 @@ export class RealWorld implements World {
         r.note = e instanceof ApiProblem && e.status === 404 ? '실서버에 올린 위치 없음' : `위치 조회 실패: ${describe(e)}`;
       }
       r.deliveryId = [...this.rows.values()].find((x) => x.summary.riderId === r.id && !TERMINAL_X.has(x.summary.state ?? ''))?.summary.deliveryId ?? null;
+    }
+
+    // 4. 라이더 관제(RR-08) — 운행 중 라이더 전원(라이더 앱 포함) 현재 위치. 이 PC 만(관제 계정 토큰은 개발 서버가 이 경로에만 붙인다)
+    await this.pollControl();
+  }
+
+  /** 관제 조회 박자 [시뮬] — 계약 설명 "화면은 10초마다 다시 부른다" */
+  private static readonly CONTROL_POLL_SEC = 10;
+
+  private async pollControl() {
+    if (this.writeAccess === 'remote') {
+      this.controlStatus = '라이더 관제: 다른 기기에서는 안 보임(라이더 위치는 라이더 운영·관리자만 — 개발 서버가 있는 PC 에서만)';
+      return;
+    }
+    if (!this.controlAvailable) {
+      this.controlStatus = this.writeAccess === 'unknown' ? null : '라이더 관제: 이 PC 에 관제 계정 비밀번호 파일 없음 — 라이더 앱 라이더 위치 못 봄';
+      return;
+    }
+    if (this.clock.now - this.lastControlAt < RealWorld.CONTROL_POLL_SEC) return;
+    this.lastControlAt = this.clock.now;
+    try {
+      const list = await this.backend.listRiderLocations(this.params.mfcId);
+      const seen = new Set<string>();
+      let located = 0;
+      for (const c of list.items ?? []) {
+        if (!c.riderId) continue;
+        const sim = isSimRiderId(c.riderId);
+        // 시뮬레이터 라이더는 위 3번(본인 조회)·이 브라우저 엔진이 그린다 — 여기서는 라이더 앱 라이더만
+        if (sim) continue;
+        seen.add(c.riderId);
+        let r = this.appRiders.get(c.riderId);
+        if (!r) {
+          r = new RemoteRider(c.riderId);
+          this.appRiders.set(c.riderId, r);
+        }
+        const loc = c.location;
+        r.pos = loc?.lat !== undefined && loc?.lng !== undefined ? { lat: loc.lat, lng: loc.lng } : null;
+        if (r.pos) located++;
+        const d = c.activeDeliveries?.[0];
+        r.deliveryId = d?.deliveryId ?? null;
+        const age = c.staleSinceSeconds;
+        r.note = [
+          `라이더 앱${c.nameMasked ? ` ${c.nameMasked}` : ''}`,
+          d ? `${STAGE_LABEL[d.stage ?? ''] ?? '진행 중'}` : '배송 없음',
+          r.pos ? `위치 ${age ?? '?'}초 전${c.stale ? ' — 끊김' : ''}` : '위치 아직 없음',
+        ].join(' · ');
+      }
+      for (const id of [...this.appRiders.keys()]) if (!seen.has(id)) this.appRiders.delete(id); // 운행 끈 라이더는 목록에서 빠진다
+      this.controlStatus = `라이더 관제(관제 계정 claude-dev, 이 PC 만): 운행 중 라이더 앱 라이더 ${seen.size}명 · 위치 있음 ${located}명`;
+    } catch (e) {
+      this.controlStatus = `라이더 관제 실패: ${describe(e)}`;
     }
   }
 
@@ -446,6 +514,7 @@ export class RealWorld implements World {
     if (withD.length) lines.push(`dispatch shipmentId 실측(§5): 채워짐 ${filled} / 읽은 배송 ${withD.length}`);
     if (errs.length) lines.push(`배차 조회 실패 ${errs.length}건 — 예: ${errs[0]}`);
     lines.push(this.operationLock ?? '실서버 가상 라이더 운행 가능(잠금 풀림)');
+    if (this.controlStatus) lines.push(this.controlStatus);
     const loc = this.locator as { ready: boolean; reason?: string | null } | null;
     lines.push(
       loc?.ready

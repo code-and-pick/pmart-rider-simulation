@@ -11,6 +11,7 @@ import {
   ResultUnknown,
   type Center,
   type CommandResponse,
+  type ControlRiderList,
   type Delivery,
   type DeliveryExecution,
   type DeliveryListResponse,
@@ -45,7 +46,8 @@ import type {
 } from '../port';
 
 type Method = ApiCallRecord['method'];
-type Actor = { rider: string } | 'observer';
+/** control = 관제 계정(RR-08) — 개발 서버가 이 PC 의 GET /rider-locations 에만 토큰을 붙인다 */
+type Actor = { rider: string } | 'observer' | 'control';
 
 interface ReqOpts {
   query?: Record<string, string | number | undefined>;
@@ -77,6 +79,11 @@ export class HttpBackend implements RiderPort {
     this.observer = this.makeObserver();
   }
 
+  /** tracking 0.8.0 라이더 관제 — 운행 중 라이더(라이더 앱 포함)의 현재 위치. RIDER_OPS·OPERATOR_ADMIN 만(관제 계정, 이 PC 만) */
+  listRiderLocations(mfcId: string): Promise<ControlRiderList> {
+    return this.request<ControlRiderList>('control', 'GET', '/rider-locations', { query: { mfcId } });
+  }
+
   asRider(riderId: string): RiderApi {
     if (!isSimRiderId(riderId)) throw new Error(`시뮬레이터 라이더 ID 가 아님: ${riderId}`);
     let api = this.riderApis.get(riderId);
@@ -100,7 +107,7 @@ export class HttpBackend implements RiderPort {
   private log(actor: Actor, method: Method, path: string, status: number | 'ERR', ms: number, code?: string) {
     const rec: ApiCallRecord = {
       at: this.o.now(),
-      actor: actor === 'observer' ? 'observer' : actor.rider,
+      actor: typeof actor === 'string' ? actor : actor.rider,
       method,
       path,
       status,
@@ -120,7 +127,7 @@ export class HttpBackend implements RiderPort {
       : '';
     const logPath = qs ? `${path}?${qs}` : path;
     const headers: Record<string, string> = { Accept: 'application/json, application/problem+json' };
-    if (actor === 'observer') headers['X-Sim-Actor'] = 'observer';
+    if (typeof actor === 'string') headers['X-Sim-Actor'] = actor;
     else headers['X-Sim-Rider'] = actor.rider;
     if (opts.write) {
       headers['Idempotency-Key'] = opts.write.idempotencyKey;

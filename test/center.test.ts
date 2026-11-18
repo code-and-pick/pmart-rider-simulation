@@ -126,3 +126,61 @@ describe('MFC 위치 — center-master', () => {
     expect(w.mfcLocation).toEqual({ lat: 35.1578, lng: 129.0597 });
   });
 });
+
+describe('라이더 관제(RR-08) — 라이더 앱 라이더 위치', () => {
+  it('이 PC(관제 계정 있음)면 GET /rider-locations 를 X-Sim-Actor control 로, 라이더 앱 라이더를 지도에 — 시뮬레이터 라이더는 빼고', async () => {
+    const calls: { url: string; headers: Record<string, string> }[] = [];
+    const fake = (async (url: string, init: RequestInit) => {
+      calls.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
+      if (url.includes('/sim-auth/status')) return json(200, { riderSigning: true, observer: true, control: true });
+      if (url.includes('/rider-locations'))
+        return json(200, {
+          asOf: '2026-11-18T03:30:00Z',
+          items: [
+            { riderId: 'RD-sim-01', stale: false, activeDeliveries: [], location: { lat: 1, lng: 1 } },
+            {
+              riderId: 'RD-5c41',
+              nameMasked: '김*수',
+              stale: false,
+              staleSinceSeconds: 4,
+              location: { lat: 35.16, lng: 129.06, quality: 'GOOD' },
+              activeDeliveries: [{ deliveryId: 'DLV-1', stage: 'TO_STORE', pickedUp: false }],
+            },
+            { riderId: 'RD-noloc', stale: true, activeDeliveries: [], location: null },
+          ],
+        });
+      if (url.includes('/mfc-pickup-points')) return json(200, { items: [{ centerId: 'MFC-SEED-01', name: 'x', coordinates: { lat: 35.1578, lng: 129.0597 } }] });
+      if (url.includes('/deliveries')) return json(200, { items: [] });
+      return json(404, {});
+    }) as unknown as typeof fetch;
+    const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
+    await flush();
+    await w.advance(0);
+    const call = calls.find((c) => c.url.includes('/rider-locations'));
+    expect(call?.url).toContain('mfcId=MFC-SEED-01');
+    expect(call?.headers).toMatchObject({ 'X-Sim-Actor': 'control' });
+    const app = w.riders.filter((r) => !r.id.startsWith('RD-sim-'));
+    expect(app.map((r) => r.id)).toEqual(['RD-5c41', 'RD-noloc']);
+    expect(app[0]).toMatchObject({ pos: { lat: 35.16, lng: 129.06 }, deliveryId: 'DLV-1' });
+    expect(app[0]!.note).toContain('MFC 로 가는 중');
+    expect(app[1]!.pos).toBeNull();
+    expect(w.diagnostics().some((d) => d.includes('라이더 앱 라이더 2명') && d.includes('위치 있음 1명'))).toBe(true);
+  });
+
+  it('다른 기기·관제 계정 없는 PC 는 부르지 않는다', async () => {
+    for (const status of [json(403, { code: 'LOOPBACK_ONLY' }), json(200, { riderSigning: true, observer: true, control: false })]) {
+      const urls: string[] = [];
+      const fake = (async (url: string) => {
+        urls.push(url);
+        if (url.includes('/sim-auth/status')) return status.clone();
+        if (url.includes('/deliveries')) return json(200, { items: [] });
+        return json(404, {});
+      }) as unknown as typeof fetch;
+      const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
+      await flush();
+      await w.advance(0);
+      expect(urls.some((u) => u.includes('/rider-locations'))).toBe(false);
+      expect(w.diagnostics().some((d) => d.startsWith('라이더 관제:'))).toBe(true);
+    }
+  });
+});
