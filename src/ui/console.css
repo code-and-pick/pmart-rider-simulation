@@ -1334,3 +1334,76 @@
 .c-loc.none {
   color: var(--c-red);
 }
+
+/* 배송·라이더 목록 — 묶기·정렬 줄, 접는 묶음 */
+.c-view-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -2px 0 8px;
+  font-size: 12px;
+}
+.c-mini-seg {
+  display: inline-flex;
+  border: 1px solid var(--c-line);
+  border-radius: 7px;
+  overflow: hidden;
+  margin-right: 6px;
+}
+.c-mini-seg button {
+  border: 0;
+  background: var(--c-panel);
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.c-mini-seg button + button {
+  border-left: 1px solid var(--c-line);
+}
+.c-mini-seg button.on {
+  background: var(--c-ink);
+  color: var(--c-panel) !important;
+}
+.c-select {
+  border: 1px solid var(--c-line);
+  border-radius: 7px;
+  background: var(--c-panel);
+  color: var(--c-ink);
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12px;
+}
+.c-group {
+  margin-bottom: 6px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-soft);
+}
+.c-group.hot {
+  border-color: color-mix(in srgb, var(--c-red) 40%, var(--c-line));
+}
+.c-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+.c-group > summary .c-link {
+  margin-left: auto;
+}
+.c-group-l {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.c-group > .c-list {
+  padding: 0 6px 2px;
+}
+p.c-empty {
+  margin: 0;
+}

@@ -14,6 +14,7 @@ import { Progress } from './Progress';
 import { FILTER_LABEL, rowMatches, type OpsFilter, type OpsRow } from './ops';
 import { OrdersTab } from './OrdersTab';
 import { riderIndex, type RiderRow } from './riderTable';
+import { groupRows, sortRows, type GroupBy, type SortBy } from './listView';
 import { isSimRiderId } from '../config';
 import { apiFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
@@ -125,13 +126,14 @@ const STATUS_TABS: readonly (readonly [OpsFilter | null, string])[] = [
   [null, '전체'],
 ];
 
-/** 목록 순서: 심각 알림 → 주의 알림 → 찾는 중 → 배송 중(오래된 것 먼저) → 끝난 것(최근 것 먼저) */
-function rank(r: OpsRow): number {
-  if (r.alert?.level === 'bad') return 0;
-  if (r.alert) return 1;
-  if (r.bucket === 'searching') return 2;
-  if (r.bucket === 'delivering') return 3;
-  return 4;
+/** 라이더 위치 수신 한 단어(묶음 머리·카드) */
+function RiderLoc({ r }: { r: RiderRow | undefined }) {
+  if (!r) return null;
+  return (
+    <span className={`c-loc ${r.loc}`} title={r.sinceSec !== null ? `마지막 위치 ${dur(r.sinceSec)} 전` : undefined}>
+      {r.loc === 'ok' ? '● 수신' : r.loc === 'stale' ? '● 끊김' : '● 위치 없음'}
+    </span>
+  );
 }
 
 function DeliveriesView() {
@@ -140,23 +142,27 @@ function DeliveriesView() {
   const f = app.filter;
   const sel = app.selected;
   const [q, setQ] = useState('');
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const [sortBy, setSortBy] = useState<SortBy>('urgent');
   const needle = q.trim().toLowerCase();
   const riders = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
+  const nameOf = (id: string) => riders.get(id)?.name ?? shortRiderId(id);
   const byRider = b.rows.filter((r) => !sel || r.card.riderId === sel || r.card.riderIds.includes(sel));
   const count = (k: OpsFilter | null) => byRider.filter((r) => rowMatches(r, k)).length;
-  const rows = byRider
+  const matched = byRider
     .filter((r) => rowMatches(r, f === 'failedCalls' ? null : f))
     .filter((r) => {
       if (!needle) return true;
       const c = r.card;
-      return [c.deliveryId, c.deliveryNumber, c.orderNumber, c.orderId, c.riderId, c.riderId ? shortRiderId(c.riderId) : null].some((x) => x?.toLowerCase().includes(needle));
-    })
-    .sort((x, y) => {
-      const d = rank(x) - rank(y);
-      if (d) return d;
-      if (rank(x) <= 3) return (x.startMs ?? 0) - (y.startMs ?? 0);
-      return y.card.createdAt - x.card.createdAt;
+      // 배송·주문 번호, 라이더 ID·짧은 번호, 라이더 이름("김*수 · 482913" — 화면 번호 6자리 포함)
+      return [c.deliveryId, c.deliveryNumber, c.orderNumber, c.orderId, c.riderId, c.riderId ? shortRiderId(c.riderId) : null, c.riderId ? nameOf(c.riderId) : null].some((x) =>
+        x?.toLowerCase().includes(needle),
+      );
     });
+  const rows = sortRows(matched, sortBy);
+  const groups = groupRows(rows.slice(0, MAX_DELIVERIES), groupBy, nameOf);
+  // 묶음이 많으면 지연 있는 묶음만 펼친다(라이더 100명이면 다 펼치면 못 본다) [시뮬]
+  const openAll = groups.length <= 6;
   const tabbed = STATUS_TABS.some(([k]) => k === f);
   return (
     <>
@@ -187,14 +193,74 @@ function DeliveriesView() {
           )}
         </div>
       )}
-      <input className="c-search" type="search" placeholder="배송번호 · 주문번호 · 라이더 찾기" value={q} onChange={(e) => setQ(e.target.value)} aria-label="배송 찾기" />
-      <ul className="c-list">
-        {rows.slice(0, MAX_DELIVERIES).map((r) => (
-          <DeliveryItem key={r.card.deliveryId} r={r} sel={sel} rider={r.card.riderId ? riders.get(r.card.riderId) : undefined} />
-        ))}
-        {rows.length === 0 && <li className="c-empty">{needle ? '찾는 배송이 없습니다.' : emptyText(f, app.sim.mode)}</li>}
-        {rows.length > MAX_DELIVERIES && <li className="c-empty">앞 {MAX_DELIVERIES}건만 — 찾기·상태 탭으로 좁혀 보세요.</li>}
-      </ul>
+      <input
+        className="c-search"
+        type="search"
+        placeholder="배송·주문번호 · 라이더 이름·번호 찾기"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label="배송 찾기"
+      />
+      <div className="c-view-row" aria-label="묶기·정렬">
+        <span className="c-muted">묶기</span>
+        <div className="c-mini-seg" role="group" aria-label="묶기">
+          {(
+            [
+              ['none', '없음'],
+              ['stage', '단계별'],
+              ['rider', '라이더별'],
+            ] as const
+          ).map(([k, l]) => (
+            <button key={k} className={groupBy === k ? 'on' : ''} aria-pressed={groupBy === k} onClick={() => setGroupBy(k)}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <span className="c-muted">정렬</span>
+        <select className="c-select" value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)} aria-label="정렬">
+          <option value="urgent" title="지연 → 오래된 것">급한 순</option>
+          <option value="longest">오래 걸린 순</option>
+          <option value="recent">최근 순</option>
+        </select>
+        {needle && <span className="c-muted">{matched.length}건 일치</span>}
+      </div>
+      {rows.length === 0 && <p className="c-empty">{needle ? '찾는 배송이 없습니다.' : emptyText(f, app.sim.mode)}</p>}
+      {groups.map((g) =>
+        groupBy === 'none' ? (
+          <ul key={g.key} className="c-list">
+            {g.rows.map((r) => (
+              <DeliveryItem key={r.card.deliveryId} r={r} sel={sel} rider={r.card.riderId ? riders.get(r.card.riderId) : undefined} />
+            ))}
+          </ul>
+        ) : (
+          <details key={g.key} className={`c-group ${g.alerts ? 'hot' : ''}`} open={openAll || g.alerts > 0}>
+            <summary>
+              <span className="c-group-l">{g.riderId ? `🛵 ${g.label}` : g.label}</span>
+              {g.riderId && <RiderLoc r={riders.get(g.riderId)} />}
+              <span className="c-n">{g.rows.length}</span>
+              {g.alerts > 0 && <span className="c-pill red">지연 {g.alerts}</span>}
+              {g.riderId && (
+                <button
+                  className="c-link"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    app.select(g.riderId as string);
+                  }}
+                  title="이 라이더를 지도에서 찾고 배송 목록을 이 라이더로"
+                >
+                  지도
+                </button>
+              )}
+            </summary>
+            <ul className="c-list">
+              {g.rows.map((r) => (
+                <DeliveryItem key={r.card.deliveryId} r={r} sel={sel} rider={r.card.riderId ? riders.get(r.card.riderId) : undefined} />
+              ))}
+            </ul>
+          </details>
+        ),
+      )}
+      {rows.length > MAX_DELIVERIES && <p className="c-empty">앞 {MAX_DELIVERIES}건만 — 찾기·상태 탭으로 좁혀 보세요.</p>}
     </>
   );
 }
@@ -268,6 +334,7 @@ function DeliveryItem({ r, sel, rider }: { r: OpsRow; sel: string | null; rider:
 // ─────────────── 라이더 ───────────────
 
 type RiderShow = 'all' | 'busy' | 'stale' | 'app';
+type RiderSort = 'attention' | 'waiting' | 'busy' | 'name';
 
 function jobText(j: RiderJob): string {
   const parts: string[] = [];
@@ -285,14 +352,40 @@ function RidersView() {
   const all = app.sim.riders;
   const [q, setQ] = useState('');
   const [show, setShow] = useState<RiderShow>('all');
+  const [sortBy, setSortBy] = useState<RiderSort>('attention');
   const rowOf = new Map(b.rows.map((x) => [x.card.deliveryId, x]));
   const doneOf = (id: string) => b.rows.filter((x) => x.card.riderId === id && x.bucket === 'done').length;
+  const idx = riderIndex(app.sim.controlBoard?.()?.items ?? null, all, isSimRiderId);
   const needle = q.trim().toLowerCase();
   const counts = { all: all.length, busy: all.filter((r) => r.deliveryId).length, stale: all.filter((r) => r.locationOffline).length, app: all.filter((r) => r.external).length };
+  const nowMs = app.sim.clock.epochMs();
+  // 주의 점수: 위치 끊김 > 지연 배송 > 배송 중 > 대기 (작을수록 위)
+  const attention = (r: RiderView) => {
+    const row = r.deliveryId ? rowOf.get(r.deliveryId) : undefined;
+    if (r.locationOffline) return 0;
+    if (row?.alert) return row.alert.level === 'bad' ? 1 : 2;
+    return r.deliveryId ? 3 : 4;
+  };
+  const waitedSec = (r: RiderView) => {
+    const w = idx.get(r.id)?.waitingSince;
+    return w && !r.deliveryId ? (nowMs - Date.parse(w)) / 1000 : -1;
+  };
+  const elapsed = (r: RiderView) => (r.deliveryId ? (rowOf.get(r.deliveryId)?.totalSec ?? 0) : -1);
+  const name = (r: RiderView) => idx.get(r.id)?.name ?? r.label ?? r.id;
   const riders = all
     .filter((r) => (show === 'busy' ? !!r.deliveryId : show === 'app' ? !!r.external : show === 'stale' ? !!r.locationOffline : true))
-    .filter((r) => !needle || [r.id, r.label ?? '', r.deliveryId ?? ''].some((x) => x.toLowerCase().includes(needle)))
-    .sort((x, y) => Number(!!y.locationOffline) - Number(!!x.locationOffline) || Number(!!y.deliveryId) - Number(!!x.deliveryId));
+    .filter((r) => {
+      if (!needle) return true;
+      const row = r.deliveryId ? rowOf.get(r.deliveryId) : undefined;
+      // ID·이름·화면 번호(6자리)·진행 중 배송·주문 번호
+      return [r.id, name(r), r.deliveryId ?? '', row?.card.deliveryNumber ?? '', row?.card.orderNumber ?? ''].some((x) => x.toLowerCase().includes(needle));
+    })
+    .sort((x, y) => {
+      if (sortBy === 'waiting') return waitedSec(y) - waitedSec(x) || attention(x) - attention(y);
+      if (sortBy === 'busy') return Number(!!y.deliveryId) - Number(!!x.deliveryId) || elapsed(y) - elapsed(x);
+      if (sortBy === 'name') return name(x).localeCompare(name(y), 'ko');
+      return attention(x) - attention(y) || elapsed(y) - elapsed(x);
+    });
   return (
     <>
       <div className="c-status" role="tablist" aria-label="라이더 거르기">
@@ -309,7 +402,17 @@ function RidersView() {
           </button>
         ))}
       </div>
-      <input className="c-search" type="search" placeholder="이름 · 번호 · 배송번호 찾기" value={q} onChange={(e) => setQ(e.target.value)} aria-label="라이더 찾기" />
+      <input className="c-search" type="search" placeholder="이름 · 라이더 번호 · 배송·주문번호 찾기" value={q} onChange={(e) => setQ(e.target.value)} aria-label="라이더 찾기" />
+      <div className="c-view-row" aria-label="정렬">
+        <span className="c-muted">정렬</span>
+        <select className="c-select" value={sortBy} onChange={(e) => setSortBy(e.target.value as RiderSort)} aria-label="라이더 정렬">
+          <option value="attention" title="위치 끊김 → 지연 → 배송 중">주의 먼저</option>
+          <option value="waiting">오래 기다린 순</option>
+          <option value="busy">배송 중 먼저</option>
+          <option value="name">이름순</option>
+        </select>
+        <span className="c-muted">{riders.length}명</span>
+      </div>
       <ul className="c-list">
         {riders.map((r) => (
           <RiderItem key={r.id} r={r} row={r.deliveryId ? rowOf.get(r.deliveryId) : undefined} done={doneOf(r.id)} />
