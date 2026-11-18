@@ -13,7 +13,6 @@ import {
   type CommandResponse,
   type ControlRiderList,
   type StaffDropLocation,
-  type OperatingTime,
   type Delivery,
   type DeliveryExecution,
   type DeliveryListResponse,
@@ -79,11 +78,6 @@ export class HttpBackend implements RiderPort {
   constructor(private readonly o: HttpBackendOptions) {
     this.doFetch = o.fetch ?? ((...a) => fetch(...a));
     this.observer = this.makeObserver();
-  }
-
-  /** execution 직원용 라이더 운행시간(운행·접속·대기 합) — 관제 계정, 이 PC 만. date = 서울 날짜(YYYY-MM-DD) */
-  getRiderOperatingTime(riderId: string, date: string): Promise<OperatingTime> {
-    return this.request<OperatingTime>('control', 'GET', '/rider-operating-time', { query: { riderId, from: date, to: date } });
   }
 
   /** execution 0.24.0 직원용 전달지(주소·좌표, 열람 기록) — 관제 계정, 이 PC 만. 응답은 화면 메모리에만(로그에는 경로·상태만) */

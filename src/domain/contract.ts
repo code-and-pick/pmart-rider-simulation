@@ -578,19 +578,6 @@ export interface StaffDropLocation {
   piiAccessLogId: string;
 }
 
-/** (execution 0.11.0 + 2026-11-18) 직원용 라이더 운행시간 GET /rider-operating-time?riderId=&from=&to= — RIDER_OPS·OPERATOR_ADMIN·CS_AGENT. */
-export interface OperatingTime {
-  from: string;
-  to: string;
-  /** 운행시간 = 배차 수락 ~ 전달 완료(겹치면 한 번) */
-  totalSeconds: number;
-  /** 접속 시간 = 운행(ON_DUTY) 켜 둔 시간 — rider 를 못 부르면 null */
-  connectedSeconds?: number | null;
-  /** 대기 시간 = 운행 중 + 신규배차 켬 + 맡은 배송 0건 — 못 부르면 null */
-  waitingSeconds?: number | null;
-  days: { date: string; seconds: number; connectedSeconds?: number | null; waitingSeconds?: number | null }[];
-}
-
 /** GET /deliveries (직원 배송 찾기) 목록 한 줄 — 개인정보 없음. */
 export interface StaffDeliverySummary {
   deliveryId?: string;

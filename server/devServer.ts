@@ -144,7 +144,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
     actor = { kind: 'observer' };
   } else if (actorHdr === 'control') {
     // 관리자 권한 토큰 — 이 PC 의 GET /api/v1/rider-locations 한 가지만(lanPolicy.isControlRead)
-    if (!isControlRead(method, url)) return problem(res, 403, 'CONTROL_READ_ONLY', '관제 계정은 라이더 관제(GET /rider-locations)·직원용 전달지(GET /deliveries/{id}/drop-location)·직원용 운행시간(GET /rider-operating-time) 조회에만');
+    if (!isControlRead(method, url)) return problem(res, 403, 'CONTROL_READ_ONLY', '관제 계정은 라이더 관제(GET /rider-locations)·직원용 전달지(GET /deliveries/{id}/drop-location) 조회에만');
     actor = { kind: 'control' };
   }
 

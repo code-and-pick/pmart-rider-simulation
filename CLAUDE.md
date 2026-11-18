@@ -22,7 +22,7 @@ MFC 쪽 시뮬레이터(`../pmart-mfc-simulation`)의 짝이다. MFC 에서 점�
 - **실서버 가입·운행 잠금 `REAL_RIDER_GATE`(`src/config.ts`)는 사용자 결정 없이 바꾸지 않는다**(2026-11-16 사용자가 풂: 2명·전화 010-0000-00NN). 인원을 늘리거나 새 ID 로 가입시키기 전에 묻는다 — 가입한 라이더는 지울 수 없다(탈퇴 501 — RR-07). 실서버 시험이 끝나면 화면 "운행 종료"로 OFF_DUTY 를 확인한다(ON_DUTY 로 남기면 실제 제안이 간다).
 - 백엔드도 사용자가 맡는다(2026-11-16) — `docs/backend-requests.md` RR 은 기록용이고 백엔드 handoff·PR 로 보내지 않는다. 백엔드 저장소는 여전히 이 세션에서 읽기만.
 - 실서버 모드의 가상 라이더는 **시뮬레이터 전용 라이더 ID**(`RD-sim-` 접두어 — RR-01, 인원·전화 대역은 사용자 결정 RR-02)만 쓴다. 실제 라이더 앱 사용자를 조종하지 않는다.
-- 관제 계정(`claude-dev`, OPERATOR_ADMIN — 사용자 2026-11-18 "claude-dev 써")은 이 PC 개발 서버가 `GET /rider-locations`·`GET /deliveries/{id}/drop-location`·`GET /rider-operating-time` 세 조회에만 붙인다(`server/lanPolicy.ts` `isControlRead`). 쓰기·다른 경로·다른 기기 금지.
+- 관제 계정(`claude-dev`, OPERATOR_ADMIN — 사용자 2026-11-18 "claude-dev 써")은 이 PC 개발 서버가 `GET /rider-locations`·`GET /deliveries/{id}/drop-location` 두 조회에만 붙인다(`server/lanPolicy.ts` `isControlRead`). 쓰기·다른 경로·다른 기기 금지.
 - LAN 다른 기기에는 토큰을 주지 않는다. 다른 기기 요청은 개발 서버가 GET·HEAD 허용 목록만 넘기고(직원 조회 = 관찰 계정, 라이더 본인 조회 = 시뮬레이터 라이더 ID 에 한해 서명), 쓰기·전달지(개인정보)는 막는다(`docs/design.md` §6-4).
 - 실행하지 않은 테스트·빌드를 통과했다고 보고하지 않는다.
 - 작업 일지를 `docs/worklog/YYYY-MM-DD.md` 에 남긴다(형식·규칙 `docs/worklog/README.md`, 백엔드 일지 형식을 따름). 일지 없이 커밋하지 않고, 백엔드에서 읽어 확인한 사실은 근거(파일·커밋)와 함께 적는다.
