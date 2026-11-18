@@ -20,6 +20,8 @@ export interface OrderSeg {
 export interface OrderRow {
   /** 주문번호 — 모르면 null(배송 ID 로 한 줄) */
   orderId: string | null;
+  /** 화면용 주문번호 — 없으면 null */
+  orderNumber: string | null;
   deliveryIds: string[];
   startMs: number | null;
   /** 모든 배송이 끝났으면 마지막 시각, 하나라도 진행 중이면 null */
@@ -81,6 +83,7 @@ export function groupOrders(
     const endMs = done && last ? last.atMs : null;
     rows.push({
       orderId: g[0]?.orderId ?? null,
+      orderNumber: g.find((c) => c.orderNumber)?.orderNumber ?? null,
       deliveryIds: g.map((c) => c.deliveryId),
       startMs: steps[0]?.atMs ?? null,
       endMs,

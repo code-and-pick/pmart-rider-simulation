@@ -1,5 +1,6 @@
 import type { DeliveryTimeline } from '../sim/timeline';
 import { dur, seoulTime } from './format';
+import { shortId } from '../domain/riderId';
 
 /**
  * 배송 한 건의 흐름·시간 — 단계마다 시각, 앞 단계에서 걸린 시간, 출처(배차·수행·라이더 엔진).
@@ -13,9 +14,10 @@ export function Timeline({ t, nowMs }: { t: DeliveryTimeline; nowMs: number }) {
     <section className="timeline" aria-label={`${t.deliveryId} 흐름·시간`}>
       <div className="tl-head">
         <span>
-          {t.orderId ? (
+          {t.orderNumber || t.orderId ? (
             <>
-              주문 <b>{t.orderId}</b>
+              주문 <b title={t.orderId ?? ""}>{t.orderNumber ?? shortId(t.orderId ?? "")}</b>
+              {t.deliveryNumber && <span className="muted"> · 배송 {t.deliveryNumber}</span>}
             </>
           ) : (
             '주문 —'

@@ -5,7 +5,7 @@ import { Metrics } from './Metrics';
 import { displayStage, purposeLabel } from '../domain/displayStage';
 import { Progress } from './Progress';
 import { Timeline } from './Timeline';
-import { shortRiderId } from '../domain/riderId';
+import { deliveryLabel, orderLabel, shortId, shortRiderId } from '../domain/riderId';
 import { OrdersTab } from './OrdersTab';
 import { apiFor, cardsFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
@@ -29,6 +29,29 @@ function PickedTimeline({ id }: { id: string }) {
   return t ? <Timeline t={t} nowMs={sim.clock.epochMs()} /> : null;
 }
 
+/** 문제로 보이는 연결 상태 줄 — 실패·못 읽음·없음·거절·막음 */
+const DIAG_BAD = /실패|못 읽|못 봄|없음|거절|막음|잠김|403|5\d\d/;
+
+/** 연결 상태 — 평소엔 한 줄 요약(문제 수), 누르면 펼침. 문제가 있으면 그 줄을 강조 */
+function Diagnostics({ lines }: { lines: string[] }) {
+  const bad = lines.filter((l) => DIAG_BAD.test(l));
+  return (
+    <details className={`diag ${bad.length ? 'has-bad' : ''}`}>
+      <summary>
+        연결 상태 {bad.length ? <b className="warn-text">확인 필요 {bad.length}</b> : <span className="ok-text">정상</span>}
+        <span className="muted"> · {lines.length}줄</span>
+      </summary>
+      <ul aria-label="연결 상태">
+        {lines.map((d) => (
+          <li key={d} className={DIAG_BAD.test(d) ? 'warn-text' : ''}>
+            {d}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 export function RightPanel() {
   const app = useApp();
   const { sim } = app;
@@ -41,13 +64,7 @@ export function RightPanel() {
   const cards = cardsFor(allCards, sel);
   return (
     <aside className="panel right" aria-label="배송·로그">
-      {diag.length > 0 && (
-        <ul className="diag" aria-label="연결 상태">
-          {diag.map((d) => (
-            <li key={d}>{d}</li>
-          ))}
-        </ul>
-      )}
+      {diag.length > 0 && <Diagnostics lines={diag} />}
       <Metrics m={m} />
       {sel && (
         <div className="filter-chip" role="status">
@@ -87,7 +104,7 @@ export function RightPanel() {
                     onClick={() => app.selectDelivery(c.deliveryId)}
                   >
                     <div className="card-head">
-                      <b>{c.deliveryId}</b>
+                      <b title={`배송 ${c.deliveryId}${c.orderId ? ` · 주문 ${c.orderId}` : ""}`}>{deliveryLabel(c)}</b>
                       {tag && (
                         <span className="purpose-tag" title={`배송 목적 ${c.purpose} — 오배송 확인(case)에서 생긴 배송`}>
                           {tag}
@@ -102,12 +119,12 @@ export function RightPanel() {
                     <Progress stage={stage} />
                     <div className="stage-text">
                       {stage.text}
-                      {c.orderId && <span className="muted"> · 주문 {c.orderId}</span>}
+                      {orderLabel(c) && !c.deliveryNumber && <span className="muted"> · 주문 {orderLabel(c)}</span>}
                     </div>
                     {/* 원래 두 상태를 출처와 함께 작게(docs/design.md §4 — 위 단계는 화면용 계산) */}
                     <div className="raw-states">
                       배차 <code>{c.dispatchState ?? '—'}</code> · 수행 <code>{c.executionState ?? '사본 없음'}</code> · 출고{' '}
-                      <code>{c.shipmentId ?? '—'}</code>
+                      <code title={c.shipmentId ?? ""}>{c.shipmentId ? shortId(c.shipmentId) : '—'}</code>
                     </div>
                   </button>
                   {picked && <PickedTimeline id={c.deliveryId} />}

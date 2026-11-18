@@ -7,6 +7,8 @@ import { groupOrders, segmentsOf } from '../src/ui/orders';
 const card = (deliveryId: string, orderId: string | null, createdAt: number): DeliveryCard => ({
   deliveryId,
   orderId,
+  orderNumber: null,
+  deliveryNumber: null,
   shipmentId: null,
   dispatchState: null,
   executionState: null,
@@ -85,5 +87,31 @@ describe('한 주문에 배송 둘', () => {
       ['findRider', 10],
       ['now', 10],
     ]);
+  });
+});
+
+describe('화면용 번호', () => {
+  it('짧은 시스템 번호·주문/배송 표시 번호', async () => {
+    const { shortId, orderLabel, deliveryLabel } = await import('../src/domain/riderId');
+    expect(shortId('DLV-8704f124-3020-4e1c-8781-dedd07dffef1')).toBe('DLV-8704');
+    expect(shortId('ORD-4cd46d90-7b62-3934-a35f-f53fe0d6ee99')).toBe('ORD-4cd4');
+    expect(shortId('DL-m00005')).toBe('DL-m00005');
+    expect(shortId('ORD-4cd46d90-7b62-3934-a35f-f53fe0d6ee99-S1')).toBe('ORD-4cd4-S1');
+    expect(orderLabel({ orderNumber: '43505165', orderId: 'ORD-4cd46d90-7b62-3934-a35f-f53fe0d6ee99' })).toBe('43505165');
+    expect(orderLabel({ orderNumber: null, orderId: 'ORD-4cd46d90-7b62-3934-a35f-f53fe0d6ee99' })).toBe('ORD-4cd4');
+    expect(deliveryLabel({ deliveryNumber: '74939255-1', deliveryId: 'DLV-x' })).toBe('74939255-1');
+    expect(deliveryLabel({ deliveryNumber: null, deliveryId: 'DLV-8704f124-3020-4e1c-8781-dedd07dffef1' })).toBe('DLV-8704');
+  });
+
+  it('MOCK 카드 — 주문번호 8자리, 배송 번호 = 주문번호-1', async () => {
+    const { Simulation } = await import('../src/sim/simulation');
+    const { DEFAULT_PARAMS } = await import('../src/config');
+    const sim = new Simulation({ ...DEFAULT_PARAMS, mock: { ...DEFAULT_PARAMS.mock } }, { startEpochMs: Date.UTC(2026, 10, 16, 1, 0, 0) });
+    sim.backend.autoOrders = false;
+    sim.backend.createOrder({ pickSec: 5, packMinutes: 4, packages: 1, customer: DEFAULT_PARAMS.mfcLocation });
+    await sim.runFor(10); // 점원 배차 요청(pickSec 뒤)에 배송이 생긴다
+    const [c] = sim.deliveryCards();
+    expect(c!.orderNumber).toMatch(/^\d{8}$/);
+    expect(c!.deliveryNumber).toBe(`${c!.orderNumber}-1`);
   });
 });

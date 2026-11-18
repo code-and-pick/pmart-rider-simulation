@@ -3,6 +3,7 @@ import { useApp } from '../app/App';
 import { dur, seoulTime } from './format';
 import { groupOrders, type SegKind } from './orders';
 import { Timeline } from './Timeline';
+import { shortId } from '../domain/riderId';
 import type { DeliveryCard } from '../sim/world';
 
 /** 구간 색 — 지표 막대(Metrics)와 같게 */
@@ -61,7 +62,9 @@ export function OrdersTab({ cards }: { cards: DeliveryCard[] }) {
           <li key={key}>
             <button className={`card ord ${isOpen ? 'picked' : ''}`} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : key)}>
               <div className="card-head">
-                <b>{r.orderId ? `주문 ${r.orderId}` : `주문번호 모름 · ${r.deliveryIds[0]}`}</b>
+                <b title={r.orderId ?? r.deliveryIds[0]}>
+                  {r.orderNumber ? `주문 ${r.orderNumber}` : r.orderId ? `주문 ${shortId(r.orderId)}` : `주문번호 모름 · ${shortId(r.deliveryIds[0] ?? "")}`}
+                </b>
                 <span className="ord-total" title={r.endMs === null ? '첫 단계부터 지금까지' : '첫 단계부터 마지막 단계까지'}>
                   {r.endMs === null ? '지금까지 ' : '총 '}
                   <b>{dur(total)}</b>
@@ -86,7 +89,7 @@ export function OrdersTab({ cards }: { cards: DeliveryCard[] }) {
                 const t = sim.deliveryTimeline(id);
                 return t ? (
                   <div key={id}>
-                    {r.deliveryIds.length > 1 && <div className="ord-sub muted">{id}</div>}
+                    {r.deliveryIds.length > 1 && <div className="ord-sub muted" title={id}>{t.deliveryNumber ?? shortId(id)}</div>}
                     <Timeline t={t} nowMs={nowMs} />
                   </div>
                 ) : null;

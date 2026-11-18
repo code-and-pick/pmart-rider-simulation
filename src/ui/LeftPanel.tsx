@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useApp } from '../app/App';
 import { displayStage } from '../domain/displayStage';
+import { deliveryLabel } from '../domain/riderId';
 import { PHASE_COLOR } from '../render/colors';
 import { PHASE_LABEL, type RiderJob } from '../sim/rider';
 import { friendlyNote } from './friendly';
@@ -14,22 +16,56 @@ function jobText(j: RiderJob): string {
   return parts.join(' · ');
 }
 
+type RiderShow = 'all' | 'busy' | 'app';
+
 export function LeftPanel() {
   const app = useApp();
   const cards = app.sim.deliveryCards();
   const byId = new Map(cards.map((c) => [c.deliveryId, c]));
+  const [q, setQ] = useState('');
+  const [show, setShow] = useState<RiderShow>('all');
+  const all = app.sim.riders;
+  const appCount = all.filter((r) => r.external).length;
+  const busyCount = all.filter((r) => r.deliveryId).length;
+  const needle = q.trim().toLowerCase();
+  const riders = all
+    .filter((r) => (show === 'busy' ? !!r.deliveryId : show === 'app' ? !!r.external : true))
+    .filter((r) => !needle || r.id.toLowerCase().includes(needle) || (r.label ?? '').toLowerCase().includes(needle) || (r.deliveryId ?? '').toLowerCase().includes(needle))
+    // 배송 중인 라이더 먼저(찾기 쉽게) — 같은 무리 안에서는 원래 순서
+    .sort((a, b) => Number(!!b.deliveryId) - Number(!!a.deliveryId));
   return (
     <aside className="panel left" aria-label="라이더">
       <h2>
         라이더{' '}
         <span className="muted">
-          {app.sim.riders.filter((r) => !r.external).length}명
-          {app.sim.riders.some((r) => r.external) && ` · 라이더 앱 ${app.sim.riders.filter((r) => r.external).length}명`}
+          {all.length - appCount}명{appCount > 0 && ` · 라이더 앱 ${appCount}명`}
         </span>
       </h2>
-      <p className="hint">누르면 오른쪽이 그 라이더로 걸러지고 지도에서 찾는다. 단계는 엔진 기준(백엔드 상태 아님).</p>
+      <input
+        className="rider-search"
+        type="search"
+        placeholder="이름·번호·배송번호로 찾기"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label="라이더 찾기"
+      />
+      <div className="rider-show" role="group" aria-label="라이더 거르기">
+        {(
+          [
+            ['all', `전체 ${all.length}`],
+            ['busy', `배송 중 ${busyCount}`],
+            ...(appCount > 0 ? [['app', `라이더 앱 ${appCount}`] as const] : []),
+          ] as const
+        ).map(([k, l]) => (
+          <button key={k} className={show === k ? 'on' : ''} aria-pressed={show === k} onClick={() => setShow(k)}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <p className="hint">누르면 오른쪽이 그 라이더로 걸러지고 지도에서 찾는다. 배송 중인 라이더가 위에.</p>
       <ul className="riders">
-        {app.sim.riders.map((r) => {
+        {riders.length === 0 && <li className="empty">맞는 라이더가 없다.</li>}
+        {riders.map((r) => {
           const card = r.deliveryId ? byId.get(r.deliveryId) : undefined;
           const stage = card ? displayStage(card.dispatchState, card.executionState, card.radiusKm, card.purpose) : null;
           const done = cards.filter((c) => c.riderId === r.id && c.executionState === 'COMPLETED').length;
@@ -62,7 +98,7 @@ export function LeftPanel() {
                 </div>
                 {card && stage && (
                   <div className="rc-delivery">
-                    <span className="rc-dl">{card.deliveryId}</span>
+                    <span className="rc-dl" title={card.deliveryId}>{deliveryLabel(card)}</span>
                     <Progress stage={stage} compact />
                     <span className="rc-stage">{stage.text}</span>
                   </div>

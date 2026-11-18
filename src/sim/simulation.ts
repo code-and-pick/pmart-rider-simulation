@@ -124,7 +124,7 @@ export class Simulation implements World {
 
   /** MOCK 세계의 배송 카드. 실서버(P2)는 관찰 계정 조회로 같은 모양을 만든다. */
   deliveryCards(): DeliveryCard[] {
-    return [...this.backend.deliveries.values()].map((d) => card(d, this.backend.ridersOf(d.deliveryId))).sort((a, b) => b.createdAt - a.createdAt);
+    return [...this.backend.deliveries.values()].map((d) => card(d, this.backend.ridersOf(d.deliveryId), this.backend.displayNumbers(d))).sort((a, b) => b.createdAt - a.createdAt);
   }
 
   /** MOCK 배송 한 건의 흐름 — MockBackend 의 배차·제안·수행 기록 시각(시뮬레이션 시각) */
@@ -137,7 +137,7 @@ export class Simulation implements World {
       ['COMPLETED', 'FAILED', 'CANCELLED', 'RETURNED_TO_STORE'].includes(del.x.state) ||
       del.d.state === 'DISPATCH_FAILED' ||
       del.d.state === 'CANCELLED_BEFORE_PICKUP';
-    return assemble({ deliveryId, orderId: del.orderId, purpose: del.purpose, basis: 'sim', gaps: [] }, steps, terminal);
+    return assemble({ deliveryId, orderId: del.orderId, ...this.backend.displayNumbers(del), purpose: del.purpose, basis: 'sim', gaps: [] }, steps, terminal);
   }
 
   diagnostics(): string[] {
@@ -236,11 +236,13 @@ export class Simulation implements World {
   }
 }
 
-function card(d: MDelivery, riderIds: string[]): DeliveryCard {
+function card(d: MDelivery, riderIds: string[], nums: { orderNumber: string | null; deliveryNumber: string | null }): DeliveryCard {
   const at = d.d.attempts[d.d.attempts.length - 1];
   return {
     deliveryId: d.deliveryId,
     orderId: d.orderId,
+    orderNumber: nums.orderNumber,
+    deliveryNumber: nums.deliveryNumber,
     shipmentId: d.shipmentId,
     dispatchState: d.d.state,
     executionState: d.x.exists ? d.x.state : null,

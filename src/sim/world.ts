@@ -35,6 +35,10 @@ export interface RiderView {
 export interface DeliveryCard {
   deliveryId: string;
   orderId: string | null;
+  /** 화면용 주문번호(8자리 — 고객·라이더·MFC·상담원이 같은 번호). 모르면 null */
+  orderNumber: string | null;
+  /** 화면 배송 번호(주문번호-순번, ADR-0070). 모르면 null */
+  deliveryNumber: string | null;
   /** dispatch Delivery.shipmentId — 실서버에서 채워지는지 실측(§5) */
   shipmentId: string | null;
   /** null = 아직 dispatch 를 못 읽음(실서버) */

@@ -575,6 +575,10 @@ export interface StaffDeliverySummary {
   pickedUpAt?: string | null;
   completedAt?: string | null;
   createdAt?: string;
+  /** (2026-11-18) 화면용 주문번호 8자리 — 배정 사건이 실어 준 값(배정 전 null). 백엔드 9c5fdddc execution 0.26.0 */
+  orderNumber?: string | null;
+  /** (2026-11-18, ADR-0070) 화면 배송 번호 = 화면용 주문번호-순번(예 74939255-1). 모르면 null */
+  deliveryNumber?: string | null;
 }
 
 export interface StaffDeliveryListResponse {

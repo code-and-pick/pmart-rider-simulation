@@ -134,7 +134,57 @@ button {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 290px 1fr 360px;
+  grid-template-columns: 300px minmax(0, 1fr) 420px;
+}
+.body.left-closed {
+  grid-template-columns: minmax(0, 1fr) 420px;
+}
+.body.right-closed {
+  grid-template-columns: 300px minmax(0, 1fr);
+}
+.body.left-closed.right-closed {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* 패널 열고 닫기 — 지도 가장자리 가운데 */
+.panel-toggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 10px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+.panel-toggle.left {
+  left: 0;
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+}
+.panel-toggle.right {
+  right: 0;
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+}
+.panel-toggle.open {
+  padding: 14px 4px;
+  color: var(--muted);
+}
+.panel-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+.pt-badge {
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
 }
 .panel {
   background: var(--panel);
@@ -484,13 +534,61 @@ button.card.ord.picked {
 }
 
 .diag {
-  list-style: none;
   margin: 0 0 8px;
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
   font-size: 12px;
   color: var(--muted);
+}
+.diag.has-bad {
+  border-color: color-mix(in srgb, var(--warn) 50%, var(--line));
+}
+.diag summary {
+  cursor: pointer;
+  color: var(--ink);
+}
+.diag ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.diag li + li {
+  margin-top: 3px;
+}
+.ok-text {
+  color: var(--chip-ok-ink);
+}
+/* 왼쪽 라이더 찾기·거르기 */
+.rider-search {
+  width: 100%;
+  padding: 5px 8px;
+  margin: 4px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+.rider-show {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.rider-show button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  padding: 2px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.rider-show button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 .metrics {
   display: grid;
@@ -780,7 +878,10 @@ code {
 }
 
 @media (max-width: 900px) {
-  .body {
+  .body,
+  .body.left-closed,
+  .body.right-closed,
+  .body.left-closed.right-closed {
     grid-template-columns: 1fr;
     grid-template-rows: 45vh auto auto;
   }

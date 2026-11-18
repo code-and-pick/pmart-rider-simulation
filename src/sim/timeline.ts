@@ -21,6 +21,9 @@ export interface TimelineStep {
 export interface DeliveryTimeline {
   deliveryId: string;
   orderId: string | null;
+  /** 화면용 주문번호·배송 번호(있으면 이것을 보인다) */
+  orderNumber?: string | null;
+  deliveryNumber?: string | null;
   purpose: DeliveryPurpose | null;
   /** 시각 순 */
   steps: TimelineStep[];
