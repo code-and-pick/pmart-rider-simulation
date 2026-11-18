@@ -16,6 +16,16 @@
 
 ## 열린 요청
 
+### RR-08 실서버 화면에 라이더 앱 라이더 위치·정확한 전달지 — 열림 2026-11-18 (사용자 결정 "다" = 정확한 위치)
+- 계기: 사용자가 라이더 앱으로 배차 수락 → 가게로 이동했는데(배송 `DLV-665800db…`, 라이더 `RD-5c41a0e7…`, 2026-11-18 12:15:24 배정 → 12:18:56 배정 취소·픽업 전 취소) 시뮬레이터 실서버 화면에 라이더 위치·전달지가 안 떴다.
+- 지금 못 하는 이유(백엔드 `aaa2ff8c` 계약 읽음):
+  - 라이더 위치: 실서버 화면은 `RD-sim-` 라이더 본인 토큰 `GET /riders/me/locations/latest` 만 읽는다. 관제 `GET /rider-locations`(tracking 0.8.0, 운행 중 라이더 현재 위치)는 RIDER_OPS·OPERATOR_ADMIN 만 — 관찰 계정(`claude-mfc-wrk`, MFC 점원)으로 부르면 **403** "라이더 관제는 라이더 운영·관리자만"(2026-11-18 실측).
+  - 전달지: 정확한 좌표를 주는 공개 API 는 `GET /deliveries/{id}/drop-info`(execution 0.22.2, **배정 라이더 본인·픽업 뒤**)뿐. 직원·운영자용은 없다. `GET /internal/deliveries/{id}/route-points`(dispatch, drop 좌표)는 서비스 간 전용·응답 저장 금지라 시뮬레이터는 부르지 않는다. 제안 요약 `dropAreaPoint`(약 1km 격자)는 제안 받은 라이더에게만.
+- 필요한 것(사용자가 백엔드도 맡음 — 결정):
+  1. 라이더 위치: 시뮬레이터 관찰용 **라이더 운영(RIDER_OPS) 읽기 계정**을 LAN 비밀 파일로(`deploy/lan/.secrets/`, 이름만 확인·내용 안 읽음). 있으면 개발 서버가 그 계정 토큰으로 `GET /rider-locations?mfcId=` 를 불러 지도에 운행 중 라이더 전원(라이더 앱 포함)을 그린다 — 다른 기기에는 지금처럼 개발 서버가 붙이는 조회만.
+  2. 정확한 전달지: 운영자(RIDER_OPS·OPERATOR_ADMIN)가 진행 중 배송의 전달지 좌표를 읽는 공개 API 가 백엔드에 새로 있어야 한다(열람 사유·기록 여부는 백엔드 결정). 생기면 시뮬레이터는 좌표만 이 PC 화면 지도에 그리고 주소 글자·전화는 쓰지 않는다·저장·로그 안 함, 다른 기기로는 넘기지 않는다(`server/lanPolicy.ts` 개인정보 경로).
+- 시뮬레이터 쪽: 계정·API 가 생기기 전에는 코드 변경 없음(계약에 없는 길을 추측해 부르지 않는다).
+
 ### RR-03 포장 QR 값을 라이더 쪽에서 얻는 방법 — 해소 2026-11-18
 - 회신: 백엔드 `docs/handoff/simulator/rider/2026-11-18-backend-reply-rr03-rr05-rr07.md`(보낸 영역 delivery, 사용자 2026-11-18 "응 전부 진행해") — **그 방식으로 괜찮다**. 관찰용 직원 계정(읽기만)으로 `GET /shipments/{shipmentId}` 의 qrCode = "라벨을 본다". 백엔드 변경 없음, 쓰기(인계 허가·확정)는 라이더 토큰으로만. 시뮬레이터는 이미 이 방식(`HttpBackend.getShipment`·`server/lanPolicy.ts` OBSERVER) — 바꿀 것 없음.
 인계 허가에는 포장 `qrCode`(`PKG:<id>:<버전>`)가 필요하다. 실제로는 포장 라벨을 찍지만, 라이더 토큰으로는 출고·포장을 조회할 수 없다(`GET /shipments/{id}` 는 OPERATOR, execution 응답 `packageIds` 는 인계된 것만 — `rider_e2e.py` 주석). `rider_e2e.py` 는 execution DB 를 읽어 대신한다.
