@@ -4,7 +4,7 @@
 // 기준: pmart-backend origin/main c475ff94 (2026-11-17 다시 읽음 — 6df1e842 뒤 바뀐 것은 모두 추가뿐, 시뮬레이터가 부르는 길·값 그대로)
 //   contracts/openapi/delivery-dispatch-service.yaml   0.4.7 (0.4.5~0.4.7: 제안 요약에 dropEtaSeconds·pickupPoint·dropAreaPoint·order(주문 요약) 추가 — 아직 안 씀)
 //   contracts/openapi/delivery-execution-service.yaml  0.7.2 (0.6.0~0.7.2: 도움요청 대화 messages·배송별 도움요청 목록 GET·수행 조회 orderSummary 추가 — 아직 안 씀)
-//   contracts/openapi/delivery-tracking-service.yaml   0.8.1 (0.8.0: 라이더 관제 GET /rider-locations — RIDER_OPS·OPERATOR_ADMIN, 실서버 화면이 관제 계정으로 읽음 RR-08. 백엔드 aaa2ff8c)
+//   contracts/openapi/delivery-tracking-service.yaml   0.11.0 (0.10.0: ControlRider.riderNumber 화면 번호 — 백엔드 c902fb2f. 0.8.0: 라이더 관제 GET /rider-locations — RIDER_OPS·OPERATOR_ADMIN, 실서버 화면이 관제 계정으로 읽음 RR-08. 백엔드 aaa2ff8c)
 //   contracts/openapi/rider-service.yaml               0.5.0 (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
 //   contracts/openapi/mfc-fulfillment-service.yaml     0.7.0 (출고 조회·포장 인계 부분만 — 0.6~0.7 변경은 작업 줄 바코드 등이라 인계 API 그대로)
 //   contracts/openapi/center-master-service.yaml       0.2.0 (MFC 위치: 라이더용 GET /mfc-pickup-points 먼저, 실패하면 관찰 계정 GET /centers/{centerId})
@@ -624,6 +624,8 @@ export interface RiderLocation {
 export interface ControlRider {
   riderId: string;
   nameMasked?: string | null;
+  /** (0.10.0) 화면용 라이더 번호 6자리(ADR-0070 — 가입 때 정해지고 바뀌지 않음). 화면은 "김*수 · 482913" */
+  riderNumber?: string | null;
   vehicleType?: string | null;
   newDispatchEnabled?: boolean;
   restriction?: string | null;

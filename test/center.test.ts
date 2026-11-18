@@ -210,7 +210,7 @@ describe('라이더 앱 라이더 표시', () => {
     await flush();
     await w.advance(0);
     const app = () => w.riders.find((r) => r.external)!;
-    expect(app()).toMatchObject({ label: '김*수 5c41', phase: 'TO_STORE', pos: { lat: 35.16, lng: 129.06 } });
+    expect(app()).toMatchObject({ label: '김*수 · 5c41', phase: 'TO_STORE', pos: { lat: 35.16, lng: 129.06 } });
 
     // 다음 관제 조회: 북쪽으로 약 111m, 고객에게 가는 중
     lat = 35.161;

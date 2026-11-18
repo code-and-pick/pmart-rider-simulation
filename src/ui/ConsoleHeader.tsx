@@ -37,10 +37,10 @@ export function ConsoleHeader({ view, onView }: { view: View; onView: (v: View) 
       </div>
       <nav className="c-views" role="tablist" aria-label="보기">
         <button role="tab" aria-selected={view === 'field'} className={view === 'field' ? 'on' : ''} onClick={() => onView('field')}>
-          관제
+          지도 관제
         </button>
-        <button role="tab" aria-selected={view === 'ops'} className={view === 'ops' ? 'on' : ''} onClick={() => onView('ops')} title="라이더 백오피스 화면 목록">
-          운영 화면
+        <button role="tab" aria-selected={view === 'riders'} className={view === 'riders' ? 'on' : ''} onClick={() => onView('riders')} title="라이더 관제 표 — 라이더 백오피스 라이더 관제와 같은 내용">
+          라이더 관제
         </button>
       </nav>
       <div className="c-right">

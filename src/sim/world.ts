@@ -2,7 +2,7 @@
 
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
 import type { SimParams } from '../config';
-import type { DeliveryPurpose, DispatchState, ExecutionState } from '../domain/contract';
+import type { ControlRider, DeliveryPurpose, DispatchState, ExecutionState } from '../domain/contract';
 import type { LatLng } from '../util/geo';
 import type { SimClock } from './clock';
 import type { RiderJob, RiderPhase } from './rider';
@@ -23,6 +23,8 @@ export interface RiderView {
   readonly pathKind: 'ROAD' | 'STRAIGHT' | null;
   /** 위치 끊김 장면 중(MOCK) — 지도 표시가 실제 위치보다 늦다는 뜻은 아니고, 백엔드가 이 라이더 위치를 못 받는 중 */
   readonly locationOffline?: boolean;
+  /** 서버가 받은 마지막 위치가 몇 초 전인가(실서버 조회 라이더만 — 모르면 없음) */
+  readonly locationAgeSec?: number | null;
   /** 진행 중 주문 요약(주문번호·품목 수·금액·예상 소요) — 없으면 표시 안 함 */
   readonly job?: RiderJob | null;
   /** 화면에 보이는 짧은 이름(라이더 앱 라이더: 마스킹 이름 + 번호 앞 4자리). 없으면 id — 전체 번호는 마우스 설명에 */
@@ -131,6 +133,8 @@ export interface World {
   readonly clock: SimClock;
   readonly params: SimParams;
   readonly riders: readonly RiderView[];
+  /** 실서버 라이더 관제(GET /rider-locations) 마지막 응답 — 이 PC 에서 관제 계정이 있을 때만, 그 밖(MOCK·다른 기기)은 null */
+  controlBoard?(): { items: ControlRider[]; asOf: string } | null;
   readonly apiLog: readonly ApiCallRecord[];
   readonly eventLog: readonly DomainEventRecord[];
   readonly notes: readonly NoteRecord[];

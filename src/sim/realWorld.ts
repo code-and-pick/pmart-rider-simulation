@@ -11,7 +11,7 @@
 import { HttpBackend } from '../backend/http/HttpBackend';
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
 import { DEFAULT_PARAMS, isSimRiderId, REAL_RIDER_GATE, simRiderId, type SimParams } from '../config';
-import { ApiProblem, type Delivery, type DomainEventType, type StaffDeliverySummary } from '../domain/contract';
+import { ApiProblem, type ControlRider, type Delivery, type DomainEventType, type StaffDeliverySummary } from '../domain/contract';
 import { SimClock } from './clock';
 import { VirtualRider } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
@@ -51,6 +51,7 @@ class RemoteRider implements RiderView {
   heading = 0;
   readonly phase = 'REMOTE' as const;
   note = '위치 조회 전';
+  locationAgeSec: number | null = null;
   deliveryId: string | null = null;
   readonly target = null;
   readonly path = null;
@@ -81,6 +82,7 @@ class AppRider implements RiderView {
   readonly external = true;
   /** 관제 stale(위치 없음 또는 3분 넘게 안 들어옴) */
   locationOffline = false;
+  locationAgeSec: number | null = null;
   readonly target = null;
   readonly path = null;
   readonly pathKind = null;
@@ -127,6 +129,11 @@ export class RealWorld implements World {
   /** 이 PC 개발 서버에 관제 계정 비밀번호 파일이 있나(/sim-auth/status) */
   private controlAvailable = false;
   private lastControlAt = -Infinity;
+  private lastControl: { items: ControlRider[]; asOf: string } | null = null;
+
+  controlBoard(): { items: ControlRider[]; asOf: string } | null {
+    return this.lastControl;
+  }
   /** 이 브라우저가 움직이는 가상 라이더(P3 — 잠금이 풀린 뒤에만) */
   private readonly driven = new Map<string, VirtualRider>();
   readonly apiLog: ApiCallRecord[] = [];
@@ -389,6 +396,7 @@ export class RealWorld implements World {
       try {
         const loc = await this.backend.asRider(r.id).getLatestLocation();
         if (loc.lat !== undefined && loc.lng !== undefined) r.pos = { lat: loc.lat, lng: loc.lng };
+        r.locationAgeSec = loc.staleSinceSeconds ?? null;
         r.note = `마지막 위치 ${loc.staleSinceSeconds ?? '?'}초 전 (${loc.quality ?? '?'})`;
       } catch (e) {
         r.pos = null;
@@ -417,6 +425,7 @@ export class RealWorld implements World {
     this.lastControlAt = this.clock.now;
     try {
       const list = await this.backend.listRiderLocations(this.params.mfcId);
+      this.lastControl = { items: list.items ?? [], asOf: list.asOf };
       const seen = new Set<string>();
       let located = 0;
       for (const c of list.items ?? []) {
@@ -434,10 +443,12 @@ export class RealWorld implements World {
         const p = loc?.lat !== undefined && loc?.lng !== undefined ? { lat: loc.lat, lng: loc.lng } : null;
         r.setServerPos(p, this.clock.now);
         if (p) located++;
-        r.label = c.nameMasked ? `${c.nameMasked} ${shortRiderId(c.riderId)}` : shortRiderId(c.riderId);
+        // 화면 번호(ADR-0070) "김*수 · 482913" — 번호가 없으면 고유번호 앞 4자리
+        r.label = [c.nameMasked, c.riderNumber ?? shortRiderId(c.riderId)].filter(Boolean).join(" · ");
         const d = c.activeDeliveries?.[0];
         r.deliveryId = d?.deliveryId ?? null;
         r.locationOffline = !!c.stale;
+        r.locationAgeSec = c.staleSinceSeconds ?? null;
         r.phase = d ? (STAGE_PHASE[d.stage ?? ''] ?? (d.pickedUp ? 'TO_CUSTOMER' : 'TO_STORE')) : 'IDLE';
         const age = c.staleSinceSeconds;
         r.note = [

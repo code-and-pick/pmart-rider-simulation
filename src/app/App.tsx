@@ -3,7 +3,7 @@ import { ConsoleHeader } from '../ui/ConsoleHeader';
 import { ConsolePanel } from '../ui/ConsolePanel';
 import { KpiCards } from '../ui/KpiCards';
 import { MapDetail } from '../ui/MapDetail';
-import { OpsPanel } from '../ui/OpsPanel';
+import { RiderControlPage } from '../ui/RiderControlPage';
 import { ScenarioBar } from '../ui/ScenarioBar';
 import { PHASE_COLOR } from '../render/colors';
 import type { AppController } from './controller';
@@ -18,8 +18,8 @@ export function useApp(): AppController {
   return c;
 }
 
-/** 위쪽 보기: 관제(지도) / 운영 화면(라이더 백오피스 목록). 지도는 숨기기만 한다(떼지 않음 — 시뮬레이션은 계속 돈다). */
-export type View = 'field' | 'ops';
+/** 위쪽 보기: 관제(지도) / 라이더 관제(표 — 백오피스 라이더 관제와 같은 내용). 지도는 숨기기만 한다(떼지 않음 — 시뮬레이션은 계속 돈다). */
+export type View = 'field' | 'riders';
 
 /** 패널 열림 기억(이 브라우저만 — 편의용, 못 읽으면 열림) */
 function usePanelOpen(key: string): [boolean, () => void] {
@@ -69,7 +69,7 @@ export function App({ controller }: { controller: AppController }) {
           <MapView panelOpen={panelOpen} onPanel={togglePanel} />
           {panelOpen && <ConsolePanel />}
         </div>
-        {view === 'ops' && <OpsPanel />}
+        {view === 'riders' && <RiderControlPage onShowOnMap={() => setView('field')} />}
       </div>
     </Ctx.Provider>
   );
