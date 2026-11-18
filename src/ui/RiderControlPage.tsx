@@ -6,6 +6,7 @@ import { deliveryLabel, orderLabel, shortRiderId } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
 import { dur, seoulTime } from './format';
 import { OpsPanel } from './OpsPanel';
+import { RiderDetail } from './RiderDetail';
 import { Progress } from './Progress';
 import { rowMatchesRider, rowsFromControl, rowsFromRiders, vehicleName, type RiderRow, type RiderTableFilter } from './riderTable';
 
@@ -99,6 +100,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
         <input className="c-search" type="search" placeholder="이름 · 라이더 번호 · 배송번호" value={q} onChange={(e) => setQ(e.target.value)} aria-label="라이더 찾기" />
       </div>
 
+      <div className="c-rider-split">
       <div className="c-table-wrap">
         <table className="c-table">
           <thead>
@@ -113,7 +115,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
           </thead>
           <tbody>
             {shown.map((r) => (
-              <tr key={r.id} className={`${app.selected === r.id ? 'sel' : ''} ${r.loc !== 'ok' ? 'warn' : ''}`} onClick={() => app.select(app.selected === r.id ? null : r.id)}>
+              <tr key={r.id} className={`${app.selected === r.id ? 'sel' : ''} ${r.loc !== 'ok' ? 'warn' : ''}`} onClick={() => app.select(app.selected === r.id ? null : r.id)} title="누르면 오른쪽에 라이더 상세">
                 <td>
                   <b title={r.id}>{r.name}</b>
                   {r.external && <span className="c-tag">라이더 앱</span>}
@@ -159,6 +161,8 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
             )}
           </tbody>
         </table>
+      </div>
+      <RiderDetail row={rows.find((r) => r.id === app.selected)} onShowOnMap={openOnMap} />
       </div>
 
       <h3 className="c-page-h3">최근 배송 <span className="c-muted">끝난 것까지 · 최근 {RECENT}건 · 줄을 누르면 관제 지도에서</span></h3>

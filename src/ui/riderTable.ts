@@ -21,6 +21,9 @@ export interface RiderRow {
   loc: LocState;
   /** 마지막 수신 뒤 초 — 모르면 null */
   sinceSec: number | null;
+  /** 운행 시작·대기 시작(관제 응답 — 모르면 null) */
+  onDutySince: string | null;
+  waitingSince: string | null;
   /** 진행 중 배송(관제 단계·도착 예정) */
   deliveries: { deliveryId: string; stage: string; etaPickup: string | null; etaDrop: string | null }[];
 }
@@ -51,6 +54,8 @@ export function rowsFromControl(items: readonly ControlRider[], isSim: (id: stri
     restriction: c.restriction && c.restriction !== 'NORMAL' ? c.restriction : null,
     loc: !c.location ? 'none' : c.stale ? 'stale' : 'ok',
     sinceSec: c.staleSinceSeconds ?? null,
+    onDutySince: c.onDutySince ?? null,
+    waitingSince: c.waitingSince ?? null,
     deliveries: (c.activeDeliveries ?? []).map((d) => ({
       deliveryId: d.deliveryId,
       stage: STAGE[d.stage ?? ''] ?? (d.pickedUp ? '픽업 뒤' : '진행 중'),
@@ -73,6 +78,8 @@ export function rowsFromRiders(riders: readonly RiderView[], isSim: (id: string)
     // 서버 끊김 기준(3분 — tracking stale-after)과 같게 [확정: delivery-tracking 0.8.0 설명]
     loc: !r.pos ? 'none' : r.locationOffline || (r.locationAgeSec ?? 0) > 180 ? 'stale' : 'ok',
     sinceSec: r.locationAgeSec ?? null,
+    onDutySince: null,
+    waitingSince: null,
     deliveries: r.deliveryId ? [{ deliveryId: r.deliveryId, stage: PHASE_LABEL[r.phase], etaPickup: null, etaDrop: null }] : [],
   }));
 }

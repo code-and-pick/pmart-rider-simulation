@@ -80,7 +80,7 @@ export function MapDetail() {
  * 전달지 주소(사용자 2026-11-18 "주소까지 보이게") — 실서버는 직원용 drop-location(이 PC·관제 계정, 백엔드가 열람 기록).
  * 배정 ~ 전달 전 배송만 부른다(그 밖은 백엔드도 409 — 부르지 않고 안내만). 화면에만 — 복사·로그·저장 안 함.
  */
-function DropAddress({ deliveryId, open }: { deliveryId: string; open: boolean }) {
+export function DropAddress({ deliveryId, open }: { deliveryId: string; open: boolean }) {
   const app = useApp();
   if (!open) return <span className="c-muted">배정 ~ 전달 전 배송만 열람</span>;
   const d = app.sim.dropLocation?.(deliveryId);

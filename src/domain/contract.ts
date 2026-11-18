@@ -643,6 +643,10 @@ export interface ControlRider {
   /** (0.10.0) 화면용 라이더 번호 6자리(ADR-0070 — 가입 때 정해지고 바뀌지 않음). 화면은 "김*수 · 482913" */
   riderNumber?: string | null;
   vehicleType?: string | null;
+  /** (0.9.0) 지금 운행 구간 시작 — 신규배차 켜고 끄기로는 안 바뀜 */
+  onDutySince?: string | null;
+  /** (0.11.0) 진행 중 배송 없이 기다리기 시작한 때(배송 중이면 null) */
+  waitingSince?: string | null;
   newDispatchEnabled?: boolean;
   restriction?: string | null;
   location?: {
