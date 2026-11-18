@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useApp } from '../app/App';
 import { seoulTime } from './format';
-import { Metrics } from './Metrics';
+import { Metrics, type MetricPick } from './Metrics';
+import { BUCKET_LABEL, bucketOf, countBuckets, isFailedCall } from './buckets';
 import { displayStage, purposeLabel } from '../domain/displayStage';
 import { Progress } from './Progress';
 import { Timeline } from './Timeline';
@@ -57,15 +58,43 @@ export function RightPanel() {
   const { sim } = app;
   const sel = app.selected;
   const [tab, setTab] = useState<Tab>('deliveries');
+  const [pick, setPick] = useState<MetricPick | null>(null);
   const m = sim.metrics();
   const t = (at: number) => seoulTime(sim.clock.epochMs(at));
   const diag = sim.diagnostics();
   const allCards = sim.deliveryCards();
-  const cards = cardsFor(allCards, sel);
+  const riderCards = cardsFor(allCards, sel);
+  const counts = countBuckets(riderCards);
+  const bucket = pick && pick !== 'failedCalls' ? pick : null;
+  const cards = bucket ? riderCards.filter((c) => bucketOf(c) === bucket) : riderCards;
+  const failedOnly = pick === 'failedCalls';
+  const onPick = (p: MetricPick | null) => {
+    setPick(p);
+    if (p === 'failedCalls') setTab('api');
+    else if (p && tab !== 'orders') setTab('deliveries');
+  };
   return (
     <aside className="panel right" aria-label="배송·로그">
       {diag.length > 0 && <Diagnostics lines={diag} />}
-      <Metrics m={m} />
+      <Metrics m={m} counts={counts} mode={sim.mode} active={pick} onPick={onPick} />
+      {pick && (
+        <div className="filter-chip" role="status">
+          <span>
+            {failedOnly ? (
+              <>
+                <b>{sim.mode === 'mock' ? '응답 끊김' : '요청 실패'}</b> 만 보는 중(API 탭)
+              </>
+            ) : (
+              <>
+                <b>{BUCKET_LABEL[pick as keyof typeof BUCKET_LABEL]}</b> {cards.length}건만 보는 중
+              </>
+            )}
+          </span>
+          <button className="chip-x" aria-label="거르기 풀기" title="거르기 풀기" onClick={() => setPick(null)}>
+            ✕
+          </button>
+        </div>
+      )}
       {sel && (
         <div className="filter-chip" role="status">
           <span>
@@ -133,7 +162,9 @@ export function RightPanel() {
             })}
             {cards.length === 0 && (
               <li className="empty">
-                {sel
+                {bucket
+                  ? `${BUCKET_LABEL[bucket]} 배송이 없다(최근 목록 안).`
+                  : sel
                   ? `${shortRiderId(sel)} 에게 온 배송이 아직 없다.`
                   : sim.mode === 'mock'
                     ? '아직 배송이 없다 — MOCK 주문이 들어오면 생긴다.'
@@ -158,11 +189,19 @@ export function RightPanel() {
         )}
         {tab === 'api' && (
           <ul className="log">
+            {failedOnly && (
+              <li className="log-help">
+                {sim.mode === 'mock'
+                  ? '응답 끊김 = MOCK 이 일부러 응답을 지운 쓰기 요청. 라이더가 같은 Idempotency-Key 로 다시 보내 결과가 한 번만 반영된다.'
+                  : '요청 실패 = 응답이 없거나(네트워크·시간 초과) 백엔드가 5xx(서버 오류·잠시 못 씀)로 답한 요청. 이 화면을 연 뒤 누적이고, 대부분 조회라 다음 박자(5초)에 다시 읽는다. 한꺼번에 오르면 백엔드 배포·재시작 중인 경우가 많다.'}
+              </li>
+            )}
             {apiFor(sim.apiLog, sel)
+              .filter((r) => !failedOnly || isFailedCall(r))
               .reverse()
               .slice(0, MAX_ROWS)
               .map((r, i) => (
-                <li key={i} className={typeof r.status === 'number' && r.status >= 400 ? 'warn' : ''}>
+                <li key={i} className={isFailedCall(r) || (typeof r.status === 'number' && r.status >= 400) ? 'warn' : ''}>
                   <span className="time">{t(r.at)}</span> <span className="actor">{r.actor}</span> {r.method} {r.path} <b>{r.status}</b>
                   {r.code ? ` ${r.code}` : ''}
                 </li>

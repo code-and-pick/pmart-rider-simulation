@@ -925,7 +925,30 @@ code {
   border-top: 3px solid var(--count-c, var(--line));
   border-radius: 6px;
   padding: 4px 6px;
-  cursor: help;
+  cursor: pointer;
+  /* 누르는 칸(button) — 기본 버튼 모양을 지운다 */
+  background: var(--panel);
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.count:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.count.on {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.log-help {
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .count.tone-done {
   --count-c: #2fbf71;
