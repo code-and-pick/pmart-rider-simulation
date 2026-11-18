@@ -382,7 +382,8 @@ export class RealWorld implements World {
     if (!r) return null;
     const s = r.summary;
     const d = r.dispatch;
-    const created = s.createdAt ?? d?.createdAt;
+    // 배송 생성은 배차 쪽 시각이 먼저(수행 사본은 DeliveryCreated 를 받은 뒤라 조금 늦다 — 취소가 생성보다 앞서 보이는 것을 막음)
+    const created = d?.createdAt ?? s.createdAt;
     const steps: TimelineStep[] = dispatchSteps(d, created ? Date.parse(created) : null);
     steps.push(...summarySteps(s, steps.some((x) => x.key === 'assigned')));
     const trip = [...this.driven.values()].map((v) => v.trip).find((t) => t?.deliveryId === deliveryId) ?? this.doneTrips.get(deliveryId);

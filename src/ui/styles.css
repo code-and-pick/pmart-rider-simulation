@@ -309,6 +309,50 @@ button {
   font-size: 11px;
 }
 
+/* 주문 탭 */
+.orders {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+button.card.ord {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  cursor: pointer;
+}
+button.card.ord.picked {
+  border-color: var(--accent);
+}
+.ord-total {
+  font-variant-numeric: tabular-nums;
+}
+.ord-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.ord-legend .sw {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin-right: 3px;
+  vertical-align: -1px;
+}
+.ord-sub {
+  font-size: 11px;
+  margin: 4px 0 -2px;
+}
+.warn-text {
+  color: var(--warn);
+}
+
 /* 배송 단계 막대 */
 .progress {
   --step-on: var(--accent);

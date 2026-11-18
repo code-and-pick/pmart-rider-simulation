@@ -5,12 +5,14 @@ import { Metrics } from './Metrics';
 import { displayStage, purposeLabel } from '../domain/displayStage';
 import { Progress } from './Progress';
 import { Timeline } from './Timeline';
+import { OrdersTab } from './OrdersTab';
 import { apiFor, cardsFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
-type Tab = 'deliveries' | 'events' | 'api' | 'notes';
+type Tab = 'deliveries' | 'orders' | 'events' | 'api' | 'notes';
 
 const TABS: readonly (readonly [Tab, string])[] = [
   ['deliveries', '배송'],
+  ['orders', '주문'],
   ['events', '사건'],
   ['api', 'API'],
   ['notes', '기록'],
@@ -122,6 +124,7 @@ export function RightPanel() {
             )}
           </ul>
         )}
+        {tab === 'orders' && <OrdersTab cards={cards} />}
         {tab === 'events' && (
           <ul className="log">
             {eventsFor(sim.eventLog, allCards, sel)

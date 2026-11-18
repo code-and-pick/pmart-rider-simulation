@@ -1,0 +1,89 @@
+// 주문 탭 — 배송을 주문번호로 묶고 구간 막대를 만든다.
+import { describe, expect, it } from 'vitest';
+import type { DeliveryTimeline } from '../src/sim/timeline';
+import type { DeliveryCard } from '../src/sim/world';
+import { groupOrders, segmentsOf } from '../src/ui/orders';
+
+const card = (deliveryId: string, orderId: string | null, createdAt: number): DeliveryCard => ({
+  deliveryId,
+  orderId,
+  shipmentId: null,
+  dispatchState: null,
+  executionState: null,
+  riderId: null,
+  riderIds: [],
+  radiusKm: null,
+  customer: null,
+  purpose: null,
+  pickup: null,
+  createdAt,
+});
+const S = 1_000_000;
+const tl = (id: string, keys: [string, number, boolean?][], ended: boolean): DeliveryTimeline => ({
+  deliveryId: id,
+  orderId: null,
+  purpose: null,
+  basis: 'sim',
+  gaps: [],
+  steps: keys.map(([key, sec, bad]) => ({ key, label: key, atMs: S + sec * 1000, source: '배차', bad })),
+  endMs: ended ? S + (keys.at(-1)?.[1] ?? 0) * 1000 : null,
+});
+
+describe('주문 탭', () => {
+  it('구간 — 생성→배정 라이더 찾기, →가게 도착 MFC 로, →픽업 가게에서, →완료 고객에게', () => {
+    const t = tl('D1', [['created', 0], ['firstOffer', 0], ['assigned', 10], ['x-ARRIVED_AT_STORE-1', 60], ['x-PICKED_UP-2', 200], ['x-COMPLETED-3', 500]], true);
+    expect(segmentsOf(t.steps, t.endMs, 0).map((s) => [s.kind, s.sec])).toEqual([
+      ['findRider', 0],
+      ['findRider', 10],
+      ['toStore', 50],
+      ['atStore', 140],
+      ['toCustomer', 300],
+    ]);
+  });
+
+  it('가게 도착을 모르면(실서버 목록) 배정→픽업은 한 구간, 진행 중이면 지금까지 구간', () => {
+    const t = tl('D1', [['created', 0], ['assigned', 10], ['x-PICKED_UP', 300]], false);
+    const segs = segmentsOf(t.steps, null, S + 400_000);
+    expect(segs.map((s) => s.kind)).toEqual(['findRider', 'storeAll', 'now']);
+    expect(segs.at(-1)?.sec).toBe(100);
+  });
+
+  it('같은 주문의 배송은 한 줄 — 하나라도 진행 중이면 끝나지 않음, 주문번호 없으면 배송 하나가 한 줄, 최근 먼저', () => {
+    const tls: Record<string, DeliveryTimeline> = {
+      D1: tl('D1', [['created', 0], ['x-COMPLETED', 100]], true),
+      D2: tl('D2', [['created', 200], ['assigned', 210]], false),
+      D3: tl('D3', [['created', 50], ['dispatchFailed', 90, true]], true),
+    };
+    const rows = groupOrders([card('D1', 'O-1', 0), card('D2', 'O-1', 200), card('D3', null, 50)], (id) => tls[id] ?? null, S + 300_000);
+    expect(rows.map((r) => r.orderId)).toEqual(['O-1', null]);
+    expect(rows[0]).toMatchObject({ deliveryIds: ['D1', 'D2'], startMs: S, endMs: null, lastLabel: 'assigned' });
+    expect(rows[1]).toMatchObject({ deliveryIds: ['D3'], endMs: S + 90_000, bad: true });
+  });
+});
+
+describe('걸린 시간 글자', () => {
+  it('분·시간·일', async () => {
+    const { dur } = await import('../src/ui/format');
+    expect(dur(45)).toBe('45초');
+    expect(dur(200)).toBe('3분 20초');
+    expect(dur(2 * 3600 + 5 * 60 + 9)).toBe('2시간 5분');
+    expect(dur(3909 * 60 + 11)).toBe('2일 17시간 9분');
+    expect(dur(null)).toBe('—');
+  });
+});
+
+describe('한 주문에 배송 둘', () => {
+  it('앞 배송 끝 → 다음 배송 생성은 "다음 배송까지" 구간', () => {
+    const tls: Record<string, DeliveryTimeline> = {
+      D1: tl('D1', [['created', 0], ['cancelled', 30, true]], true),
+      D2: tl('D2', [['created', 1000], ['assigned', 1010]], false),
+    };
+    const [row] = groupOrders([card('D1', 'O-1', 0), card('D2', 'O-1', 1000)], (id) => tls[id] ?? null, S + 1_020_000);
+    expect(row!.segments.map((s) => [s.kind, s.sec])).toEqual([
+      ['bad', 30],
+      ['between', 970],
+      ['findRider', 10],
+      ['now', 10],
+    ]);
+  });
+});
