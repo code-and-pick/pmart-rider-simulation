@@ -53,6 +53,12 @@ export function startTicker(fn: () => void, intervalMs: number): () => void {
 export type MapStatus = { kind: 'loading' } | { kind: 'kakao' } | { kind: 'plane'; reason: string };
 
 const DONE_STATES = new Set(['CLOSED', 'CANCELLED_BEFORE_PICKUP', 'DISPATCH_FAILED', 'BLOCKED']);
+/** 지도 위 상세 카드가 덮는 오른쪽 폭(px) — 카드 360 + 오른쪽 여백 40(ui/console.css .map-detail) */
+const DETAIL_CARD_PX = 400;
+
+/** 지도 옮기기: 범위 맞추기 / 그 점으로(상세 카드 피해 왼쪽으로, zoomIn 이면 너무 멀면 당김) / 그 점으로 그냥 */
+type MapView = { fit: LatLng[] } | { focus: LatLng; zoomIn: boolean } | { pan: LatLng };
+
 /** 끝난 배송 핀을 지도에 남겨 두는 시간(시뮬 초) [시뮬] */
 const KEEP_DONE_SEC = 90;
 /** 실패로 끝난 배송 핀은 더 오래 남긴다(시뮬 초) [시뮬] — 빠른 배속에서도 실패 위치가 보이게 */
@@ -106,17 +112,27 @@ export class AppController {
 
   private mapEl: HTMLElement | null = null;
   /** 지도가 숨겨진 동안(라이더 관제 화면 — 크기 0) 받은 "범위 맞추기·옮기기" — 보이게 된 첫 프레임에 한다 */
-  private pendingView: { fit: LatLng[] } | { pan: LatLng } | null = null;
+  private pendingView: MapView | null = null;
 
   /** 지도 범위 맞추기·옮기기 — 숨겨져 크기가 0 이면(그때 맞추면 세계 지도 배율로 튄다) 보일 때까지 미룬다 */
-  private view(v: { fit: LatLng[] } | { pan: LatLng }) {
+  private view(v: MapView) {
     if (!this.surface || !this.mapEl || this.mapEl.clientWidth === 0 || this.mapEl.clientHeight === 0) {
       this.pendingView = v;
       return;
     }
     this.pendingView = null;
     if ('fit' in v) this.surface.fitTo(v.fit);
+    else if ('focus' in v) this.surface.focusOn(v.focus, this.detailOffsetPx(), v.zoomIn);
     else this.surface.panTo(v.pan);
+  }
+
+  /**
+   * 상세 카드(지도 오른쪽 위, 폭 약 360px + 여백 — ui/MapDetail)가 떠 있으면 그 점을 화면 가운데보다 이만큼 왼쪽에 둔다
+   * = 카드를 뺀 남은 지도 가운데. 카드가 없으면 0. 좁은 화면에서는 지도 폭의 1/4 까지만 [시뮬].
+   */
+  private detailOffsetPx(): number {
+    if (!this.selectedDelivery || !this.mapEl) return 0;
+    return Math.round(Math.min(DETAIL_CARD_PX / 2, this.mapEl.clientWidth / 4));
   }
 
   private mapGen = 0;
@@ -208,15 +224,13 @@ export class AppController {
     }
     this.selectedDelivery = deliveryId;
     const card = this.sim.deliveryCards().find((c) => c.deliveryId === deliveryId);
-    // 배정 라이더가 있으면 그 라이더로 거른다(오른쪽 탭·지도 강조) — 따라가기는 끈다(지도를 배송 범위로 맞추므로)
+    // 배정 라이더가 있으면 그 라이더로 거른다(오른쪽 탭·지도 강조) — 따라가기는 끈다
     if (card?.riderId && this.sim.riders.some((r) => r.id === card.riderId)) this.selected = card.riderId;
     this.follow = false;
-    const pts = [this.sim.mfcLocation];
-    if (card?.customer) pts.push(card.customer);
-    if (card?.pickup) pts.push(card.pickup);
+    // 지도는 기사에게(사용자 2026-11-18 "지도 위치가 기사에게 맞춰지게") — 상세 카드가 오른쪽에 뜨므로 기사를 그만큼 왼쪽에.
+    // 기사가 아직 없거나 위치를 모르면 픽업지(회수·다시 배송) 또는 MFC
     const rider = card?.riderId ? this.sim.riders.find((r) => r.id === card.riderId) : undefined;
-    if (rider?.pos) pts.push(rider.pos);
-    this.view({ fit: pts });
+    this.view({ focus: rider?.pos ?? card?.pickup ?? this.sim.mfcLocation, zoomIn: true });
     this.ticker.emit();
   }
 
@@ -317,7 +331,9 @@ export class AppController {
       // 따라가기 — 매 프레임 옮기면 지도가 흔들려서 약 1초마다
       if (this.follow && r.id === this.selected && performance.now() - this.lastFollowAt > 1000) {
         this.lastFollowAt = performance.now();
-        s.panTo(r.pos);
+        // 상세 카드가 떠 있으면 카드에 안 가리게 왼쪽으로 — 배율은 사용자가 정한 그대로(당기지 않음)
+        if (this.selectedDelivery) s.focusOn(r.pos, this.detailOffsetPx(), false);
+        else s.panTo(r.pos);
       }
       const kind =
         r.phase === 'TO_STORE' || r.phase === 'RETURNING' || r.phase === 'TO_PICKUP' ? 'TO_STORE' : r.phase === 'TO_CUSTOMER' ? 'TO_CUSTOMER' : null;

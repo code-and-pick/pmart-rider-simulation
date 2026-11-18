@@ -158,6 +158,14 @@ export class PlaneSurface implements MapSurface {
     this.cy = m.y;
   }
 
+  focusOn(pos: LatLng, offsetLeftPx: number, zoomIn = true): void {
+    // 평면은 가까이(1px ≈ 4m) — 너무 멀리 보고 있으면 당긴다
+    if (zoomIn) this.pxPerM = Math.max(this.pxPerM, 0.25);
+    const m = this.toM(pos);
+    this.cx = m.x + offsetLeftPx / this.pxPerM;
+    this.cy = m.y;
+  }
+
   frame(): void {
     const dpr = window.devicePixelRatio || 1;
     const w = this.container.clientWidth;

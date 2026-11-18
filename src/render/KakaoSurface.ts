@@ -7,6 +7,9 @@ import { createCustomerEl, createMfcEl, createRiderEl, updateCustomerEl, updateR
 import type { CustomerPinState, MapSurface, RiderMarkerState, RouteKind } from './surface';
 import type { LatLng } from '../util/geo';
 
+/** 배송·라이더에 맞출 때 이보다 멀리 보고 있으면 당기는 레벨 [시뮬] — 카카오 레벨 5 ≈ 축척 250m(사용자 2026-11-18 캡처와 같은 배율) */
+const FOCUS_LEVEL = 5;
+
 interface Marker {
   ov: KCustomOverlay;
   el: HTMLElement;
@@ -142,6 +145,19 @@ export class KakaoSurface implements MapSurface {
     const b = new this.k.LatLngBounds();
     for (const p of points) b.extend(this.ll(p));
     this.map.setBounds(b, 60, 60, 60, 60);
+  }
+
+  focusOn(pos: LatLng, offsetLeftPx: number, zoomIn = true): void {
+    this.map.relayout();
+    // 너무 멀리 보고 있으면 동네가 보이게 당긴다(레벨 5 ≈ 축척 250m) — 더 가까이 보고 있으면 그대로
+    if (zoomIn && this.map.getLevel() > FOCUS_LEVEL) this.map.setLevel(FOCUS_LEVEL);
+    const p = this.ll(pos);
+    this.map.setCenter(p);
+    if (!offsetLeftPx) return;
+    // 그 점이 화면 가운데보다 offsetLeftPx 만큼 왼쪽에 오게 — 중심을 그만큼 오른쪽 점으로
+    const proj = this.map.getProjection();
+    const pt = proj.containerPointFromCoords(p);
+    this.map.setCenter(proj.coordsFromContainerPoint(new this.k.Point(pt.x + offsetLeftPx, pt.y)));
   }
 
   panTo(pos: LatLng): void {

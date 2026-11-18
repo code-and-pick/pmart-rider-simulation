@@ -41,6 +41,11 @@ export interface MapSurface {
   panTo(pos: LatLng): void;
   /** 점들이 다 보이게 지도 범위를 맞춘다(배송을 누르면 MFC·고객·라이더) */
   fitTo(points: LatLng[]): void;
+  /**
+   * 그 점을 화면 가운데보다 offsetLeftPx 만큼 왼쪽에 둔다(오른쪽에 뜨는 상세 카드에 가리지 않게 — 사용자 2026-11-18).
+   * 너무 멀리 보고 있으면 동네가 보이게 당긴다.
+   */
+  focusOn(pos: LatLng, offsetLeftPx: number, zoomIn?: boolean): void;
   /** 매 프레임 끝(평면은 여기서 다시 그린다) */
   frame(): void;
   destroy(): void;

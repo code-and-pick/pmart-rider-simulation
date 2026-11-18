@@ -17,6 +17,16 @@ export interface KMap {
   setLevel(level: number): void;
   /** 범위가 다 보이게(여백 px: 위·오른쪽·아래·왼쪽) */
   setBounds(b: KLatLngBounds, paddingTop?: number, paddingRight?: number, paddingBottom?: number, paddingLeft?: number): void;
+  /** 화면 픽셀 ↔ 좌표(지도 컨테이너 기준) */
+  getProjection(): KProjection;
+}
+export interface KPoint {
+  x: number;
+  y: number;
+}
+export interface KProjection {
+  containerPointFromCoords(p: KLatLng): KPoint;
+  coordsFromContainerPoint(p: KPoint): KLatLng;
 }
 export interface KCustomOverlay {
   setPosition(p: KLatLng): void;
@@ -35,6 +45,7 @@ export interface KakaoMaps {
   load(cb: () => void): void;
   LatLng: new (lat: number, lng: number) => KLatLng;
   LatLngBounds: new () => KLatLngBounds;
+  Point: new (x: number, y: number) => KPoint;
   Map: new (el: HTMLElement, opts: { center: KLatLng; level: number }) => KMap;
   CustomOverlay: new (opts: {
     position: KLatLng;
