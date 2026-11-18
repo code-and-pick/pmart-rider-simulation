@@ -27,7 +27,7 @@
 - 시뮬레이터 쪽: 계정·API 가 생기기 전에는 코드 변경 없음(계약에 없는 길을 추측해 부르지 않는다).
 - **1번(라이더 위치) 반영 2026-11-18** — 사용자 "1번으로 해 … 라이더가 어딘지 알아야 MFC쪽도, 고객센터도 대응이 가능" → 새 계정 대신 있는 관리자 계정 `claude-dev`(OPERATOR_ADMIN, 비밀 파일 `keycloak-claude-dev-password` — 이름만 확인) 사용(사용자 "claude-dev 써").
   조건: 개발 서버가 **이 PC 의 `GET /api/v1/rider-locations` 에만** 그 토큰을 붙인다(`X-Sim-Actor: control`, 다른 경로는 403 CONTROL_READ_ONLY — `server/lanPolicy.ts` `isControlRead`), 다른 기기는 경로 자체가 막힘(백엔드가 라이더 위치를 운영·관리자에게만 보이므로), 비밀번호 거절(400·401)이면 개발 서버를 다시 켤 때까지 재시도 안 함(같이 쓰는 계정 잠금 방지). 실측: 200, 같은 헤더로 다른 경로 403.
-  2번(정확한 전달지) **반영 2026-11-18** — 백엔드가 execution 0.24.0 직원용 전달지 (RIDER_OPS·OPERATOR_ADMIN, 주소·좌표만, 응답 전 개인정보 열람 기록, 배정 ~ 전달 전만)을 만듦(백엔드  읽음). 사용자 "주소까지 보이게" → 실서버 화면 고른 배송 상세에 주소·좌표(지도 핀), 이 PC·관제 계정만, 고를 때 한 번(열람 기록이 박자마다 쌓이지 않게), 화면 메모리에만.
+  2번(정확한 전달지) **반영 2026-11-18** — 백엔드가 execution 0.24.0 직원용 전달지 `GET /deliveries/{id}/drop-location`(RIDER_OPS·OPERATOR_ADMIN, 주소·좌표만, 응답 전 개인정보 열람 기록, 배정 ~ 전달 전만)을 만듦(백엔드 `c902fb2f` 읽음). 사용자 "주소까지 보이게" → 실서버 화면 고른 배송 상세에 주소·좌표(지도 핀), 이 PC·관제 계정만, 고를 때 한 번(열람 기록이 박자마다 쌓이지 않게), 화면 메모리에만.
 
 ### RR-03 포장 QR 값을 라이더 쪽에서 얻는 방법 — 해소 2026-11-18
 - 회신: 백엔드 `docs/handoff/simulator/rider/2026-11-18-backend-reply-rr03-rr05-rr07.md`(보낸 영역 delivery, 사용자 2026-11-18 "응 전부 진행해") — **그 방식으로 괜찮다**. 관찰용 직원 계정(읽기만)으로 `GET /shipments/{shipmentId}` 의 qrCode = "라벨을 본다". 백엔드 변경 없음, 쓰기(인계 허가·확정)는 라이더 토큰으로만. 시뮬레이터는 이미 이 방식(`HttpBackend.getShipment`·`server/lanPolicy.ts` OBSERVER) — 바꿀 것 없음.
