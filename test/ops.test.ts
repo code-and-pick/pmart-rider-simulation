@@ -66,6 +66,8 @@ describe('관제판', () => {
     expect(byId.C!.alert).toMatchObject({ kind: 'STORE_WAIT' });
     expect(byId.D!.alert).toMatchObject({ kind: 'LATE' });
     expect(byId.E!.alert).toBeNull();
+    expect(byId.A!.alert!.overSec).toBe(60); // 6분째 − 기준 5분
+    expect(byId.C!.alert!.overSec).toBe(2 * 60); // 가게 대기 12분 − 10분
     expect(byId.F!.alert).toBeNull();
     expect(b.counts).toMatchObject({ searching: 3, delivering: 2, done: 1, active: 5, delayed: 4 });
     expect(b.alerts[0]).toMatchObject({ level: 'bad', deliveryId: 'B' }); // 심각 먼저

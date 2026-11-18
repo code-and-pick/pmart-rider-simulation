@@ -6,8 +6,7 @@ import { AlertsPanel } from './AlertsPanel';
 import { BUCKET_LABEL, isFailedCall, type Bucket } from './buckets';
 import { displayStage, purposeLabel } from '../domain/displayStage';
 import { Progress } from './Progress';
-import { Timeline } from './Timeline';
-import { deliveryLabel, orderLabel, shortId, shortRiderId } from '../domain/riderId';
+import { deliveryLabel, orderLabel, shortRiderId } from '../domain/riderId';
 import { OrdersTab } from './OrdersTab';
 import { rowMatches, type OpsFilter, type OpsRow } from './ops';
 import { apiFor, eventsFor, notesFor, roleOf } from './riderFilter';
@@ -235,21 +234,19 @@ export function RightPanel() {
   );
 }
 
-/** 배송 한 줄 — 번호·라이더·걸린 시간·단계, 지연이면 배지. 누르면 지도에서 보여 주고 아래에 두 상태와 흐름을 편다 */
+/** 배송 한 줄 — 번호·라이더·걸린 시간·단계, 지연이면 배지와 기준 넘긴 시간. 누르면 지도에서 보여 주고 지도 위에 상세 카드(ui/MapDetail) */
 function DeliveryRow({ r, sel }: { r: OpsRow; sel: string | null }) {
   const app = useApp();
-  const { sim } = app;
   const c = r.card;
   const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
   const tag = purposeLabel(c.purpose);
   const picked = app.selectedDelivery === c.deliveryId;
-  const tl = picked ? sim.deliveryTimeline(c.deliveryId) : null;
   return (
     <li>
       <button
         className={`drow b-${r.bucket} ${picked ? 'picked' : ''} ${r.alert ? `al-${r.alert.level}` : ''}`}
         aria-pressed={picked}
-        title={`배송 ${c.deliveryId}${c.orderId ? ` · 주문 ${c.orderId}` : ''} — 누르면 지도에서 보여 주고 흐름을 편다`}
+        title={`배송 ${c.deliveryId}${c.orderId ? ` · 주문 ${c.orderId}` : ''} — 누르면 지도에서 보여 주고 지도 위에 상세(두 상태·흐름)`}
         onClick={() => app.selectDelivery(c.deliveryId)}
       >
         <div className="drow-1">
@@ -264,6 +261,11 @@ function DeliveryRow({ r, sel }: { r: OpsRow; sel: string | null }) {
               </span>
             )
           )}
+          {r.alert?.overSec !== undefined && r.alert.overSec > 0 && (
+            <span className={`over ${r.alert.level}`} title={`${r.alert.title} 기준을 넘긴 시간`}>
+              +{Math.max(1, Math.round(r.alert.overSec / 60))}분
+            </span>
+          )}
           <span className="drow-time">{elapsedText(r)}</span>
         </div>
         <div className="drow-2">
@@ -277,16 +279,6 @@ function DeliveryRow({ r, sel }: { r: OpsRow; sel: string | null }) {
           </div>
         )}
       </button>
-      {picked && (
-        <div className="drow-detail">
-          {/* 원래 두 상태를 출처와 함께(docs/design.md §4 — 위 단계는 화면용 계산) */}
-          <div className="raw-states">
-            배차 <code>{c.dispatchState ?? '—'}</code> · 수행 <code>{c.executionState ?? '사본 없음'}</code> · 출고{' '}
-            <code title={c.shipmentId ?? ''}>{c.shipmentId ? shortId(c.shipmentId) : '—'}</code>
-          </div>
-          {tl && <Timeline t={tl} nowMs={sim.clock.epochMs()} />}
-        </div>
-      )}
     </li>
   );
 }

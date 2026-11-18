@@ -10,7 +10,8 @@ import type { MapSurface } from '../render/surface';
 import { PHASE_LABEL } from '../sim/rider';
 import type { DeliveryCard, ScenarioKnobs, World } from '../sim/world';
 import type { LatLng } from '../util/geo';
-import { buildBoard, type OpsBoard, type OpsFilter } from '../ui/ops';
+import { buildBoard, rowMatches, type OpsBoard, type OpsFilter } from '../ui/ops';
+import { deliveryLabel } from '../domain/riderId';
 
 /** useSyncExternalStore 로 구독하는 작은 변경 알림. */
 export class Emitter {
@@ -295,9 +296,12 @@ export class AppController {
       else s.removeRoute(r.id);
     }
     const now = this.sim.clock.now;
+    // 관제 거르기(지연만·상태 칸)를 지도 핀에도 — 목록과 같은 규칙(ui/ops.rowMatches). 고른 배송은 늘 보인다
+    const f = this.filter && this.filter !== 'failedCalls' ? this.filter : null;
+    const shown = f ? new Set(this.board().rows.filter((r) => rowMatches(r, f)).map((r) => r.card.deliveryId)) : null;
     for (const c of this.sim.deliveryCards()) {
       const pos = pinOf(c);
-      if (!pos) {
+      if (!pos || (shown && !shown.has(c.deliveryId) && c.deliveryId !== this.selectedDelivery)) {
         s.removeCustomer(c.deliveryId);
         continue; // 실서버: 고객 위치를 읽지 않는다(개인정보). 회수품을 받은 회수는 MFC 로 가므로 핀 없음
       }
@@ -313,7 +317,7 @@ export class AppController {
       s.upsertCustomer(c.deliveryId, {
         pos,
         color: customerColor(c),
-        label: c.deliveryId.replace(/^DL-/, ''),
+        label: c.deliveryNumber ?? deliveryLabel(c).replace(/^DL-/, ''),
         highlight: c.deliveryId === this.selectedDelivery,
       });
     }

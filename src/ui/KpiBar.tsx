@@ -1,6 +1,7 @@
 import { useApp } from '../app/App';
 import { dur } from './format';
 import type { OpsFilter } from './ops';
+import { useAlertSound } from './alertSound';
 
 /**
  * 관제 숫자 줄(지도 위 가로 한 줄) — 상태별 배송 수·지연·라이더·요청 실패. 누르면 오른쪽 목록이 그 칸으로 걸러진다(다시 누르면 풀림).
@@ -13,6 +14,8 @@ export function KpiBar() {
   const m = sim.metrics();
   const f = app.filter;
   const real = sim.mode === 'http';
+  const [sound, toggleSound] = useAlertSound(b.alerts);
+  const bad = b.alerts.filter((a) => a.level === 'bad').length;
   const tile = (key: OpsFilter, n: number, label: string, tone: string, hint: string, sub?: string) => (
     <button
       key={key}
@@ -43,6 +46,14 @@ export function KpiBar() {
         {tile('deliveryFailed', b.counts.deliveryFailed, '전달 실패', 'bad', '고객 부재 등으로 라이더가 전달 실패를 등록한 배송(확정 대기 + 확정)')}
       </div>
       <div className="kpi-group kpi-info" aria-label="라이더·연결">
+        <button
+          className={`bell ${b.alerts.length ? (bad ? 'bad' : 'warn') : ''} ${sound ? 'on' : ''}`}
+          aria-pressed={sound}
+          onClick={toggleSound}
+          title={`이상 상황 ${b.alerts.length}건(심각 ${bad}) — 누르면 새 알림 소리 ${sound ? '끄기' : '켜기'}`}
+        >
+          {sound ? '🔔' : '🔕'} 이상 <b>{b.alerts.length}</b>
+        </button>
         <span className="kpi-cap">라이더</span>
         <span className="kpi-stat" title="배송 중 / 전체 라이더(라이더 앱 포함)">
           <b>{b.riders.busy}</b>/{b.riders.total} 배송 중

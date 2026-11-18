@@ -19,6 +19,8 @@ export interface OpsAlert {
   riderId?: string;
   /** 얼마나 오래(초) — 정렬용 */
   sec: number;
+  /** 기준을 넘긴 초(목록 "+n분") — 기준이 없는 알림은 없음 */
+  overSec?: number;
 }
 
 /** 배송 한 줄(관제 목록) */
@@ -93,14 +95,15 @@ export function buildBoard(input: {
           title: '라이더 못 찾음',
           detail: `${label} — 배차 요청 뒤 ${min(row.totalSec)}분째`,
           sec: row.totalSec,
+          overSec: row.totalSec - t.searchWarnSec,
         });
       }
       const atStore = last && (last.key === 'engine-store' || last.key.startsWith('x-ARRIVED_AT_STORE'));
       if (atStore && last) {
         const wait = (input.nowMs - last.atMs) / 1000;
-        if (wait >= t.storeWaitWarnSec) push({ level: 'warn', kind: 'STORE_WAIT', title: '가게에서 대기 길어짐', detail: `${label} — 가게 도착 뒤 ${min(wait)}분째 픽업 전`, sec: wait });
+        if (wait >= t.storeWaitWarnSec) push({ level: 'warn', kind: 'STORE_WAIT', title: '가게에서 대기 길어짐', detail: `${label} — 가게 도착 뒤 ${min(wait)}분째 픽업 전`, sec: wait, overSec: wait - t.storeWaitWarnSec });
       }
-      if (row.totalSec >= t.lateTotalSec) push({ level: 'warn', kind: 'LATE', title: '배송 지연', detail: `${label} — 배차 요청부터 ${min(row.totalSec)}분째 진행 중`, sec: row.totalSec });
+      if (row.totalSec >= t.lateTotalSec) push({ level: 'warn', kind: 'LATE', title: '배송 지연', detail: `${label} — 배차 요청부터 ${min(row.totalSec)}분째 진행 중`, sec: row.totalSec, overSec: row.totalSec - t.lateTotalSec });
     }
     return row;
   });

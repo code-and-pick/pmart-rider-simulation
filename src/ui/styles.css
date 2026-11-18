@@ -1526,3 +1526,228 @@ button.link:hover {
   padding: 4px 0 0 8px;
   border-left: 2px solid var(--accent);
 }
+
+/* ───────── 지도 위 상세 카드(고른 배송) ───────── */
+.map-detail {
+  position: absolute;
+  top: 48px;
+  right: 46px;
+  z-index: 45;
+  width: 340px;
+  max-height: calc(100% - 64px);
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.md-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.md-head > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.md-no {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.md-status {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: #9aa4b5;
+}
+.md-status.b-searching {
+  background: #8f7cff;
+}
+.md-status.b-delivering {
+  background: var(--accent);
+}
+.md-status.b-done {
+  background: #2fbf71;
+}
+.md-status.b-dispatchFailed,
+.md-status.b-deliveryFailed {
+  background: #e5484d;
+}
+.md-facts {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 3px 8px;
+  margin: 0 0 6px;
+}
+.md-facts dt {
+  color: var(--muted);
+}
+.md-facts dd {
+  margin: 0;
+}
+.md-alert {
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: color-mix(in srgb, #e09b1a 14%, var(--panel));
+  color: #9a5b00;
+}
+.md-alert.bad {
+  background: color-mix(in srgb, #e5484d 14%, var(--panel));
+  color: #c2262b;
+}
+.map-detail .timeline {
+  margin-bottom: 0;
+}
+
+/* 지도 오른쪽 위 — 지연만 보기 토글 */
+.map-toggle {
+  position: absolute;
+  top: 10px;
+  right: 46px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--marker-label-bg);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.map-toggle.on {
+  border-color: #e5484d;
+}
+.switch {
+  width: 26px;
+  height: 14px;
+  border-radius: 999px;
+  background: #c3cad6;
+  position: relative;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.15s;
+}
+.switch.on {
+  background: #e5484d;
+}
+.switch.on::after {
+  left: 14px;
+}
+
+/* 목록 줄 — 기준 넘긴 시간 */
+.over {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e09b1a;
+  color: #fff;
+}
+.over.bad {
+  background: #e5484d;
+}
+
+/* 알림 종 */
+.bell {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bell b {
+  color: var(--ink);
+}
+.bell.warn {
+  border-color: #e09b1a;
+}
+.bell.bad {
+  border-color: #e5484d;
+  background: color-mix(in srgb, #e5484d 9%, var(--panel));
+}
+.bell.bad b {
+  color: #e5484d;
+}
+
+/* 라이더 목록 — 촘촘하게(PayBell 기사 관제처럼 한 줄 머리 + 진행 중 배송 한 줄) */
+.riders .rider-card {
+  padding: 5px 8px;
+  margin-bottom: 4px;
+}
+.rider-card .rc-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rider-card .rc-id {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rc-phase-chip {
+  font-size: 11px;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--rider-color, var(--muted));
+  white-space: nowrap;
+}
+.rc-done {
+  font-size: 11px;
+  color: var(--muted);
+}
+.rider-card .rc-delivery {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 12px;
+}
+.rider-card .rc-delivery .progress.compact {
+  flex: 0 0 80px;
+}
+.rc-elapsed {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.rider-card .rc-note,
+.rider-card .rc-job {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.rider-card .rc-offline {
+  font-size: 11px;
+  color: var(--warn);
+  margin-top: 2px;
+}

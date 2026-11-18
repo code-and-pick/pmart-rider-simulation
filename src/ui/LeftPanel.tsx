@@ -6,6 +6,7 @@ import { PHASE_COLOR } from '../render/colors';
 import { PHASE_LABEL, type RiderJob } from '../sim/rider';
 import { friendlyNote } from './friendly';
 import { Progress } from './Progress';
+import { dur } from './format';
 
 function jobText(j: RiderJob): string {
   const parts: string[] = [];
@@ -16,7 +17,7 @@ function jobText(j: RiderJob): string {
   return parts.join(' · ');
 }
 
-type RiderShow = 'all' | 'busy' | 'app';
+type RiderShow = 'all' | 'busy' | 'stale' | 'app';
 
 export function LeftPanel() {
   const app = useApp();
@@ -27,9 +28,11 @@ export function LeftPanel() {
   const all = app.sim.riders;
   const appCount = all.filter((r) => r.external).length;
   const busyCount = all.filter((r) => r.deliveryId).length;
+  const staleCount = all.filter((r) => r.locationOffline).length;
+  const rowOf = new Map(app.board().rows.map((x) => [x.card.deliveryId, x]));
   const needle = q.trim().toLowerCase();
   const riders = all
-    .filter((r) => (show === 'busy' ? !!r.deliveryId : show === 'app' ? !!r.external : true))
+    .filter((r) => (show === 'busy' ? !!r.deliveryId : show === 'app' ? !!r.external : show === 'stale' ? !!r.locationOffline : true))
     .filter((r) => !needle || r.id.toLowerCase().includes(needle) || (r.label ?? '').toLowerCase().includes(needle) || (r.deliveryId ?? '').toLowerCase().includes(needle))
     // 배송 중인 라이더 먼저(찾기 쉽게) — 같은 무리 안에서는 원래 순서
     .sort((a, b) => Number(!!b.deliveryId) - Number(!!a.deliveryId));
@@ -54,6 +57,7 @@ export function LeftPanel() {
           [
             ['all', `전체 ${all.length}`],
             ['busy', `배송 중 ${busyCount}`],
+            ...(staleCount > 0 ? [['stale', `위치 끊김 ${staleCount}`] as const] : []),
             ...(appCount > 0 ? [['app', `라이더 앱 ${appCount}`] as const] : []),
           ] as const
         ).map(([k, l]) => (
@@ -62,7 +66,7 @@ export function LeftPanel() {
           </button>
         ))}
       </div>
-      <p className="hint">누르면 오른쪽이 그 라이더로 걸러지고 지도에서 찾는다. 배송 중인 라이더가 위에.</p>
+
       <ul className="riders">
         {riders.length === 0 && <li className="empty">맞는 라이더가 없다.</li>}
         {riders.map((r) => {
@@ -82,25 +86,23 @@ export function LeftPanel() {
                   <span className="rc-id" title={r.id}>
                     <span className="dot" />
                     {r.label ?? r.id}
-                    {r.external && <span className="rc-app">라이더 앱</span>}
+                    {r.external && <span className="rc-app">앱</span>}
                   </span>
-                  <span className="rc-done" title="이 라이더가 완료한 배송">
-                    완료 {done}
+                  <span className="rc-phase-chip" title="라이더 단계(시뮬레이터 라이더 = 엔진, 라이더 앱 = 관제 단계)">
+                    {PHASE_LABEL[r.phase]}
                   </span>
+                  <span className="rc-done" title="이 라이더가 완료한 배송(목록 안)">✓{done}</span>
                 </div>
-                <div className="rc-phase">
-                  {PHASE_LABEL[r.phase]}
-                  {r.locationOffline && (
-                    <span className="rc-offline" title="위치 전송이 끊긴 중 — 3분 넘으면 백엔드가 위치 끊김(RiderLocationStale)을 낸다. 배송 상태는 그대로">
-                      📡 위치 끊김
-                    </span>
-                  )}
-                </div>
+                {r.locationOffline && (
+                  <div className="rc-offline" title="위치가 안 들어옴 — 3분 넘으면 백엔드가 위치 끊김(RiderLocationStale)을 낸다. 배송 상태는 그대로">
+                    📡 위치 끊김
+                  </div>
+                )}
                 {card && stage && (
                   <div className="rc-delivery">
                     <span className="rc-dl" title={card.deliveryId}>{deliveryLabel(card)}</span>
                     <Progress stage={stage} compact />
-                    <span className="rc-stage">{stage.text}</span>
+                    <span className="rc-elapsed">{rowOf.get(card.deliveryId)?.totalSec != null ? `${dur(rowOf.get(card.deliveryId)!.totalSec!)}째` : ''}</span>
                   </div>
                 )}
                 {r.deliveryId && r.job && (
@@ -108,7 +110,7 @@ export function LeftPanel() {
                     {jobText(r.job)}
                   </div>
                 )}
-                {r.note && <div className="rc-note">{friendlyNote(r.note)}</div>}
+                {r.note && !card && <div className="rc-note">{friendlyNote(r.note)}</div>}
               </button>
             </li>
           );

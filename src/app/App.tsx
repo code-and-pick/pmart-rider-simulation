@@ -5,6 +5,7 @@ import { RightPanel } from '../ui/RightPanel';
 import { ScenarioBar } from '../ui/ScenarioBar';
 import { TopBar } from '../ui/TopBar';
 import { KpiBar } from '../ui/KpiBar';
+import { MapDelayToggle, MapDetail } from '../ui/MapDetail';
 import type { AppController } from './controller';
 
 const Ctx = createContext<AppController | null>(null);
@@ -99,6 +100,8 @@ function MapView(p: { leftOpen: boolean; rightOpen: boolean; onLeft: () => void;
         <span className="legend-solid" /> 도로 경로(카카오모빌리티, 자동차 기준) <span className="legend-dash" /> 직선 — 도로 경로 아님
         {st.kind === 'plane' && <span className="map-fallback"> · 좌표 평면 대체 화면({st.reason})</span>}
       </div>
+      <MapDelayToggle />
+      <MapDetail />
       {/* 패널 열고 닫기 — 닫으면 지도가 넓어진다. 단축키 [ ] */}
       <button
         className={`panel-toggle left ${p.leftOpen ? 'open' : ''}`}
