@@ -1278,6 +1278,20 @@ export class MockBackend implements RiderPort {
   }
 
   /** showPickup: 회수지 좌표는 배정 라이더·직원만(제안만 받은 라이더에게는 비움 — dispatch DispatchViews.recovery) */
+  /** 화면 흐름·시간용(직원 관점) — 배차 관점 + 시도별 제안 시각 + 수행 기록. 없는 배송이면 null */
+  timelineSource(deliveryId: string): { dispatch: Delivery; history: StatusHistoryEntry[] } | null {
+    const del = this.deliveries.get(deliveryId);
+    if (!del) return null;
+    const dispatch = this.dispatchView(del, false);
+    const offers = [...this.offers.values()].filter((o) => o.deliveryId === deliveryId);
+    for (const at of dispatch.attempts ?? []) {
+      at.offers = offers
+        .filter((o) => o.attemptId === at.attemptId)
+        .map((o) => ({ offerId: o.offerId, riderId: o.riderId, state: o.state, sentAt: this.clock.iso(o.sentAt) }));
+    }
+    return { dispatch, history: del.x.history };
+  }
+
   private dispatchView(del: MDelivery, showPickup = true): Delivery {
     const a = del.d.assignment;
     return {

@@ -4,6 +4,7 @@ import { seoulTime } from './format';
 import { Metrics } from './Metrics';
 import { displayStage, purposeLabel } from '../domain/displayStage';
 import { Progress } from './Progress';
+import { Timeline } from './Timeline';
 import { apiFor, cardsFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
 type Tab = 'deliveries' | 'events' | 'api' | 'notes';
@@ -17,6 +18,13 @@ const TABS: readonly (readonly [Tab, string])[] = [
 
 /** 한 번에 그리는 줄 수 [시뮬] — 4Hz 로 다시 그리므로 넉넉하지 않게 */
 const MAX_ROWS = 120;
+
+/** 누른 배송 카드 아래 — 그 배송의 흐름·시간 */
+function PickedTimeline({ id }: { id: string }) {
+  const { sim } = useApp();
+  const t = sim.deliveryTimeline(id);
+  return t ? <Timeline t={t} nowMs={sim.clock.epochMs()} /> : null;
+}
 
 export function RightPanel() {
   const app = useApp();
@@ -89,13 +97,17 @@ export function RightPanel() {
                       )}
                     </div>
                     <Progress stage={stage} />
-                    <div className="stage-text">{stage.text}</div>
+                    <div className="stage-text">
+                      {stage.text}
+                      {c.orderId && <span className="muted"> · 주문 {c.orderId}</span>}
+                    </div>
                     {/* 원래 두 상태를 출처와 함께 작게(docs/design.md §4 — 위 단계는 화면용 계산) */}
                     <div className="raw-states">
                       배차 <code>{c.dispatchState ?? '—'}</code> · 수행 <code>{c.executionState ?? '사본 없음'}</code> · 출고{' '}
                       <code>{c.shipmentId ?? '—'}</code>
                     </div>
                   </button>
+                  {picked && <PickedTimeline id={c.deliveryId} />}
                 </li>
               );
             })}

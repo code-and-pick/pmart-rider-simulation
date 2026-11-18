@@ -241,6 +241,74 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* 배송 한 건 흐름·시간(누른 카드 아래) */
+.timeline {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 12px;
+}
+.tl-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.tl-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tl-steps li {
+  display: grid;
+  grid-template-columns: 58px 1fr auto auto;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 0;
+  border-top: 1px dashed var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.tl-steps li:first-child {
+  border-top: none;
+}
+.tl-steps li.bad .tl-label {
+  color: var(--warn);
+}
+.tl-steps li.now .tl-label {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tl-steps .time {
+  color: var(--muted);
+}
+.tl-gap {
+  color: var(--muted);
+  text-align: right;
+}
+.tl-src {
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  min-width: 2.5em;
+  text-align: center;
+}
+.tl-src.src-server {
+  background: var(--chip-ok);
+  color: var(--chip-ok-ink);
+}
+.tl-src.src-engine {
+  background: var(--chip-warn);
+  color: var(--chip-warn-ink);
+}
+.tl-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+}
+
 /* 배송 단계 막대 */
 .progress {
   --step-on: var(--accent);

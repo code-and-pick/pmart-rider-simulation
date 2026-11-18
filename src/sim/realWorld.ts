@@ -18,6 +18,8 @@ import { straightRoutes, type RouteProvider } from './route';
 import type { LatLng } from '../util/geo';
 import type { DeliveryCard, MetricsSummary, NoteRecord, PhaseSegment, RiderView, ScenarioKnobs, World } from './world';
 import type { AddressLocator } from './geocode';
+import { assemble, dispatchSteps, summarySteps, type DeliveryTimeline, type TimelineStep } from './timeline';
+import type { RiderTrip } from './rider';
 
 const RING = 300;
 const SUBSTEP = 0.25;
@@ -66,6 +68,8 @@ export class RealWorld implements World {
   private status = '실서버 조회 준비';
   private authStatus = '개발 서버 토큰 상태 확인 전';
   private readonly startWall = Date.now();
+  /** 이 브라우저가 움직인 가상 라이더의 끝난 배송 기록(엔진이 잰 가게 도착 시각) — 흐름 화면용 */
+  private readonly doneTrips = new Map<string, RiderTrip>();
   /** center-master 에서 읽은 MFC 위치(정본 — 배차 반경 기준). 읽기 전·실패면 null */
   private center: { location: LatLng; label: string } | null = null;
   private centerError: string | null = null;
@@ -182,7 +186,7 @@ export class RealWorld implements World {
         home,
         r.pos ?? home,
         {
-          onTripDone: () => undefined,
+          onTripDone: (t) => this.doneTrips.set(t.deliveryId, { ...t }),
           onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }, 1500),
         },
         { allowSignup: this.gate.signupAllowed, routes: this.routes, locator: this.locator ?? undefined },
@@ -367,6 +371,29 @@ export class RealWorld implements World {
         createdAt: s.createdAt ? (Date.parse(s.createdAt) - this.startWall) / 1000 : 0,
       };
     });
+  }
+
+  /**
+   * 실서버 배송 한 건의 흐름 — 관찰 계정으로 읽은 배차 관점(생성·제안·배정)과 직원 배송 목록(배정·픽업·완료) 시각, 실제 시각.
+   * 가게 도착은 목록에 없어, 이 브라우저가 움직인 가상 라이더 배송이면 엔진이 잰 시각을 출처 "라이더 엔진"으로 붙인다.
+   */
+  deliveryTimeline(deliveryId: string): DeliveryTimeline | null {
+    const r = this.rows.get(deliveryId);
+    if (!r) return null;
+    const s = r.summary;
+    const d = r.dispatch;
+    const created = s.createdAt ?? d?.createdAt;
+    const steps: TimelineStep[] = dispatchSteps(d, created ? Date.parse(created) : null);
+    steps.push(...summarySteps(s, steps.some((x) => x.key === 'assigned')));
+    const trip = [...this.driven.values()].map((v) => v.trip).find((t) => t?.deliveryId === deliveryId) ?? this.doneTrips.get(deliveryId);
+    if (trip?.storeArrivedAt !== undefined) {
+      steps.push({ key: 'engine-store', label: '가게 도착', atMs: this.clock.epochMs(trip.storeArrivedAt), source: '라이더 엔진' });
+    }
+    const terminal = TERMINAL_X.has(s.state ?? '') || d?.state === 'DISPATCH_FAILED' || d?.state === 'CANCELLED_BEFORE_PICKUP';
+    const gaps = ['가게 도착·고객 도착 시각은 직원 배송 목록에 없다 — 이 화면이 움직인 가상 라이더 배송만 엔진이 잰 가게 도착을 보인다'];
+    if (!d) gaps.unshift('배차 관점을 아직 못 읽음 — 제안 시각 없음');
+    if (s.state === 'FAILED' || s.state === 'CANCELLED') gaps.push(`수행 ${s.state} — 그 시각은 목록에 없다`);
+    return assemble({ deliveryId, orderId: s.orderId ?? d?.orderId ?? null, purpose: d?.purpose ?? null, basis: 'real', gaps }, steps, terminal);
   }
 
   /**

@@ -6,6 +6,7 @@ import type { DeliveryPurpose, DispatchState, ExecutionState } from '../domain/c
 import type { LatLng } from '../util/geo';
 import type { SimClock } from './clock';
 import type { RiderJob, RiderPhase } from './rider';
+import type { DeliveryTimeline } from './timeline';
 
 export interface RiderView {
   readonly id: string;
@@ -133,6 +134,8 @@ export interface World {
   readonly canChangeSpeed: boolean;
   advance(dtReal: number): Promise<void>;
   deliveryCards(): DeliveryCard[];
+  /** 배송 한 건의 흐름·시간(카드를 누르면 펼침) — 없는 배송이면 null */
+  deliveryTimeline(deliveryId: string): DeliveryTimeline | null;
   metrics(): MetricsSummary;
   /** 화면 위쪽 안내 줄(연결 상태·실측 결과 등) */
   diagnostics(): string[];

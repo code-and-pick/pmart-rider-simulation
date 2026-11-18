@@ -15,6 +15,7 @@ import { VirtualRider, type RiderTrip } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
 import type { DeliveryCard, IncidentCounts, MetricsSummary, NoteRecord, PhaseSegment, ScenarioKnobs, World } from './world';
 import { mockLocator } from './geocode';
+import { assemble, dispatchSteps, executionSteps, type DeliveryTimeline } from './timeline';
 
 const SUBSTEP = 0.25;
 const RING = 300;
@@ -124,6 +125,19 @@ export class Simulation implements World {
   /** MOCK 세계의 배송 카드. 실서버(P2)는 관찰 계정 조회로 같은 모양을 만든다. */
   deliveryCards(): DeliveryCard[] {
     return [...this.backend.deliveries.values()].map((d) => card(d, this.backend.ridersOf(d.deliveryId))).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  /** MOCK 배송 한 건의 흐름 — MockBackend 의 배차·제안·수행 기록 시각(시뮬레이션 시각) */
+  deliveryTimeline(deliveryId: string): DeliveryTimeline | null {
+    const del = this.backend.deliveries.get(deliveryId);
+    const src = this.backend.timelineSource(deliveryId);
+    if (!del || !src) return null;
+    const steps = [...dispatchSteps(src.dispatch, Date.parse(this.clock.iso(del.createdAt))), ...executionSteps(src.history)];
+    const terminal =
+      ['COMPLETED', 'FAILED', 'CANCELLED', 'RETURNED_TO_STORE'].includes(del.x.state) ||
+      del.d.state === 'DISPATCH_FAILED' ||
+      del.d.state === 'CANCELLED_BEFORE_PICKUP';
+    return assemble({ deliveryId, orderId: del.orderId, purpose: del.purpose, basis: 'sim', gaps: [] }, steps, terminal);
   }
 
   diagnostics(): string[] {
