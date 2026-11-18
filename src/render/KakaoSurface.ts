@@ -133,6 +133,8 @@ export class KakaoSurface implements MapSurface {
 
   fitTo(points: LatLng[]): void {
     if (!points.length) return;
+    // 숨겼다 다시 보인 직후면 지도가 아는 크기가 낡았다(ResizeObserver 보다 먼저 불릴 수 있음) — 먼저 크기를 다시 잰다
+    this.map.relayout();
     if (points.length === 1) {
       this.map.panTo(this.ll(points[0] as LatLng));
       return;
@@ -143,6 +145,7 @@ export class KakaoSurface implements MapSurface {
   }
 
   panTo(pos: LatLng): void {
+    this.map.relayout();
     this.map.panTo(this.ll(pos));
   }
 

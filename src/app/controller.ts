@@ -93,6 +93,7 @@ export class AppController {
     surface.setMfc(center, this.sim.params.mfcId, CONTRACT.radiusStepsKm);
     this.drawnMfc = { ...center };
     this.surface = surface;
+    this.mapEl = container;
     this.ticker.emit();
   }
 
@@ -100,6 +101,22 @@ export class AppController {
     this.mapGen++;
     this.surface?.destroy();
     this.surface = null;
+    this.mapEl = null;
+  }
+
+  private mapEl: HTMLElement | null = null;
+  /** 지도가 숨겨진 동안(라이더 관제 화면 — 크기 0) 받은 "범위 맞추기·옮기기" — 보이게 된 첫 프레임에 한다 */
+  private pendingView: { fit: LatLng[] } | { pan: LatLng } | null = null;
+
+  /** 지도 범위 맞추기·옮기기 — 숨겨져 크기가 0 이면(그때 맞추면 세계 지도 배율로 튄다) 보일 때까지 미룬다 */
+  private view(v: { fit: LatLng[] } | { pan: LatLng }) {
+    if (!this.surface || !this.mapEl || this.mapEl.clientWidth === 0 || this.mapEl.clientHeight === 0) {
+      this.pendingView = v;
+      return;
+    }
+    this.pendingView = null;
+    if ('fit' in v) this.surface.fitTo(v.fit);
+    else this.surface.panTo(v.pan);
   }
 
   private mapGen = 0;
@@ -164,7 +181,7 @@ export class AppController {
       this.selectedDelivery = null;
     }
     const r = id ? this.sim.riders.find((x) => x.id === id) : undefined;
-    if (r?.pos) this.surface?.panTo(r.pos);
+    if (r?.pos) this.view({ pan: r.pos });
     this.ticker.emit();
   }
 
@@ -182,8 +199,9 @@ export class AppController {
   /** 오른쪽에서 고른 배송 — 지도에서 고객 핀을 강조하고 MFC·고객·라이더가 다 보이게 맞춘다 */
   selectedDelivery: string | null = null;
 
-  selectDelivery(deliveryId: string | null) {
-    if (!deliveryId || this.selectedDelivery === deliveryId) {
+  /** keep = 이미 고른 배송이어도 풀지 않는다(다른 화면에서 "지도에서 보기") */
+  selectDelivery(deliveryId: string | null, keep = false) {
+    if (!deliveryId || (!keep && this.selectedDelivery === deliveryId)) {
       this.selectedDelivery = null;
       this.ticker.emit();
       return;
@@ -198,7 +216,7 @@ export class AppController {
     if (card?.pickup) pts.push(card.pickup);
     const rider = card?.riderId ? this.sim.riders.find((r) => r.id === card.riderId) : undefined;
     if (rider?.pos) pts.push(rider.pos);
-    this.surface?.fitTo(pts);
+    this.view({ fit: pts });
     this.ticker.emit();
   }
 
@@ -272,6 +290,8 @@ export class AppController {
   private syncMap() {
     const s = this.surface;
     if (!s) return;
+    // 숨겨진 동안 미룬 범위 맞추기 — 지도가 다시 보이면(크기 > 0) 한다
+    if (this.pendingView && this.mapEl && this.mapEl.clientWidth > 0 && this.mapEl.clientHeight > 0) this.view(this.pendingView);
     // MFC 위치가 바뀌면(실서버: center-master 를 읽은 뒤) 지도도 옮긴다
     const mfc = this.sim.mfcLocation;
     if (!this.drawnMfc || this.drawnMfc.lat !== mfc.lat || this.drawnMfc.lng !== mfc.lng) {

@@ -46,7 +46,8 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
     onShowOnMap();
     app.setPanelTab('deliveries');
     app.setFilter(null, true);
-    app.selectDelivery(deliveryId);
+    // 이미 고른 배송이어도 풀지 않는다. 지도는 아직 숨겨져 있어(크기 0) 범위 맞추기는 지도가 보인 뒤 controller 가 한다
+    app.selectDelivery(deliveryId, true);
   };
   const source = board
     ? `실서버 라이더 관제 · ${seoulTime(Date.parse(board.asOf))} 기준 · 10초마다`
