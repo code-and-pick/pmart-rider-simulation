@@ -4,6 +4,7 @@ import { OpsPanel } from '../ui/OpsPanel';
 import { RightPanel } from '../ui/RightPanel';
 import { ScenarioBar } from '../ui/ScenarioBar';
 import { TopBar } from '../ui/TopBar';
+import { KpiBar } from '../ui/KpiBar';
 import type { AppController } from './controller';
 
 const Ctx = createContext<AppController | null>(null);
@@ -59,6 +60,7 @@ export function App({ controller }: { controller: AppController }) {
     <Ctx.Provider value={controller}>
       <div className="app">
         <TopBar view={view} onView={setView} />
+        {view === 'field' && <KpiBar />}
         {view === 'field' && <ScenarioSlot />}
         <div className={`body ${leftOpen ? '' : 'left-closed'} ${rightOpen ? '' : 'right-closed'}`} hidden={view !== 'field'}>
           {leftOpen && <LeftPanel />}
@@ -78,9 +80,10 @@ function ScenarioSlot() {
 
 function MapView(p: { leftOpen: boolean; rightOpen: boolean; onLeft: () => void; onRight: () => void }) {
   const app = useApp();
+  const b = app.board();
   const riders = app.sim.riders;
-  const busy = riders.filter((r) => r.deliveryId).length;
-  const active = app.sim.deliveryCards().filter((c) => c.executionState !== 'COMPLETED' && c.executionState !== 'CANCELLED' && c.executionState !== 'FAILED').length;
+  const busy = b.riders.busy;
+  const active = b.counts.active;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;

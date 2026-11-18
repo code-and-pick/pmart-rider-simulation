@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../app/App';
-import { seoulTime } from './format';
-import { Metrics, type MetricPick } from './Metrics';
-import { BUCKET_LABEL, bucketOf, countBuckets, isFailedCall } from './buckets';
+import { dur, seoulTime } from './format';
+import { PhaseSummary } from './Metrics';
+import { AlertsPanel } from './AlertsPanel';
+import { BUCKET_LABEL, isFailedCall, type Bucket } from './buckets';
 import { displayStage, purposeLabel } from '../domain/displayStage';
 import { Progress } from './Progress';
 import { Timeline } from './Timeline';
 import { deliveryLabel, orderLabel, shortId, shortRiderId } from '../domain/riderId';
 import { OrdersTab } from './OrdersTab';
-import { apiFor, cardsFor, eventsFor, notesFor, roleOf } from './riderFilter';
+import { rowMatches, type OpsFilter, type OpsRow } from './ops';
+import { apiFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
 type Tab = 'deliveries' | 'orders' | 'events' | 'api' | 'notes';
 
@@ -22,13 +24,9 @@ const TABS: readonly (readonly [Tab, string])[] = [
 
 /** 한 번에 그리는 줄 수 [시뮬] — 4Hz 로 다시 그리므로 넉넉하지 않게 */
 const MAX_ROWS = 120;
+const MAX_DELIVERIES = 80;
 
-/** 누른 배송 카드 아래 — 그 배송의 흐름·시간 */
-function PickedTimeline({ id }: { id: string }) {
-  const { sim } = useApp();
-  const t = sim.deliveryTimeline(id);
-  return t ? <Timeline t={t} nowMs={sim.clock.epochMs()} /> : null;
-}
+const FILTER_LABEL: Record<OpsFilter, string> = { ...BUCKET_LABEL, delayed: '지연·이상', failedCalls: '요청 실패' };
 
 /** 문제로 보이는 연결 상태 줄 — 실패·못 읽음·없음·거절·막음 */
 const DIAG_BAD = /실패|못 읽|못 봄|없음|거절|막음|잠김|403|5\d\d/;
@@ -53,58 +51,92 @@ function Diagnostics({ lines }: { lines: string[] }) {
   );
 }
 
+/** 목록 순서: 심각 알림 → 주의 알림 → 진행 중(오래된 것 먼저) → 끝난 것(최근 것 먼저) */
+function rank(r: OpsRow): number {
+  if (r.alert?.level === 'bad') return 0;
+  if (r.alert) return 1;
+  if (r.bucket === 'searching') return 2;
+  if (r.bucket === 'delivering') return 3;
+  return 4;
+}
+
+const ACTIVE: ReadonlySet<Bucket> = new Set(['searching', 'delivering']);
+
+function elapsedText(r: OpsRow): string {
+  if (r.totalSec === null) return '';
+  return ACTIVE.has(r.bucket) ? `${dur(r.totalSec)}째` : `총 ${dur(r.totalSec)}`;
+}
+
 export function RightPanel() {
   const app = useApp();
   const { sim } = app;
   const sel = app.selected;
+  const f = app.filter;
   const [tab, setTab] = useState<Tab>('deliveries');
-  const [pick, setPick] = useState<MetricPick | null>(null);
+  const [q, setQ] = useState('');
+  // 숫자 줄에서 고른 거르기에 맞춰 탭을 옮긴다
+  useEffect(() => {
+    if (f === 'failedCalls') setTab('api');
+    else if (f) setTab((t) => (t === 'orders' ? t : 'deliveries'));
+  }, [f]);
   const m = sim.metrics();
   const t = (at: number) => seoulTime(sim.clock.epochMs(at));
   const diag = sim.diagnostics();
-  const allCards = sim.deliveryCards();
-  const riderCards = cardsFor(allCards, sel);
-  const counts = countBuckets(riderCards);
-  const bucket = pick && pick !== 'failedCalls' ? pick : null;
-  const cards = bucket ? riderCards.filter((c) => bucketOf(c) === bucket) : riderCards;
-  const failedOnly = pick === 'failedCalls';
-  const onPick = (p: MetricPick | null) => {
-    setPick(p);
-    if (p === 'failedCalls') setTab('api');
-    else if (p && tab !== 'orders') setTab('deliveries');
-  };
+  const board = app.board();
+  const allCards = board.rows.map((r) => r.card);
+  const needle = q.trim().toLowerCase();
+  const rows = board.rows
+    .filter((r) => !sel || r.card.riderId === sel || r.card.riderIds.includes(sel))
+    .filter((r) => rowMatches(r, f))
+    .filter((r) => {
+      if (!needle) return true;
+      const c = r.card;
+      return [c.deliveryId, c.deliveryNumber, c.orderNumber, c.orderId, c.riderId, c.riderId ? shortRiderId(c.riderId) : null].some((x) => x?.toLowerCase().includes(needle));
+    })
+    .sort((a, b) => {
+      const d = rank(a) - rank(b);
+      if (d) return d;
+      if (rank(a) <= 3) return (a.startMs ?? 0) - (b.startMs ?? 0);
+      return b.card.createdAt - a.card.createdAt;
+    });
+  const failedOnly = f === 'failedCalls';
   return (
     <aside className="panel right" aria-label="배송·로그">
       {diag.length > 0 && <Diagnostics lines={diag} />}
-      <Metrics m={m} counts={counts} mode={sim.mode} active={pick} onPick={onPick} />
-      {pick && (
+      <AlertsPanel />
+      <PhaseSummary m={m} />
+      {(f || sel) && (
         <div className="filter-chip" role="status">
           <span>
-            {failedOnly ? (
+            {sel && (
               <>
-                <b>{sim.mode === 'mock' ? '응답 끊김' : '요청 실패'}</b> 만 보는 중(API 탭)
-              </>
-            ) : (
-              <>
-                <b>{BUCKET_LABEL[pick as keyof typeof BUCKET_LABEL]}</b> {cards.length}건만 보는 중
+                <b title={sel}>{shortRiderId(sel)}</b> 만
               </>
             )}
-          </span>
-          <button className="chip-x" aria-label="거르기 풀기" title="거르기 풀기" onClick={() => setPick(null)}>
-            ✕
-          </button>
-        </div>
-      )}
-      {sel && (
-        <div className="filter-chip" role="status">
-          <span>
-            <b title={sel}>{shortRiderId(sel)}</b> 만 보는 중
+            {sel && f && ' · '}
+            {f && (
+              <>
+                <b>{FILTER_LABEL[f]}</b>
+                {!failedOnly && ` ${rows.length}건`}
+              </>
+            )}{' '}
+            보는 중
           </span>
           <span className="chip-actions">
-            <button className={`chip-btn ${app.follow ? 'on' : ''}`} aria-pressed={app.follow} onClick={() => app.toggleFollow()} title="지도가 이 라이더를 계속 따라간다">
-              {app.follow ? '따라가는 중' : '따라가기'}
-            </button>
-            <button className="chip-x" aria-label="전체 보기" title="전체 보기" onClick={() => app.select(null)}>
+            {sel && (
+              <button className={`chip-btn ${app.follow ? 'on' : ''}`} aria-pressed={app.follow} onClick={() => app.toggleFollow()} title="지도가 이 라이더를 계속 따라간다">
+                {app.follow ? '따라가는 중' : '따라가기'}
+              </button>
+            )}
+            <button
+              className="chip-x"
+              aria-label="거르기 모두 풀기"
+              title="거르기 모두 풀기"
+              onClick={() => {
+                if (f) app.setFilter(f);
+                if (sel) app.select(null);
+              }}
+            >
               ✕
             </button>
           </span>
@@ -114,66 +146,43 @@ export function RightPanel() {
         {TABS.map(([k, label]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
             {label}
+            {k === 'deliveries' && <span className="tab-n">{rows.length}</span>}
           </button>
         ))}
       </div>
       <div className="tab-body">
         {tab === 'deliveries' && (
-          <ul className="cards">
-            {cards.slice(0, 60).map((c) => {
-              const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
-              const tag = purposeLabel(c.purpose);
-              const picked = app.selectedDelivery === c.deliveryId;
-              return (
-                <li key={c.deliveryId}>
-                  <button
-                    className={`card dcard tone-${stage.tone} ${picked ? 'picked' : ''}`}
-                    aria-pressed={picked}
-                    title="누르면 지도에서 이 배송(MFC·고객·라이더)을 보여 준다"
-                    onClick={() => app.selectDelivery(c.deliveryId)}
-                  >
-                    <div className="card-head">
-                      <b title={`배송 ${c.deliveryId}${c.orderId ? ` · 주문 ${c.orderId}` : ""}`}>{deliveryLabel(c)}</b>
-                      {tag && (
-                        <span className="purpose-tag" title={`배송 목적 ${c.purpose} — 오배송 확인(case)에서 생긴 배송`}>
-                          {tag}
-                        </span>
-                      )}
-                      {sel ? (
-                        <span className={`role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
-                      ) : (
-                        <span className="muted" title={c.riderId ?? ''}>{c.riderId ? shortRiderId(c.riderId) : ''}</span>
-                      )}
-                    </div>
-                    <Progress stage={stage} />
-                    <div className="stage-text">
-                      {stage.text}
-                      {orderLabel(c) && !c.deliveryNumber && <span className="muted"> · 주문 {orderLabel(c)}</span>}
-                    </div>
-                    {/* 원래 두 상태를 출처와 함께 작게(docs/design.md §4 — 위 단계는 화면용 계산) */}
-                    <div className="raw-states">
-                      배차 <code>{c.dispatchState ?? '—'}</code> · 수행 <code>{c.executionState ?? '사본 없음'}</code> · 출고{' '}
-                      <code title={c.shipmentId ?? ""}>{c.shipmentId ? shortId(c.shipmentId) : '—'}</code>
-                    </div>
-                  </button>
-                  {picked && <PickedTimeline id={c.deliveryId} />}
+          <>
+            <input
+              className="rider-search"
+              type="search"
+              placeholder="배송·주문번호·라이더로 찾기"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              aria-label="배송 찾기"
+            />
+            <ul className="drows">
+              {rows.slice(0, MAX_DELIVERIES).map((r) => (
+                <DeliveryRow key={r.card.deliveryId} r={r} sel={sel} />
+              ))}
+              {rows.length === 0 && (
+                <li className="empty">
+                  {f && f !== 'failedCalls'
+                    ? `${FILTER_LABEL[f]} 배송이 없다(최근 목록 안).`
+                    : needle
+                      ? '찾는 배송이 없다.'
+                      : sel
+                        ? `${shortRiderId(sel)} 에게 온 배송이 아직 없다.`
+                        : sim.mode === 'mock'
+                          ? '아직 배송이 없다 — MOCK 주문이 들어오면 생긴다.'
+                          : '아직 배송이 없다 — 점원 배차 요청 뒤 생긴다.'}
                 </li>
-              );
-            })}
-            {cards.length === 0 && (
-              <li className="empty">
-                {bucket
-                  ? `${BUCKET_LABEL[bucket]} 배송이 없다(최근 목록 안).`
-                  : sel
-                  ? `${shortRiderId(sel)} 에게 온 배송이 아직 없다.`
-                  : sim.mode === 'mock'
-                    ? '아직 배송이 없다 — MOCK 주문이 들어오면 생긴다.'
-                    : '아직 배송이 없다 — 점원 배차 요청 뒤 생긴다.'}
-              </li>
-            )}
-          </ul>
+              )}
+              {rows.length > MAX_DELIVERIES && <li className="empty">앞 {MAX_DELIVERIES}건만 — 찾기·거르기로 좁혀 보세요.</li>}
+            </ul>
+          </>
         )}
-        {tab === 'orders' && <OrdersTab cards={cards} />}
+        {tab === 'orders' && <OrdersTab cards={rows.map((r) => r.card)} />}
         {tab === 'events' && (
           <ul className="log">
             {eventsFor(sim.eventLog, allCards, sel)
@@ -215,7 +224,7 @@ export function RightPanel() {
               .slice(0, MAX_ROWS)
               .map((n, i) => (
                 <li key={i}>
-                  <span className="time">{t(n.at)}</span> {!sel && <span className="actor">{n.riderId}</span>} {n.text}
+                  <span className="time">{t(n.at)}</span> {!sel && <span className="actor">{shortRiderId(n.riderId)}</span>} {n.text}
                 </li>
               ))}
             {sim.notes.length === 0 && <li className="empty">가상 라이더 진행 기록(엔진 기준 — 백엔드 상태 아님). 라이더가 움직이면 쌓인다.</li>}
@@ -226,3 +235,58 @@ export function RightPanel() {
   );
 }
 
+/** 배송 한 줄 — 번호·라이더·걸린 시간·단계, 지연이면 배지. 누르면 지도에서 보여 주고 아래에 두 상태와 흐름을 편다 */
+function DeliveryRow({ r, sel }: { r: OpsRow; sel: string | null }) {
+  const app = useApp();
+  const { sim } = app;
+  const c = r.card;
+  const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
+  const tag = purposeLabel(c.purpose);
+  const picked = app.selectedDelivery === c.deliveryId;
+  const tl = picked ? sim.deliveryTimeline(c.deliveryId) : null;
+  return (
+    <li>
+      <button
+        className={`drow b-${r.bucket} ${picked ? 'picked' : ''} ${r.alert ? `al-${r.alert.level}` : ''}`}
+        aria-pressed={picked}
+        title={`배송 ${c.deliveryId}${c.orderId ? ` · 주문 ${c.orderId}` : ''} — 누르면 지도에서 보여 주고 흐름을 편다`}
+        onClick={() => app.selectDelivery(c.deliveryId)}
+      >
+        <div className="drow-1">
+          <b className="drow-no">{deliveryLabel(c)}</b>
+          {tag && <span className="purpose-tag">{tag}</span>}
+          {sel ? (
+            <span className={`role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
+          ) : (
+            c.riderId && (
+              <span className="drow-rider" title={c.riderId}>
+                🛵 {shortRiderId(c.riderId)}
+              </span>
+            )
+          )}
+          <span className="drow-time">{elapsedText(r)}</span>
+        </div>
+        <div className="drow-2">
+          <Progress stage={stage} compact />
+          <span className="drow-stage">{stage.text}</span>
+          {!c.deliveryNumber && orderLabel(c) && <span className="muted"> · 주문 {orderLabel(c)}</span>}
+        </div>
+        {r.alert && (
+          <div className={`drow-alert ${r.alert.level}`}>
+            ⚠ {r.alert.title} — {r.alert.detail.split(' — ').at(-1)}
+          </div>
+        )}
+      </button>
+      {picked && (
+        <div className="drow-detail">
+          {/* 원래 두 상태를 출처와 함께(docs/design.md §4 — 위 단계는 화면용 계산) */}
+          <div className="raw-states">
+            배차 <code>{c.dispatchState ?? '—'}</code> · 수행 <code>{c.executionState ?? '사본 없음'}</code> · 출고{' '}
+            <code title={c.shipmentId ?? ''}>{c.shipmentId ? shortId(c.shipmentId) : '—'}</code>
+          </div>
+          {tl && <Timeline t={tl} nowMs={sim.clock.epochMs()} />}
+        </div>
+      )}
+    </li>
+  );
+}

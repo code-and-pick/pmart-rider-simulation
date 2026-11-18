@@ -10,6 +10,7 @@ import type { MapSurface } from '../render/surface';
 import { PHASE_LABEL } from '../sim/rider';
 import type { DeliveryCard, ScenarioKnobs, World } from '../sim/world';
 import type { LatLng } from '../util/geo';
+import { buildBoard, type OpsBoard, type OpsFilter } from '../ui/ops';
 
 /** useSyncExternalStore 로 구독하는 작은 변경 알림. */
 export class Emitter {
@@ -214,6 +215,33 @@ export class AppController {
   addRider() {
     this.sim.addRider();
     this.ticker.emit();
+  }
+
+  /** 관제 거르기(숫자 칸·알림) — 목록이 따른다. 같은 걸 다시 고르면 풀림 */
+  filter: OpsFilter | null = null;
+
+  setFilter(f: OpsFilter | null) {
+    this.filter = this.filter === f ? null : f;
+    this.ticker.emit();
+  }
+
+  private boardCache: { v: number; b: OpsBoard } | null = null;
+
+  /** 관제판(지연·이상·숫자) — 다시 그리는 박자마다 한 번만 계산 */
+  board(): OpsBoard {
+    const v = this.ticker.getVersion();
+    if (this.boardCache?.v === v) return this.boardCache.b;
+    const sim = this.sim;
+    const b = buildBoard({
+      cards: sim.deliveryCards(),
+      timelineOf: (id) => sim.deliveryTimeline(id),
+      riders: sim.riders,
+      calls: sim.apiLog,
+      epochOf: (at) => sim.clock.epochMs(at),
+      nowMs: sim.clock.epochMs(),
+    });
+    this.boardCache = { v, b };
+    return b;
   }
 
   /** 시나리오 조절 바 열림(MOCK) */

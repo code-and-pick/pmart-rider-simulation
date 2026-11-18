@@ -234,3 +234,20 @@ export const OPS_BACKOFFICE = {
   dev: 'http://localhost:5176',
   lan: 'https://192.168.0.40:8446',
 } as const;
+/**
+ * 관제 화면 지연·이상 기준(화면 알림만 — 배송 상태를 바꾸지 않는다). 업무 문서에 정한 값이 없어 모두 [가정](2026-11-18 관제 화면 개선).
+ * 시간은 실서버 = 실제 초, MOCK = 시뮬레이션 초.
+ */
+export const OPS_THRESHOLDS = {
+  /** 배차 요청 뒤 라이더를 못 찾은 채 이만큼 지나면 주의 [가정] — 반경 1→2→3km 단계가 도는 시간쯤 */
+  searchWarnSec: 5 * 60,
+  /** …이만큼이면 심각 [가정] */
+  searchBadSec: 10 * 60,
+  /** 가게 도착 뒤 픽업(인계)까지 이만큼 넘으면 주의 [가정] — 라이더 도움요청 STORE_WAITING(10분)과 같게 */
+  storeWaitWarnSec: 10 * 60,
+  /** 배송 생성부터 끝나지 않은 채 이만큼 넘으면 지연 [가정] — 가상 라이더가 받는 제안 상한(maxTripEtaSec 40분)과 같게 */
+  lateTotalSec: 40 * 60,
+  /** 최근 이 시간 안 요청 실패가 failBurstCount 이상이면 알림 [가정] */
+  failBurstWindowSec: 60,
+  failBurstCount: 3,
+} as const;

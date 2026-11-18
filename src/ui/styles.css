@@ -1204,3 +1204,325 @@ code {
   text-decoration: none;
   white-space: nowrap;
 }
+/* ───────── 관제 숫자 줄(지도 위 가로) ───────── */
+.kpibar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: stretch;
+  padding: 6px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.kpi-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kpi-group + .kpi-group {
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+.kpi-cap {
+  font-size: 11px;
+  color: var(--muted);
+  writing-mode: horizontal-tb;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+.kpi {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--kpi-c, var(--line));
+  border-radius: 6px;
+  padding: 3px 10px 3px 8px;
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  min-width: 92px;
+}
+.kpi:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.kpi.on {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+.kpi.tone-wait {
+  --kpi-c: #8f7cff;
+}
+.kpi.tone-active {
+  --kpi-c: var(--accent);
+}
+.kpi.tone-done {
+  --kpi-c: #2fbf71;
+}
+.kpi.tone-bad {
+  --kpi-c: #9aa4b5;
+}
+.kpi.tone-bad.alert {
+  --kpi-c: #e5484d;
+  background: color-mix(in srgb, #e5484d 9%, var(--panel));
+}
+.kpi.tone-muted {
+  --kpi-c: #9aa4b5;
+}
+.kpi-n {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.kpi-l {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.kpi-sub {
+  font-size: 10px;
+  color: var(--warn);
+}
+.kpi-info {
+  margin-left: auto;
+}
+.kpi-stat {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.kpi-stat b {
+  color: var(--ink);
+  font-size: 14px;
+}
+.kpi-stat.bad,
+.kpi-stat.bad b {
+  color: var(--warn);
+}
+
+/* ───────── 이상 상황 ───────── */
+.alerts {
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line));
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  background: color-mix(in srgb, var(--warn) 5%, var(--panel));
+  font-size: 12px;
+}
+.alerts.ok {
+  border-color: var(--line);
+  background: var(--panel);
+}
+.alerts-ok {
+  color: var(--chip-ok-ink);
+  font-weight: 600;
+}
+.alerts-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.alerts-head .link {
+  margin-left: auto;
+}
+.alerts ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.alert-row {
+  display: grid;
+  grid-template-columns: 10px auto 1fr;
+  gap: 6px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-top: 1px dashed var(--line);
+  background: transparent;
+  padding: 4px 2px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.alert-row:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e09b1a;
+}
+.alert-row.bad .alert-dot {
+  background: #e5484d;
+}
+.alert-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.alert-row.bad .alert-title {
+  color: #e5484d;
+}
+.alert-detail {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pill {
+  font-size: 11px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--chip-warn);
+  color: var(--chip-warn-ink);
+}
+.pill.bad {
+  background: #e5484d;
+  color: #fff;
+}
+button.link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+}
+button.link:hover {
+  text-decoration: underline;
+}
+
+/* 구간별 평균(접기) */
+.phases-box {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.phases-box summary {
+  cursor: pointer;
+}
+.phases-box .phases {
+  margin-top: 6px;
+}
+
+/* 탭 옆 건수 */
+.tab-n {
+  margin-left: 4px;
+  font-size: 11px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+}
+.tabs button.on .tab-n {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ───────── 배송 한 줄(관제 목록) ───────── */
+.drows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.drow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--b-c, var(--line));
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  cursor: pointer;
+}
+.drow:hover {
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+}
+.drow.picked {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.drow.b-searching {
+  --b-c: #8f7cff;
+}
+.drow.b-delivering {
+  --b-c: var(--accent);
+}
+.drow.b-done {
+  --b-c: #2fbf71;
+}
+.drow.b-dispatchFailed,
+.drow.b-deliveryFailed {
+  --b-c: #e5484d;
+}
+.drow.b-closed {
+  --b-c: #9aa4b5;
+  opacity: 0.8;
+}
+.drow.al-warn {
+  background: color-mix(in srgb, #e09b1a 7%, var(--panel));
+}
+.drow.al-bad {
+  background: color-mix(in srgb, #e5484d 7%, var(--panel));
+}
+.drow-1 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+.drow-no {
+  font-variant-numeric: tabular-nums;
+}
+.drow-rider {
+  font-size: 12px;
+  color: var(--muted);
+}
+.drow-time {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.drow-2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.drow-2 .progress.compact {
+  flex: 0 0 90px;
+}
+.drow-stage {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.drow-alert {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #b7791f;
+}
+.drow-alert.bad {
+  color: #e5484d;
+}
+.drow-detail {
+  margin: -2px 0 6px 4px;
+  padding: 4px 0 0 8px;
+  border-left: 2px solid var(--accent);
+}

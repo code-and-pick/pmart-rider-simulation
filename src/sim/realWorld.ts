@@ -79,6 +79,8 @@ class AppRider implements RiderView {
   deliveryId: string | null = null;
   heading = 0;
   readonly external = true;
+  /** 관제 stale(위치 없음 또는 3분 넘게 안 들어옴) */
+  locationOffline = false;
   readonly target = null;
   readonly path = null;
   readonly pathKind = null;
@@ -435,6 +437,7 @@ export class RealWorld implements World {
         r.label = c.nameMasked ? `${c.nameMasked} ${shortRiderId(c.riderId)}` : shortRiderId(c.riderId);
         const d = c.activeDeliveries?.[0];
         r.deliveryId = d?.deliveryId ?? null;
+        r.locationOffline = !!c.stale;
         r.phase = d ? (STAGE_PHASE[d.stage ?? ''] ?? (d.pickedUp ? 'TO_CUSTOMER' : 'TO_STORE')) : 'IDLE';
         const age = c.staleSinceSeconds;
         r.note = [
