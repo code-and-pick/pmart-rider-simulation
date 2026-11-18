@@ -61,11 +61,12 @@ export function buildBoard(input: {
 }): OpsBoard {
   const t = input.t ?? OPS_THRESHOLDS;
   const alerts: OpsAlert[] = [];
+  // 끝난 배송 흐름은 최근 것만 읽는다(MOCK 은 오래 돌리면 배송이 수백 건 — 박자마다 다 읽지 않게) [시뮬]
+  const recentDone = new Set([...input.cards].sort((a, b) => b.createdAt - a.createdAt).slice(0, 100).map((c) => c.deliveryId));
   const rows: OpsRow[] = input.cards.map((card) => {
     const bucket = bucketOf(card);
     const active = ACTIVE.has(bucket);
-    // 흐름은 진행 중·실패만 읽는다(끝난 배송이 많아도 가볍게)
-    const tl = active || bucket === 'dispatchFailed' || bucket === 'deliveryFailed' ? input.timelineOf(card.deliveryId) : null;
+    const tl = active || bucket === 'dispatchFailed' || bucket === 'deliveryFailed' || recentDone.has(card.deliveryId) ? input.timelineOf(card.deliveryId) : null;
     const first = tl?.steps[0];
     const last = tl?.steps.at(-1);
     const startMs = first?.atMs ?? null;

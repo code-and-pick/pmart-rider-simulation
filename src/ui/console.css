@@ -955,3 +955,12 @@
     padding: 0 12px 12px;
   }
 }
+
+/* 카드 안 단계 점(배차 요청 → 배정 → 가게 도착 → 픽업 → 고객 도착 → 완료) — 사용자 "흐름 보는 건 좋았는데" */
+.c-item-flow {
+  margin: 6px 0 2px;
+  max-width: 220px;
+}
+.c-item-2 .progress.compact {
+  flex: 0 0 96px;
+}

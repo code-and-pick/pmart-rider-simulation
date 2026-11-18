@@ -10,6 +10,7 @@ import { isFailedCall, type Bucket } from './buckets';
 import { dur, seoulTime } from './format';
 import { friendlyNote } from './friendly';
 import { PhaseSummary } from './Metrics';
+import { Progress } from './Progress';
 import { FILTER_LABEL, rowMatches, type OpsFilter, type OpsRow } from './ops';
 import { OrdersTab } from './OrdersTab';
 import { apiFor, eventsFor, notesFor, roleOf } from './riderFilter';
@@ -225,6 +226,9 @@ function DeliveryItem({ r, sel }: { r: OpsRow; sel: string | null }) {
           <span className={`c-st b-${r.bucket}`}>{BUCKET_CHIP[r.bucket] === '끝남' ? stage.text : BUCKET_CHIP[r.bucket]}</span>
           <span className="c-time">{r.totalSec === null ? '' : active ? `${dur(r.totalSec)} 경과` : `총 ${dur(r.totalSec)}`}</span>
         </div>
+        <div className="c-item-flow">
+          <Progress stage={stage} compact />
+        </div>
         <div className="c-item-2">
           {sel ? (
             <span className={`c-role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
@@ -322,6 +326,7 @@ function RiderItem({ r, row, done }: { r: RiderView; row: OpsRow | undefined; do
           {row ? (
             <>
               <span className="c-rider">📦 {deliveryLabel(row.card)}</span>
+              <Progress stage={displayStage(row.card.dispatchState, row.card.executionState, row.card.radiusKm, row.card.purpose)} compact />
               <span className="c-stage">{row.totalSec !== null ? `${dur(row.totalSec)} 경과` : ''}</span>
               {row.alert && <span className={`c-mini ${row.alert.level}`}>{row.alert.title}</span>}
             </>
