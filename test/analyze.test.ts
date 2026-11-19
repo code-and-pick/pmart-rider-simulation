@@ -14,10 +14,10 @@ describe('분석', () => {
     expect(binMinutes(24 * 60)).toBe(120);
     expect(binMinutes(3 * 24 * 60)).toBe(360);
     expect(binMinutes(10 * 24 * 60)).toBe(1440);
-    // 칸이 많아도 아래 글자는 8개 안팎
+    // 칸이 많아도 아래 글자는 16개 이하
     expect(labelEvery(5)).toBe(1);
-    expect(labelEvery(16)).toBe(2);
-    expect(labelEvery(30)).toBe(4);
+    expect(labelEvery(16)).toBe(1);
+    expect(labelEvery(30)).toBe(2);
   });
 
   it('겹치는 막대는 아랫줄로, 이어지는 막대는 같은 줄, 최대 4줄', () => {

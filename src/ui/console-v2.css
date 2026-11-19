@@ -655,6 +655,22 @@ i.k-other {
   position: absolute;
   transform: translateX(-50%);
   top: 3px;
+  text-align: center;
+  white-space: nowrap;
+}
+/* 여러 날 — 윗줄 시각, 아랫줄 날짜(날이 바뀐 눈금에만) */
+.c-tl-axis.two {
+  height: 34px;
+}
+.c-tl-axis .c-tl-track span em {
+  display: block;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--c-ink);
+}
+.c-an-chart svg .tick.date {
+  font-weight: 700;
+  fill: var(--c-ink);
 }
 .c-tl-row .c-tl-track {
   background: var(--c-soft);

@@ -116,9 +116,9 @@ export function binMinutes(spanMin: number): number {
   return [10, 15, 30, 60, 120, 180, 360, 720, 1440].find((b) => spanMin / b <= 16) ?? 1440;
 }
 
-/** 아래 글자는 8개 안팎만 — 칸이 많으면 건너뛴다(글자 겹침 방지) */
+/** 아래 글자는 16개 이하만 — 칸이 많으면 건너뛴다(글자 겹침 방지) */
 export function labelEvery(nBins: number): number {
-  return Math.max(1, Math.ceil(nBins / 8));
+  return Math.max(1, Math.ceil(nBins / 16));
 }
 
 const KST = 9 * 3600_000;
@@ -149,14 +149,27 @@ function HourBars({ rows }: { rows: readonly OpsRow[] }) {
     return { h: from, c, total: c.done + c.active + c.failed + c.other };
   });
   const multiDay = seoulDay(b0) !== seoulDay(hi);
+  const dayBin = bin >= 86_400_000;
   const clock = (ms: number) => (bin >= 3_600_000 ? `${seoulHour(ms)}시` : seoulTime(ms).slice(0, 5));
-  // 하루 칸 = 날짜만, 여러 날에 걸치면 날짜 + 시각, 하루 안이면 시각만
-  const label = (ms: number) => (bin >= 86_400_000 ? seoulDay(ms) : multiDay ? `${seoulDay(ms)} ${clock(ms)}` : clock(ms));
+  // 칸 범위(툴팁) — "11/16 12시 ~ 11/17 0시", 하루 칸은 날짜만
+  const range = (ms: number) =>
+    dayBin ? seoulDay(ms) : `${multiDay ? `${seoulDay(ms)} ` : ''}${clock(ms)} ~ ${multiDay && seoulDay(ms + bin) !== seoulDay(ms) ? `${seoulDay(ms + bin)} ` : ''}${clock(ms + bin)}`;
   const every = labelEvery(nBins);
+  // 아래 글자 두 줄 — 윗줄 시각(하루 칸이면 날짜), 아랫줄 날짜(여러 날일 때, 날이 바뀐 첫 글자에만)
+  const shown = per.map((_, i) => i).filter((i) => i % every === 0);
+  const dateLine = new Map<number, string>();
+  if (multiDay && !dayBin) {
+    let prev = '';
+    for (const i of shown) {
+      const d = seoulDay(per[i]!.h);
+      if (d !== prev) dateLine.set(i, d);
+      prev = d;
+    }
+  }
   const max = Math.max(1, ...per.map((p) => p.total));
   const W = 640;
-  const H = 220;
-  const pad = { l: 32, r: 8, t: 18, b: 24 };
+  const H = 230;
+  const pad = { l: 32, r: 8, t: 18, b: dateLine.size ? 38 : 24 };
   const bw = Math.min(36, ((W - pad.l - pad.r) / per.length) * 0.6);
   const x = (i: number) => pad.l + ((i + 0.5) * (W - pad.l - pad.r)) / per.length;
   const y = (v: number) => pad.t + (H - pad.t - pad.b) * (1 - v / max);
@@ -200,8 +213,13 @@ function HourBars({ rows }: { rows: readonly OpsRow[] }) {
                 </text>
               )}
               {i % every === 0 && (
-                <text className="tick" x={x(i)} y={H - 6} textAnchor="middle">
-                  {label(p.h)}
+                <text className="tick" x={x(i)} y={y(0) + 17} textAnchor="middle">
+                  {dayBin ? seoulDay(p.h) : clock(p.h)}
+                </text>
+              )}
+              {dateLine.has(i) && (
+                <text className="tick date" x={x(i)} y={y(0) + 32} textAnchor="middle">
+                  {dateLine.get(i)}
                 </text>
               )}
             </g>
@@ -211,7 +229,7 @@ function HourBars({ rows }: { rows: readonly OpsRow[] }) {
       </svg>
       {hv && (
         <div className="c-an-tip" role="status">
-          <b>{label(hv.h)}~</b> · 완료 {hv.c.done} · 진행 중 {hv.c.active} · 실패 {hv.c.failed}
+          <b>{range(hv.h)}</b> · 완료 {hv.c.done} · 진행 중 {hv.c.active} · 실패 {hv.c.failed}
           {hv.c.other ? ` · 취소·기타 ${hv.c.other}` : ''} · 합계 {hv.total}
         </div>
       )}
@@ -294,20 +312,22 @@ function RiderTimeline({ rows }: { rows: readonly OpsRow[] }) {
   const t0 = Math.min(...spans.map((x) => x.s));
   const t1 = Math.max(nowMs, ...spans.map((x) => x.e));
   const pct = (ms: number) => ((ms - t0) / Math.max(1, t1 - t0)) * 100;
-  // 눈금 — 8개 이하(15분 ~ 며칠), 서울 시각에 맞춤, 여러 날이면 날짜도
-  const stepMin = [15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].find((s) => (t1 - t0) / 60_000 / s <= 8) ?? 10080;
+  // 눈금 — 12개 이하(15분 ~ 며칠), 서울 시각에 맞춤. 두 줄: 윗줄 시각, 아랫줄 날짜(여러 날일 때 날이 바뀐 눈금에만)
+  const stepMin = [15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].find((s) => (t1 - t0) / 60_000 / s <= 12) ?? 10080;
   const tlMultiDay = seoulDay(t0) !== seoulDay(t1);
   const ticks: number[] = [];
   for (let t = Math.ceil((t0 + KST) / (stepMin * 60_000)) * stepMin * 60_000 - KST; t <= t1; t += stepMin * 60_000) ticks.push(t);
+  const tickDay = (t: number, i: number) => tlMultiDay && stepMin < 1440 && (i === 0 || seoulDay(ticks[i - 1]!) !== seoulDay(t));
   const lanes = [...byRider.entries()].sort((a, b) => (a[0] === '' ? -1 : b[0] === '' ? 1 : b[1].length - a[1].length));
   return (
     <div className="c-tl">
-      <div className="c-tl-axis">
+      <div className={`c-tl-axis ${tlMultiDay && stepMin < 1440 ? 'two' : ''}`}>
         <span className="c-tl-name" />
         <div className="c-tl-track">
-          {ticks.map((t) => (
+          {ticks.map((t, i) => (
             <span key={t} style={{ left: `${pct(t)}%` }}>
-              {stepMin >= 1440 ? seoulDay(t) : tlMultiDay ? `${seoulDay(t)} ${seoulTime(t).slice(0, 5)}` : seoulTime(t).slice(0, 5)}
+              {stepMin >= 1440 ? seoulDay(t) : seoulTime(t).slice(0, 5)}
+              {tickDay(t, i) && <em>{seoulDay(t)}</em>}
             </span>
           ))}
         </div>
