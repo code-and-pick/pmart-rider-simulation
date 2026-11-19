@@ -5,6 +5,7 @@ import { deliveryLabel } from '../domain/riderId';
 import { dur, seoulTime } from './format';
 import type { OpsRow } from './ops';
 import { riderIndex } from './riderTable';
+import { binCount, binLabel, binRange, defaultView, frame, frameTitle, KST, niceStep, seoulDay, shift, type Bin, type ChartView } from './timeChart';
 
 /*
  * 분석(Onfleet "Analyze" 를 참고) — 이 화면이 가진 배송 목록으로만 센다(새 API 없음).
@@ -22,11 +23,6 @@ function kindOf(r: OpsRow): Kind {
   if (r.bucket === 'searching' || r.bucket === 'delivering') return 'active';
   if (r.bucket === 'dispatchFailed' || r.bucket === 'deliveryFailed') return 'failed';
   return 'other';
-}
-
-/** 서울 시(0~23) */
-function seoulHour(ms: number): number {
-  return new Date(ms + 9 * 3600_000).getUTCHours();
 }
 
 export function AnalyzePage() {
@@ -60,8 +56,8 @@ export function AnalyzePage() {
 
       <div className="c-an-grid">
         <section className="c-an-card wide" aria-label="시간대별 배송">
-          <h3>시간대별 배송 <span className="c-muted">배차 요청 시각 기준 · 칸 = 자료 폭에 맞춰 10분~하루(서울)</span></h3>
-          <HourBars rows={rows} />
+          <h3>시간대별 배송 <span className="c-muted">배차 요청 시각 기준 · 서울</span></h3>
+          <TimeChart rows={rows} />
         </section>
         <section className="c-an-card" aria-label="상태 구성">
           <h3>상태 구성 <span className="c-muted">총 {b.rows.length}건</span></h3>
@@ -111,81 +107,101 @@ function Tile({ label, value, unit, sub, tone }: { label: string; value: string;
   );
 }
 
-/** 칸 크기(분) — 자료 폭에 맞춰 칸이 16개 이하가 되게(10분 ~ 하루) [시뮬] */
-export function binMinutes(spanMin: number): number {
-  return [10, 15, 30, 60, 120, 180, 360, 720, 1440].find((b) => spanMin / b <= 16) ?? 1440;
-}
-
-/** 아래 글자는 16개 이하만 — 칸이 많으면 건너뛴다(글자 겹침 방지) */
-export function labelEvery(nBins: number): number {
-  return Math.max(1, Math.ceil(nBins / 16));
-}
-
-const KST = 9 * 3600_000;
-
-/** 서울 날짜 "11/16" */
-function seoulDay(ms: number): string {
-  const d = new Date(ms + KST);
-  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
-}
-
-/** 시간대별 쌓은 막대 — 완료(아래) → 진행 중 → 실패, 막대 위에 합계, 마우스를 올리면 그 칸 숫자 */
-function HourBars({ rows }: { rows: readonly OpsRow[] }) {
+/**
+ * 시간대별 배송 — 고정 틀 셋(최근 2시간·하루·7일, ui/timeChart.ts) + 앞뒤 이동.
+ * 쌓은 막대(완료 → 진행 중 → 실패), 막대 위 합계, 지금 칸 강조·지난 뒤 칸은 흐리게, 마우스 = 칸 범위·숫자.
+ * 7일 막대를 누르면 그날 하루로 내려간다.
+ */
+function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
+  const app = useApp();
+  const nowMs = app.sim.clock.epochMs();
+  const [chosen, setChosen] = useState<ChartView | null>(null);
   const [hover, setHover] = useState<number | null>(null);
-  if (!rows.length) return <p className="c-muted">배송이 없습니다.</p>;
-  const starts = rows.map((r) => r.startMs as number);
-  const lo = Math.min(...starts);
-  const hi = Math.max(...starts);
-  const bin = binMinutes((hi - lo) / 60_000) * 60_000;
-  // 칸 경계를 서울 시각에 맞춘다(하루 칸 = 서울 0시부터)
-  const b0 = Math.floor((lo + KST) / bin) * bin - KST;
-  const nBins = Math.max(1, Math.floor((hi - b0) / bin) + 1);
-  const per = Array.from({ length: nBins }, (_, i) => {
-    const from = b0 + i * bin;
-    const c = { done: 0, active: 0, failed: 0, other: 0 } as Record<Kind, number>;
-    rows.forEach((r, j) => {
-      if (starts[j]! >= from && starts[j]! < from + bin) c[kindOf(r)]++;
-    });
-    return { h: from, c, total: c.done + c.active + c.failed + c.other };
-  });
-  const multiDay = seoulDay(b0) !== seoulDay(hi);
-  const dayBin = bin >= 86_400_000;
-  const clock = (ms: number) => (bin >= 3_600_000 ? `${seoulHour(ms)}시` : seoulTime(ms).slice(0, 5));
-  // 칸 범위(툴팁) — "11/16 12시 ~ 11/17 0시", 하루 칸은 날짜만
-  const range = (ms: number) =>
-    dayBin ? seoulDay(ms) : `${multiDay ? `${seoulDay(ms)} ` : ''}${clock(ms)} ~ ${multiDay && seoulDay(ms + bin) !== seoulDay(ms) ? `${seoulDay(ms + bin)} ` : ''}${clock(ms + bin)}`;
-  const every = labelEvery(nBins);
-  // 아래 글자 두 줄 — 윗줄 시각(하루 칸이면 날짜), 아랫줄 날짜(여러 날일 때, 날이 바뀐 첫 글자에만)
-  const shown = per.map((_, i) => i).filter((i) => i % every === 0);
-  const dateLine = new Map<number, string>();
-  if (multiDay && !dayBin) {
-    let prev = '';
-    for (const i of shown) {
-      const d = seoulDay(per[i]!.h);
-      if (d !== prev) dateLine.set(i, d);
-      prev = d;
-    }
-  }
-  const max = Math.max(1, ...per.map((p) => p.total));
+  const items = rows.map((r) => ({ at: r.startMs as number, kind: kindOf(r) }));
+  const v = chosen ?? defaultView(items.map((i) => i.at), nowMs);
+  const f = frame(v, nowMs);
+  const bins = binCount(items, f, ORDER);
+  const total = bins.reduce((a, b) => a + b.total, 0);
+  const sum = (k: Kind) => bins.reduce((a, b) => a + b.counts[k], 0);
+  const peak = bins.reduce<Bin<Kind> | null>((p, b) => (b.total > (p?.total ?? 0) ? b : p), null);
+  const latest = items.length ? Math.max(...items.map((i) => i.at)) : null;
+  const go = (n: ChartView) => {
+    setHover(null);
+    setChosen(n);
+  };
+
+  const yStep = niceStep(peak?.total ?? 0);
+  const max = Math.max(yStep, Math.ceil((peak?.total ?? 0) / yStep) * yStep);
   const W = 640;
-  const H = 230;
-  const pad = { l: 32, r: 8, t: 18, b: dateLine.size ? 38 : 24 };
-  const bw = Math.min(36, ((W - pad.l - pad.r) / per.length) * 0.6);
-  const x = (i: number) => pad.l + ((i + 0.5) * (W - pad.l - pad.r)) / per.length;
-  const y = (v: number) => pad.t + (H - pad.t - pad.b) * (1 - v / max);
-  const ticks = [0, Math.ceil(max / 2), max];
-  const hv = hover !== null ? per[hover] : null;
+  const H = 210;
+  const pad = { l: 30, r: 8, t: 20, b: f.mode === 'week' ? 36 : 22 };
+  const slot = (W - pad.l - pad.r) / f.n;
+  const bw = Math.min(30, slot * 0.62);
+  const x = (i: number) => pad.l + (i + 0.5) * slot;
+  const y = (n: number) => pad.t + (H - pad.t - pad.b) * (1 - n / max);
+  const ticks = Array.from({ length: Math.round(max / yStep) + 1 }, (_, i) => i * yStep);
+  const hv = hover !== null ? bins[hover] : null;
+
   return (
     <div className="c-an-chart">
-      <div className="c-an-legend" aria-label="범례">
-        {(['done', 'active', 'failed'] as const).map((k) => (
-          <span key={k}>
-            <i className={`k-${k}`} />
-            {KIND_LABEL[k]}
-          </span>
-        ))}
+      <div className="c-an-ctl">
+        <div className="c-an-seg" role="tablist" aria-label="보는 기간">
+          {(
+            [
+              ['recent', '최근 2시간'],
+              ['day', '하루'],
+              ['week', '7일'],
+            ] as const
+          ).map(([m, l]) => (
+            <button key={m} role="tab" aria-selected={v.mode === m} className={v.mode === m ? 'on' : ''} onClick={() => go({ mode: m, anchor: m === 'recent' ? nowMs : v.anchor })}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <div className="c-an-nav">
+          {v.mode !== 'recent' && (
+            <button aria-label={v.mode === 'day' ? '전날' : '앞 7일'} onClick={() => go(shift(v, -1))}>
+              ‹
+            </button>
+          )}
+          <b>{frameTitle(f, nowMs)}</b>
+          {v.mode !== 'recent' && (
+            <button aria-label={v.mode === 'day' ? '다음 날' : '뒤 7일'} onClick={() => go(shift(v, 1))} disabled={f.to > nowMs}>
+              ›
+            </button>
+          )}
+          {v.mode !== 'recent' && f.to <= nowMs && (
+            <button className="today" onClick={() => go({ mode: v.mode, anchor: nowMs })}>
+              오늘
+            </button>
+          )}
+        </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="시간대별 배송 막대">
+
+      <p className="c-an-sum">
+        {total ? (
+          <>
+            <b>{total}건</b> · 완료 {sum('done')} · 진행 중 {sum('active')} · 실패 {sum('failed')}
+            {sum('other') ? ` · 취소·기타 ${sum('other')}` : ''}
+            {peak && peak.total > 0 && (
+              <span className="peak">
+                가장 많은 때 <b>{binRange(f.mode, peak)}</b> {peak.total}건
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            이 기간엔 배송이 없습니다.
+            {latest !== null && (
+              <button className="link" onClick={() => go({ mode: 'day', anchor: latest })}>
+                마지막 배송 {seoulDay(latest)} 보기
+              </button>
+            )}
+          </>
+        )}
+      </p>
+
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`시간대별 배송 막대 — ${frameTitle(f, nowMs)}`}>
         {ticks.map((t) => (
           <g key={t}>
             <line className="grid" x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} />
@@ -194,32 +210,42 @@ function HourBars({ rows }: { rows: readonly OpsRow[] }) {
             </text>
           </g>
         ))}
-        {per.map((p, i) => {
+        {bins.map((b, i) => {
+          const isNow = nowMs >= b.from && nowMs < b.to;
+          const future = b.from > nowMs;
+          const [l1, l2] = binLabel(f.mode, b.from);
           let acc = 0;
-          const segs = ORDER.filter((k) => k !== 'other' || p.c.other).map((k) => {
-            const v = p.c[k];
-            const y0 = y(acc);
-            acc += v;
-            const y1 = y(acc);
-            return v ? <rect key={k} className={`k-${k}`} x={x(i) - bw / 2} y={y1 + 1} width={bw} height={Math.max(0, y0 - y1 - 2)} rx={3} /> : null;
-          });
           return (
-            <g key={p.h} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
-              <rect className="hit" x={x(i) - bw} y={pad.t} width={bw * 2} height={H - pad.t - pad.b} />
-              {segs}
-              {p.total > 0 && (
-                <text className="val" x={x(i)} y={y(p.total) - 5} textAnchor="middle">
-                  {p.total}
+            <g
+              key={b.from}
+              className={`${isNow ? 'is-now' : ''} ${future ? 'is-future' : ''} ${f.mode === 'week' ? 'drill' : ''}`}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+              onClick={f.mode === 'week' ? () => go({ mode: 'day', anchor: b.from }) : undefined}
+            >
+              <rect className="hit" x={pad.l + i * slot} y={pad.t} width={slot} height={H - pad.t - pad.b} />
+              {isNow && <rect className="nowband" x={pad.l + i * slot} y={pad.t} width={slot} height={H - pad.t - pad.b} />}
+              {ORDER.map((k) => {
+                const n = b.counts[k];
+                if (!n) return null;
+                const y0 = y(acc);
+                acc += n;
+                const y1 = y(acc);
+                return <rect key={k} className={`k-${k}`} x={x(i) - bw / 2} y={y1 + 1} width={bw} height={Math.max(2, y0 - y1 - 2)} rx={3} />;
+              })}
+              {b.total > 0 && (
+                <text className="val" x={x(i)} y={y(b.total) - 5} textAnchor="middle">
+                  {b.total}
                 </text>
               )}
-              {i % every === 0 && (
-                <text className="tick" x={x(i)} y={y(0) + 17} textAnchor="middle">
-                  {dayBin ? seoulDay(p.h) : clock(p.h)}
+              {(i % f.labelEvery === 0 || isNow) && (
+                <text className={`tick ${isNow ? 'now' : ''}`} x={x(i)} y={y(0) + 15} textAnchor="middle">
+                  {isNow && f.mode !== 'week' ? '지금' : l1}
                 </text>
               )}
-              {dateLine.has(i) && (
-                <text className="tick date" x={x(i)} y={y(0) + 32} textAnchor="middle">
-                  {dateLine.get(i)}
+              {l2 && (
+                <text className={`tick sub ${isNow ? 'now' : ''}`} x={x(i)} y={y(0) + 29} textAnchor="middle">
+                  {isNow ? '오늘' : l2}
                 </text>
               )}
             </g>
@@ -227,12 +253,29 @@ function HourBars({ rows }: { rows: readonly OpsRow[] }) {
         })}
         <line className="axis" x1={pad.l} x2={W - pad.r} y1={y(0)} y2={y(0)} />
       </svg>
-      {hv && (
-        <div className="c-an-tip" role="status">
-          <b>{range(hv.h)}</b> · 완료 {hv.c.done} · 진행 중 {hv.c.active} · 실패 {hv.c.failed}
-          {hv.c.other ? ` · 취소·기타 ${hv.c.other}` : ''} · 합계 {hv.total}
+
+      <div className="c-an-foot">
+        <div className="c-an-legend" aria-label="범례">
+          {ORDER.filter((k) => k !== 'other' || sum('other')).map((k) => (
+            <span key={k}>
+              <i className={`k-${k}`} />
+              {KIND_LABEL[k]}
+            </span>
+          ))}
         </div>
-      )}
+        <span className="c-an-hint" role="status">
+          {hv ? (
+            <>
+              <b>{binRange(f.mode, hv)}</b> · {hv.total ? `완료 ${hv.counts.done} · 진행 중 ${hv.counts.active} · 실패 ${hv.counts.failed}${hv.counts.other ? ` · 취소·기타 ${hv.counts.other}` : ''} · 합계 ${hv.total}` : '배송 없음'}
+              {f.mode === 'week' && ' — 누르면 그날 시간대'}
+            </>
+          ) : f.mode === 'week' ? (
+            '막대를 누르면 그날 시간대로'
+          ) : (
+            '막대에 마우스를 올리면 칸 숫자'
+          )}
+        </span>
+      </div>
     </div>
   );
 }

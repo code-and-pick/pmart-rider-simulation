@@ -754,3 +754,114 @@ i.k-other {
     grid-template-columns: 90px minmax(0, 1fr) 70px;
   }
 }
+
+/* 분석 시간대 막대 — 기간 고르기·앞뒤 이동·요약 줄·지금 칸 */
+.c-an-ctl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.c-an-seg {
+  display: inline-flex;
+  background: var(--c-soft);
+  border-radius: 8px;
+  padding: 2px;
+}
+.c-an-seg button {
+  border: 0;
+  background: transparent;
+  color: var(--c-sub);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.c-an-seg button.on {
+  background: var(--c-panel);
+  color: var(--c-ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 25%);
+}
+.c-an-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.c-an-nav b {
+  min-width: 96px;
+  text-align: center;
+}
+.c-an-nav button {
+  border: 1px solid var(--c-line);
+  background: var(--c-panel);
+  color: var(--c-ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.c-an-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.c-an-nav button.today {
+  font-size: 12px;
+}
+.c-an-sum {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--c-sub);
+}
+.c-an-sum b {
+  color: var(--c-ink);
+}
+.c-an-sum .peak {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--c-line);
+}
+.c-an-sum .link {
+  margin-left: 8px;
+}
+.c-an-chart .nowband {
+  fill: color-mix(in srgb, var(--c-blue) 10%, transparent);
+}
+.c-an-chart .tick.now {
+  fill: var(--c-blue);
+  font-weight: 800;
+}
+.c-an-chart .tick.sub {
+  font-size: 10px;
+}
+.c-an-chart .is-future .tick {
+  opacity: 0.4;
+}
+.c-an-chart g.drill {
+  cursor: pointer;
+}
+.c-an-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 6px;
+}
+.c-an-foot .c-an-legend {
+  margin: 0;
+}
+.c-an-hint {
+  font-size: 12px;
+  color: var(--c-sub);
+  min-height: 1.4em;
+}
+.c-an-hint b {
+  color: var(--c-ink);
+}
