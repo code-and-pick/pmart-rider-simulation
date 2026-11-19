@@ -865,3 +865,14 @@ i.k-other {
 .c-an-hint b {
   color: var(--c-ink);
 }
+
+/* 주문 창 — MOCK 안내 한 줄 */
+.md-note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--c-sub);
+}
+.c-btn-s:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

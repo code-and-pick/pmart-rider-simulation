@@ -32,8 +32,8 @@ export function MapDetail() {
   const active = row.bucket === 'searching' || row.bucket === 'delivering';
   const pickedUp = stage.index >= 3;
   const copy = () => {
-    const text = c.orderNumber ?? c.deliveryNumber ?? c.deliveryId;
-    void navigator.clipboard?.writeText(text).then(
+    if (!c.orderNumber) return;
+    void navigator.clipboard?.writeText(c.orderNumber).then(
       () => {
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1500);
@@ -160,18 +160,22 @@ export function MapDetail() {
             {app.follow && app.mapRider === c.riderId ? '따라가는 중' : '라이더 따라가기'}
           </button>
         )}
-        <a className="c-btn-s" href={opsDeliveryUrl(mode, c.deliveryId)} target="_blank" rel="noopener noreferrer" title="라이더 백오피스 배송 상세 — 전달 실패 확정·배차 취소·상태 정정 같은 조치는 거기서">
-          배송 조치 ↗
-        </a>
-        {c.riderId && (
-          <a className="c-btn-s" href={opsRiderUrl(mode, c.riderId)} target="_blank" rel="noopener noreferrer" title="라이더 백오피스 라이더 상세 — 계정 제한·수행료·운행시간">
+        {/* 백오피스 바로 가기는 실서버만 — MOCK 배송·라이더는 백오피스에 없고, MOCK 링크(localhost 목 백오피스)는 켜 두지 않으면 "연결할 수 없음"(사용자 2026-11-19) */}
+        {mode === 'http' && (
+          <a className="c-btn-s" href={opsDeliveryUrl(mode, c.deliveryId)} target="_blank" rel="noopener noreferrer" title="라이더 백오피스 배송 상세 — 전달 실패 확정·배차 취소·상태 정정 같은 조치는 거기서(직원 로그인)">
+            배송 조치 ↗
+          </a>
+        )}
+        {mode === 'http' && c.riderId && (
+          <a className="c-btn-s" href={opsRiderUrl(mode, c.riderId)} target="_blank" rel="noopener noreferrer" title="라이더 백오피스 라이더 상세 — 계정 제한·수행료·운행시간(직원 로그인)">
             라이더 상세 ↗
           </a>
         )}
-        <button className="c-btn-s" onClick={copy} title="주문번호(없으면 배송번호)를 복사">
-          {copied ? '복사됨' : '번호 복사'}
+        <button className="c-btn-s" onClick={copy} disabled={!c.orderNumber} title={c.orderNumber ? `주문번호 ${c.orderNumber} 복사` : '주문번호가 없는 배송(다시 배송·회수 등)'}>
+          {copied ? '복사됨' : '주문번호 복사'}
         </button>
       </div>
+      {mode !== 'http' && <p className="md-note">배송 조치·라이더 상세(백오피스)는 실서버 화면에서 — 가상 배송은 백오피스에 없습니다.</p>}
     </aside>
   );
 }
