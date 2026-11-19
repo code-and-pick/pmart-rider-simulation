@@ -122,9 +122,14 @@ export function riderIndex(control: readonly ControlRider[] | null, riders: read
 export type LocStatus = 'ok' | 'stale' | 'none' | 'rest';
 
 export function locStatus(r: RiderRow): LocStatus {
-  if (r.loc === 'ok') return 'ok';
+  // 위치 공유 = 맡은 배송이 있음 또는 신규배차 켬(백엔드 tracking 0.12.0 규칙, PR #237 — PC 5 백엔드 알림 2026-11-19). 그 밖은 쉬는 중
   if (r.deliveries.length === 0 && r.dispatchOn !== true) return 'rest';
   return r.loc;
+}
+
+/** 화면 라이더가 쉬는 중인가(맡은 배송 없음 · 신규배차 켠 게 아님) — 지도에 그리지 않는다 */
+export function isResting(r: { deliveryId: string | null; dispatchOn?: boolean | null }): boolean {
+  return !r.deliveryId && r.dispatchOn !== true;
 }
 
 /** 화면 라이더(RiderView) 기준 같은 판단 — 지도 색·머리 숫자 */
@@ -136,7 +141,7 @@ export type RiderTableFilter = 'all' | 'delivering' | 'waiting' | 'stale' | 'sim
 
 export function rowMatchesRider(r: RiderRow, f: RiderTableFilter): boolean {
   if (f === 'delivering') return r.deliveries.length > 0;
-  if (f === 'waiting') return r.deliveries.length === 0 && r.loc === 'ok';
+  if (f === 'waiting') return r.deliveries.length === 0 && locStatus(r) === 'ok';
   if (f === 'stale') return locStatus(r) === 'stale' || locStatus(r) === 'none';
   if (f === 'sim') return r.sim;
   if (f === 'app') return r.external;

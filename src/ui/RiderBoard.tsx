@@ -203,9 +203,15 @@ export function RiderList() {
                   <LocBadge r={r} />
                 </span>
                 <span className="rb-item-2">
-                  {[vehicleName(r.vehicle), r.dispatchOn === null ? null : `신규배차 ${r.dispatchOn ? '켬' : '끔'}`, r.sinceSec === null ? null : `${dur(r.sinceSec)} 전`].filter(Boolean).join(' · ')}
+                  {[
+                    vehicleName(r.vehicle),
+                    r.dispatchOn === null ? null : `신규배차 ${r.dispatchOn ? '켬' : '끔'}`,
+                    locStatus(r) === 'rest' ? '위치 공유 안 함' : r.sinceSec === null ? null : `${dur(r.sinceSec)} 전`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </span>
-                {r.pos && <span className="rb-coord">{`${r.pos.lat.toFixed(5)}, ${r.pos.lng.toFixed(5)}`}</span>}
+                {r.pos && locStatus(r) !== 'rest' && <span className="rb-coord">{`${r.pos.lat.toFixed(5)}, ${r.pos.lng.toFixed(5)}`}</span>}
                 {r.deliveries.map((d) => {
                   const op = cardOf.get(d.deliveryId);
                   const eta = etaText(d.etaDrop, nowMs);
@@ -278,22 +284,26 @@ export function RiderPanel() {
       <div className="rb-tiles">
         <Tile
           label="위치"
-          tone={!row ? undefined : row.loc === 'ok' ? 'ok' : locStatus(row) === 'rest' ? undefined : 'bad'}
+          tone={!row ? undefined : locStatus(row) === 'rest' ? undefined : row.loc === 'ok' ? 'ok' : 'bad'}
           value={
             !row
               ? '—'
-              : row.loc === 'ok'
-                ? `수신 중${row.sinceSec !== null ? ` · ${dur(row.sinceSec)} 전` : ''}`
-                : locStatus(row) === 'rest'
-                  ? <span className="rb-dim">쉬는 중 · 위치 꺼짐</span>
+              : locStatus(row) === 'rest'
+                ? <span className="rb-dim">쉬는 중 · 위치 공유 안 함</span>
+                : row.loc === 'ok'
+                  ? `수신 중${row.sinceSec !== null ? ` · ${dur(row.sinceSec)} 전` : ''}`
                   : row.loc === 'stale'
                     ? '끊김'
                     : '위치 없음'
           }
           hint={
-            row && row.loc !== 'ok'
-              ? [row.sinceSec !== null ? `마지막 수신 ${dur(row.sinceSec)} 전` : null, locStatus(row) === 'rest' ? '배송 없고 신규배차 꺼짐 — 문제 아님' : null].filter(Boolean).join(' · ') || undefined
-              : undefined
+            !row
+              ? undefined
+              : locStatus(row) === 'rest'
+                ? '맡은 배송 없고 신규배차 꺼짐 — 위치를 공유하지 않아요(지도에 안 보임, 문제 아님)'
+                : row.loc !== 'ok' && row.sinceSec !== null
+                  ? `마지막 수신 ${dur(row.sinceSec)} 전`
+                  : undefined
           }
         />
         <Tile

@@ -12,7 +12,7 @@ import type { DeliveryCard, ScenarioKnobs, World } from '../sim/world';
 import type { LatLng } from '../util/geo';
 import { buildBoard, rowMatches, type OpsBoard, type OpsFilter } from '../ui/ops';
 import { deliveryLabel } from '../domain/riderId';
-import { isAlarmOffline, type RiderTableFilter } from '../ui/riderTable';
+import { isAlarmOffline, isResting, type RiderTableFilter } from '../ui/riderTable';
 
 /** 왼쪽 메뉴 화면 */
 export type AppView = 'control' | 'field' | 'riders' | 'analyze' | 'logs';
@@ -376,9 +376,10 @@ export class AppController {
       if (this.selectedDelivery) focusDeliveries.add(this.selectedDelivery);
     }
     // 같은 자리(화면에서 가까이)에 겹친 라이더는 둥글게 벌려 그린다 — 눌러 고르기 쉽게(사용자 2026-11-19 "같은 장소에 겹쳐 있으니까 클릭이 애매")
-    const offsets = spreadOffsets(this.sim.riders.flatMap((r) => (r.pos ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])));
+    const offsets = spreadOffsets(this.sim.riders.flatMap((r) => (r.pos && !isResting(r) ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])));
     for (const r of this.sim.riders) {
-      if (!r.pos) {
+      // 쉬는 라이더(맡은 배송 없음 · 신규배차 꺼짐)는 위치를 공유하지 않는다 — 지도에 그리지 않음(백엔드 tracking 0.12.0 규칙, 2026-11-19)
+      if (!r.pos || isResting(r)) {
         s.removeRider(r.id);
         s.removeRoute(r.id);
         continue;

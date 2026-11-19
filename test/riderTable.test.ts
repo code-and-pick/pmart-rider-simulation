@@ -45,12 +45,15 @@ describe('라이더 관제 표', () => {
     const base = { id: 'RD-sim-01', label: 'sim-01', phase: 'IDLE', pos: { lat: 35.15, lng: 129.06 }, heading: 0, target: null, path: null, pathKind: null, deliveryId: null, note: '' } as const;
     const [idle, busy, stale] = rowsFromRiders(
       [
-        { ...base, id: 'RD-sim-01' },
-        { ...base, id: 'RD-sim-02', deliveryId: 'DL-1', phase: 'TO_STORE' },
-        { ...base, id: 'RD-sim-03', locationOffline: true },
+        { ...base, id: 'RD-sim-01', dispatchOn: true },
+        { ...base, id: 'RD-sim-02', deliveryId: 'DL-1', phase: 'TO_STORE', dispatchOn: true },
+        { ...base, id: 'RD-sim-03', locationOffline: true, dispatchOn: true },
+        { ...base, id: 'RD-sim-04' }, // 배송 없고 신규배차 꺼짐·모름 = 쉬는 중(위치 공유 안 함) — 대기 아님
       ],
       isSimRiderId,
     );
-    expect([idle, busy, stale].map((r) => rowMatchesRider(r!, 'waiting'))).toEqual([true, false, false]);
+    const rest = rowsFromRiders([{ ...base, id: 'RD-sim-04' }], isSimRiderId)[0]!;
+    expect([idle, busy, stale, rest].map((r) => rowMatchesRider(r!, 'waiting'))).toEqual([true, false, false, false]);
+    expect(locStatus(rest)).toBe('rest');
   });
 });
