@@ -60,7 +60,7 @@ export function AnalyzePage() {
 
       <div className="c-an-grid">
         <section className="c-an-card wide" aria-label="시간대별 배송">
-          <h3>시간대별 배송 <span className="c-muted">배차 요청 시각 기준 · 칸 = 자료 폭에 맞춰 10분~2시간(서울)</span></h3>
+          <h3>시간대별 배송 <span className="c-muted">배차 요청 시각 기준 · 칸 = 자료 폭에 맞춰 10분~하루(서울)</span></h3>
           <HourBars rows={rows} />
         </section>
         <section className="c-an-card" aria-label="상태 구성">
@@ -111,9 +111,22 @@ function Tile({ label, value, unit, sub, tone }: { label: string; value: string;
   );
 }
 
-/** 칸 크기(분) — 자료 폭에 맞춰 칸이 6~16개쯤 되게 [시뮬] */
+/** 칸 크기(분) — 자료 폭에 맞춰 칸이 16개 이하가 되게(10분 ~ 하루) [시뮬] */
 export function binMinutes(spanMin: number): number {
-  return [10, 15, 30, 60, 120].find((b) => spanMin / b <= 16) ?? 180;
+  return [10, 15, 30, 60, 120, 180, 360, 720, 1440].find((b) => spanMin / b <= 16) ?? 1440;
+}
+
+/** 아래 글자는 8개 안팎만 — 칸이 많으면 건너뛴다(글자 겹침 방지) */
+export function labelEvery(nBins: number): number {
+  return Math.max(1, Math.ceil(nBins / 8));
+}
+
+const KST = 9 * 3600_000;
+
+/** 서울 날짜 "11/16" */
+function seoulDay(ms: number): string {
+  const d = new Date(ms + KST);
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
 }
 
 /** 시간대별 쌓은 막대 — 완료(아래) → 진행 중 → 실패, 막대 위에 합계, 마우스를 올리면 그 칸 숫자 */
@@ -124,7 +137,8 @@ function HourBars({ rows }: { rows: readonly OpsRow[] }) {
   const lo = Math.min(...starts);
   const hi = Math.max(...starts);
   const bin = binMinutes((hi - lo) / 60_000) * 60_000;
-  const b0 = Math.floor(lo / bin) * bin;
+  // 칸 경계를 서울 시각에 맞춘다(하루 칸 = 서울 0시부터)
+  const b0 = Math.floor((lo + KST) / bin) * bin - KST;
   const nBins = Math.max(1, Math.floor((hi - b0) / bin) + 1);
   const per = Array.from({ length: nBins }, (_, i) => {
     const from = b0 + i * bin;
@@ -134,7 +148,11 @@ function HourBars({ rows }: { rows: readonly OpsRow[] }) {
     });
     return { h: from, c, total: c.done + c.active + c.failed + c.other };
   });
-  const label = (ms: number) => (bin >= 3_600_000 ? `${seoulHour(ms)}시` : seoulTime(ms).slice(0, 5));
+  const multiDay = seoulDay(b0) !== seoulDay(hi);
+  const clock = (ms: number) => (bin >= 3_600_000 ? `${seoulHour(ms)}시` : seoulTime(ms).slice(0, 5));
+  // 하루 칸 = 날짜만, 여러 날에 걸치면 날짜 + 시각, 하루 안이면 시각만
+  const label = (ms: number) => (bin >= 86_400_000 ? seoulDay(ms) : multiDay ? `${seoulDay(ms)} ${clock(ms)}` : clock(ms));
+  const every = labelEvery(nBins);
   const max = Math.max(1, ...per.map((p) => p.total));
   const W = 640;
   const H = 220;
@@ -181,9 +199,11 @@ function HourBars({ rows }: { rows: readonly OpsRow[] }) {
                   {p.total}
                 </text>
               )}
-              <text className="tick" x={x(i)} y={H - 6} textAnchor="middle">
-                {label(p.h)}
-              </text>
+              {i % every === 0 && (
+                <text className="tick" x={x(i)} y={H - 6} textAnchor="middle">
+                  {label(p.h)}
+                </text>
+              )}
             </g>
           );
         })}
@@ -274,10 +294,11 @@ function RiderTimeline({ rows }: { rows: readonly OpsRow[] }) {
   const t0 = Math.min(...spans.map((x) => x.s));
   const t1 = Math.max(nowMs, ...spans.map((x) => x.e));
   const pct = (ms: number) => ((ms - t0) / Math.max(1, t1 - t0)) * 100;
-  // 눈금 — 30분·1시간·3시간 중 6칸 안팎
-  const stepMin = [15, 30, 60, 120, 180, 360].find((s) => (t1 - t0) / 60_000 / s <= 8) ?? 720;
+  // 눈금 — 8개 이하(15분 ~ 며칠), 서울 시각에 맞춤, 여러 날이면 날짜도
+  const stepMin = [15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].find((s) => (t1 - t0) / 60_000 / s <= 8) ?? 10080;
+  const tlMultiDay = seoulDay(t0) !== seoulDay(t1);
   const ticks: number[] = [];
-  for (let t = Math.ceil(t0 / (stepMin * 60_000)) * stepMin * 60_000; t <= t1; t += stepMin * 60_000) ticks.push(t);
+  for (let t = Math.ceil((t0 + KST) / (stepMin * 60_000)) * stepMin * 60_000 - KST; t <= t1; t += stepMin * 60_000) ticks.push(t);
   const lanes = [...byRider.entries()].sort((a, b) => (a[0] === '' ? -1 : b[0] === '' ? 1 : b[1].length - a[1].length));
   return (
     <div className="c-tl">
@@ -286,7 +307,7 @@ function RiderTimeline({ rows }: { rows: readonly OpsRow[] }) {
         <div className="c-tl-track">
           {ticks.map((t) => (
             <span key={t} style={{ left: `${pct(t)}%` }}>
-              {seoulTime(t).slice(0, 5)}
+              {stepMin >= 1440 ? seoulDay(t) : tlMultiDay ? `${seoulDay(t)} ${seoulTime(t).slice(0, 5)}` : seoulTime(t).slice(0, 5)}
             </span>
           ))}
         </div>
