@@ -1,0 +1,445 @@
+/* ───────── 라이더 관제(기본 화면) — 백오피스 라이더 관제처럼 [라이더 목록 | 지도 | 라이더 상세] (2026-11-19, RiderBoard.tsx) ───────── */
+.rb-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 16px 12px;
+}
+.rb-kpi {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-panel);
+  color: var(--c-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--c-shadow);
+}
+.rb-kpi:disabled {
+  cursor: default;
+}
+.rb-kpi.on {
+  border: 2px solid var(--c-blue);
+  padding: 13px 17px;
+}
+.rb-kpi-l {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  font-size: 13px;
+  color: var(--c-sub);
+}
+.rb-kpi-l small {
+  flex-basis: 100%;
+  font-size: 11px;
+}
+.rb-kpi b {
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.rb-kpi.alert b {
+  color: var(--c-red);
+}
+.rb-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-sub);
+}
+.rb-dot.blue {
+  background: var(--c-blue);
+}
+.rb-dot.green {
+  background: var(--c-green);
+}
+.rb-dot.red {
+  background: var(--c-red);
+}
+
+.c-main.rb-main {
+  grid-template-columns: 320px minmax(0, 1fr) 400px;
+}
+.rb-list,
+.rb-panel {
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  box-shadow: var(--c-shadow);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rb-list-head {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--c-line);
+  display: grid;
+  gap: 10px;
+}
+.rb-list-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rb-list-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+.rb-list-title > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.rb-count {
+  color: var(--c-blue);
+  font-weight: 700;
+}
+.rb-pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.rb-pill.red {
+  background: var(--c-red);
+  color: #fff;
+}
+.rb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rb-chips button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-panel);
+  color: var(--c-ink);
+  cursor: pointer;
+}
+.rb-chips button.on {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-panel);
+  font-weight: 700;
+}
+.rb-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.rb-item {
+  width: 100%;
+  display: grid;
+  gap: 3px;
+  padding: 12px 16px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--c-line);
+  background: transparent;
+  color: var(--c-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rb-item:hover {
+  background: var(--c-soft);
+}
+.rb-item.stale {
+  border-left-color: var(--c-red);
+  background: color-mix(in srgb, var(--c-red) 6%, transparent);
+}
+.rb-item.sel {
+  border-left-color: var(--c-blue);
+  background: color-mix(in srgb, var(--c-blue) 12%, transparent);
+}
+.rb-item-1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
+}
+.rb-item-2 {
+  font-size: 12px;
+  color: var(--c-sub);
+}
+.rb-coord {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  color: var(--c-sub);
+  opacity: 0.8;
+}
+.rb-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.rb-badge.ok {
+  background: var(--c-green);
+  color: #fff;
+}
+.rb-badge.bad {
+  background: var(--c-red);
+  color: #fff;
+}
+.rb-badge.plain {
+  background: var(--c-soft);
+  color: var(--c-ink);
+}
+.rb-item-del {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--c-blue) 10%, transparent);
+  display: grid;
+  gap: 2px;
+}
+.rb-item-del-1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.rb-item-del-2 {
+  font-size: 12px;
+  color: var(--c-sub);
+}
+.rb-stage {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--c-blue);
+  color: #fff;
+}
+.rb-empty {
+  padding: 16px;
+  font-size: 13px;
+  color: var(--c-sub);
+}
+.rb-list-foot {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid var(--c-line);
+  font-size: 12px;
+  color: var(--c-sub);
+  text-align: right;
+}
+
+.rb-panel {
+  padding: 16px;
+  gap: 12px;
+  overflow-y: auto;
+}
+.rb-panel.empty {
+  border-style: dashed;
+  color: var(--c-sub);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.rb-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rb-name {
+  font-size: 18px;
+  font-weight: 800;
+}
+.rb-sub {
+  font-size: 12.5px;
+  color: var(--c-sub);
+  margin-top: 2px;
+}
+.rb-info {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 12px;
+  color: var(--c-sub);
+}
+.rb-mono {
+  font-family: ui-monospace, Consolas, monospace;
+}
+.rb-close {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--c-ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rb-gone {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--c-orange) 16%, transparent);
+  font-size: 12.5px;
+}
+.rb-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.rb-tile {
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.rb-tile.wide {
+  grid-column: 1 / -1;
+}
+.rb-tile .l {
+  font-size: 12px;
+  color: var(--c-sub);
+}
+.rb-tile .v {
+  font-size: 17px;
+  font-weight: 800;
+}
+.rb-tile .v.ok {
+  color: var(--c-green);
+}
+.rb-tile .v.bad {
+  color: var(--c-red);
+}
+.rb-tile .v.info {
+  color: var(--c-blue);
+}
+.rb-tile .h {
+  font-size: 11px;
+  color: var(--c-sub);
+  line-height: 1.4;
+}
+.rb-dim {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--c-sub);
+}
+.rb-del {
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+.rb-del.focus {
+  border-color: var(--c-blue);
+  box-shadow: 0 0 0 1px var(--c-blue);
+}
+.rb-del-no {
+  font-weight: 800;
+  font-size: 14px;
+}
+.rb-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 2px;
+  font-size: 11px;
+}
+.rb-steps li {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--c-soft);
+  color: var(--c-sub);
+}
+.rb-steps li.past {
+  background: color-mix(in srgb, var(--c-blue) 15%, transparent);
+  color: var(--c-blue);
+}
+.rb-steps li.now {
+  background: var(--c-blue);
+  color: #fff;
+  font-weight: 700;
+}
+.rb-eta {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 13px;
+}
+.rb-eta dt {
+  color: var(--c-sub);
+}
+.rb-eta dd {
+  margin: 0;
+}
+.rb-route {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.rb-route li {
+  position: relative;
+  padding-left: 16px;
+}
+.rb-route li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-ink);
+}
+.rb-route li.d::before {
+  background: var(--c-blue);
+}
+.rb-items-line {
+  margin: 0;
+  font-size: 12px;
+  color: var(--c-sub);
+}
+.rb-del-f {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1280px) {
+  .c-main.rb-main {
+    grid-template-columns: 280px minmax(0, 1fr) 340px;
+  }
+}
+@media (max-width: 960px) {
+  .rb-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .c-main.rb-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 50vh auto;
+  }
+}

@@ -12,6 +12,10 @@ import type { DeliveryCard, ScenarioKnobs, World } from '../sim/world';
 import type { LatLng } from '../util/geo';
 import { buildBoard, rowMatches, type OpsBoard, type OpsFilter } from '../ui/ops';
 import { deliveryLabel } from '../domain/riderId';
+import type { RiderTableFilter } from '../ui/riderTable';
+
+/** 왼쪽 메뉴 화면 */
+export type AppView = 'control' | 'field' | 'riders' | 'analyze' | 'logs';
 
 /** useSyncExternalStore 로 구독하는 작은 변경 알림. */
 export class Emitter {
@@ -285,11 +289,23 @@ export class AppController {
     this.ticker.emit();
   }
 
-  /** 왼쪽 메뉴 화면: 지도 관제 / 목록 관제(라이더·진행 중 주문 표) / 분석 / 기록 — 바로고 허브컨트롤룸 "지도관제·목록관제" 나눔 */
-  view: 'field' | 'riders' | 'analyze' | 'logs' = 'field';
+  /**
+   * 왼쪽 메뉴 화면: 라이더 관제(기본 — 백오피스 라이더 관제처럼 라이더 목록 · 지도 · 라이더 상세, 사용자 2026-11-19 "똑같이 해봐")
+   * / 배송 관제(field — 지도 + 오른쪽 배송·라이더 패널) / 목록 관제(표) / 분석 / 기록. 지도는 라이더 관제·배송 관제가 같이 쓴다.
+   * 롤백 지점: 태그 before-rider-control-layout(기본 화면을 바꾸기 전).
+   */
+  view: AppView = 'control';
 
-  setView(v: 'field' | 'riders' | 'analyze' | 'logs') {
+  setView(v: AppView) {
     this.view = v;
+    this.ticker.emit();
+  }
+
+  /** 라이더 관제 목록 거르기 — 위 숫자 카드와 목록이 같이 쓴다 */
+  riderFilter: RiderTableFilter = 'all';
+
+  setRiderFilter(f: RiderTableFilter) {
+    this.riderFilter = f;
     this.ticker.emit();
   }
 

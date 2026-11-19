@@ -109,7 +109,9 @@ export function decideLanRequest(method: string, url: string, remoteAddress: str
  *   GET  /api/v1/deliveries/{id}/drop-location         직원용 전달지(주소·좌표 — 백엔드가 열람 기록, 사용자 2026-11-18 "주소까지 보이게")
  *   GET  /api/v1/orders/lookups/{orderId}              직원용 주문 상세(품목·금액·결제 — 배송지·요청사항은 가린 값)   ┐ 사용자 2026-11-19
  *   POST /api/v1/orders/lookups/{orderId}/pii-reveals  배송지·연락처·요청사항 원문 열람(사유 필수, audit 기록 뒤에만) ┘ "여기서 다 열람할 수 있게 해"
- * (직원용 운행시간 /rider-operating-time 은 넣었다가 뺐다 — 사용자 2026-11-18. 이제 403 CONTROL_READ_ONLY)
+ *   GET  /api/v1/rider-operating-time?riderId=…        직원용 라이더 운행·접속·대기 시간  ┐ 사용자 2026-11-19 "똑같이 해봐"(기본 화면을
+ *   GET  /api/v1/riders?riderIds=…                     직원용 라이더 찾기(가린 이름·전화)  ┘ 백오피스 라이더 관제처럼 — 상세 칸·가입일)
+ * (운행시간은 2026-11-18 에 넣었다 뺐다가 위 결정으로 다시 넣음)
  * 관리자 권한 토큰이라 그 밖의 경로·쓰기에는 절대 붙이지 않는다. 다른 기기는 이 경로들이 허용 목록에 없어 위에서 이미 막힌다
  * (개인정보·관리자 권한 — LAN 아무 기기에나 넘기지 않는다).
  */
@@ -118,7 +120,13 @@ export function isControlRequest(method: string, url: string): boolean {
   const sub = apiSubPath(url);
   if (sub === null) return false;
   if (m === 'GET' || m === 'HEAD') {
-    return sub === '/rider-locations' || /^\/deliveries\/[^/]+\/drop-location$/.test(sub) || /^\/orders\/lookups\/[^/]+$/.test(sub);
+    return (
+      sub === '/rider-locations' ||
+      sub === '/rider-operating-time' ||
+      sub === '/riders' ||
+      /^\/deliveries\/[^/]+\/drop-location$/.test(sub) ||
+      /^\/orders\/lookups\/[^/]+$/.test(sub)
+    );
   }
   if (m === 'POST') return /^\/orders\/lookups\/[^/]+\/pii-reveals$/.test(sub);
   return false;

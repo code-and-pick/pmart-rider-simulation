@@ -8,7 +8,11 @@ describe('관제 계정 (RR-08)', () => {
     expect(isControlRequest('GET', '/api/v1/rider-locations?mfcId=MFC-SEED-01')).toBe(true);
     expect(isControlRequest('HEAD', '/api/v1/rider-locations')).toBe(true);
     expect(isControlRequest('GET', '/api/v1/deliveries/DLV-1/drop-location')).toBe(true);
-    expect(isControlRequest('GET', '/api/v1/rider-operating-time?riderId=RD-1&from=2026-11-18&to=2026-11-18')).toBe(false); // 뺐음(2026-11-18)
+    // 운행시간·라이더 찾기(가린 이름·전화) — 2026-11-19 기본 화면을 백오피스 라이더 관제처럼(다시 넣음)
+    expect(isControlRequest('GET', '/api/v1/rider-operating-time?riderId=RD-1&from=2026-11-18&to=2026-11-18')).toBe(true);
+    expect(isControlRequest('GET', '/api/v1/riders?riderIds=RD-1,RD-2&size=2')).toBe(true);
+    expect(isControlRequest('GET', '/api/v1/riders/RD-1')).toBe(false);
+    expect(isControlRequest('PATCH', '/api/v1/riders')).toBe(false);
     expect(isControlRequest('POST', '/api/v1/rider-operating-time')).toBe(false);
     expect(isControlRequest('GET', '/api/v1/riders/me/operating-time')).toBe(false);
     expect(decideLanRequest('GET', '/api/v1/rider-operating-time?riderId=RD-1', '192.168.0.55')).toMatchObject({ allow: false });

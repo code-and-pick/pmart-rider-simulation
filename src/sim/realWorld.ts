@@ -18,7 +18,7 @@ import { straightRoutes, type RouteProvider } from './route';
 import { bearingDeg, distanceM, type LatLng } from '../util/geo';
 import type { RiderPhase } from './rider';
 import { shortRiderId } from '../domain/riderId';
-import type { DeliveryCard, DropLocationView, MetricsSummary, NoteRecord, PhaseSegment, RiderView, ScenarioKnobs, World } from './world';
+import type { DeliveryCard, DropLocationView, MetricsSummary, NoteRecord, OperatingTimeView, PhaseSegment, RiderInfo, RiderView, ScenarioKnobs, World } from './world';
 import type { AddressLocator } from './geocode';
 import { OrderLookup } from './orderLookup';
 import { assemble, dispatchSteps, offerRows, summarySteps, type DeliveryTimeline, type TimelineStep } from './timeline';
@@ -188,6 +188,62 @@ export class RealWorld implements World {
         this.drops.set(deliveryId, { state: 'none', reason, at: this.clock.now });
       });
     return { state: 'loading' };
+  }
+
+  /** 오늘 운행시간 — 라이더마다, 1분마다 새로(백오피스 상세 칸과 같은 간격 [시뮬]). 화면이 그 라이더를 볼 때만 부른다 */
+  private readonly opTimes = new Map<string, OperatingTimeView & { at: number }>();
+
+  operatingTime(riderId: string): OperatingTimeView {
+    if (this.writeAccess === 'remote') return { state: 'none', reason: '다른 기기에서는 못 봄 — 개발 서버가 있는 PC 에서만(관제 계정)' };
+    if (!this.controlAvailable) return { state: 'none', reason: '이 PC 에 관제 계정 비밀번호 파일이 없음' };
+    const cur = this.opTimes.get(riderId);
+    if (cur && (cur.state === 'loading' || this.clock.now - cur.at < 60)) return cur;
+    // 다시 읽는 동안은 앞 값을 그대로 보인다(깜빡이지 않게)
+    this.opTimes.set(riderId, cur && cur.state === 'ok' ? { ...cur, at: this.clock.now } : { state: 'loading', at: this.clock.now });
+    // 서울 날짜 — 백엔드가 Asia/Seoul 자정으로 나눈다
+    const date = new Date(this.clock.epochMs() + 9 * 3600_000).toISOString().slice(0, 10);
+    this.backend
+      .getRiderOperatingTime(riderId, date)
+      .then((t) => this.opTimes.set(riderId, { state: 'ok', totalSec: t.totalSeconds, connectedSec: t.connectedSeconds ?? null, waitingSec: t.waitingSeconds ?? null, at: this.clock.now }))
+      .catch((e: unknown) => this.opTimes.set(riderId, { state: 'none', reason: `못 읽음(${describe(e)})`, at: this.clock.now }));
+    return this.opTimes.get(riderId) as OperatingTimeView;
+  }
+
+  /** 라이더 정보(가린 이름·번호·전화·가입일) — 1분마다, 화면이 부른 라이더들을 한 번에(50명씩) [시뮬] */
+  private readonly infos = new Map<string, { info: RiderInfo | null; at: number }>();
+  private readonly infoQueue = new Set<string>();
+  private infoTimer: ReturnType<typeof setTimeout> | null = null;
+
+  riderInfo(riderId: string): RiderInfo | null {
+    if (this.writeAccess !== 'ok' || !this.controlAvailable) return null;
+    const cur = this.infos.get(riderId);
+    if (!cur || this.clock.now - cur.at > 60) {
+      this.infoQueue.add(riderId);
+      if (!this.infoTimer) this.infoTimer = setTimeout(() => this.flushRiderInfo(), 50);
+    }
+    return cur?.info ?? null;
+  }
+
+  private flushRiderInfo() {
+    this.infoTimer = null;
+    const ids = [...this.infoQueue];
+    this.infoQueue.clear();
+    // 읽는 동안 다시 줄 세우지 않게 시각만 먼저(앞 값은 그대로)
+    for (const id of ids) this.infos.set(id, { info: this.infos.get(id)?.info ?? null, at: this.clock.now });
+    for (let i = 0; i < ids.length; i += 50) {
+      this.backend
+        .listRidersByIds(ids.slice(i, i + 50))
+        .then((res) => {
+          for (const r of res.items ?? []) {
+            if (!r.riderId) continue;
+            this.infos.set(r.riderId, {
+              info: { nameMasked: r.nameMasked ?? null, riderNumber: r.riderNumber ?? null, phoneMasked: r.phoneMasked ?? null, joinedAt: r.joinedAt ?? null, restriction: r.restriction ?? null },
+              at: this.clock.now,
+            });
+          }
+        })
+        .catch(() => undefined); // 1분 뒤 다시
+    }
   }
 
   controlBoard(): { items: ControlRider[]; asOf: string } | null {

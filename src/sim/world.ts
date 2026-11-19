@@ -107,6 +107,21 @@ export type DropLocationView =
   | { state: 'none'; reason: string };
 
 
+/** 오늘 운행·접속·대기 합(초) — 접속·대기는 백엔드가 rider 를 못 부르면 null */
+export type OperatingTimeView =
+  | { state: 'loading' }
+  | { state: 'ok'; totalSec: number; connectedSec: number | null; waitingSec: number | null }
+  | { state: 'none'; reason: string };
+
+/** 라이더 정보(직원용 라이더 찾기 — 가린 이름·번호·가린 전화·가입일). 모르면 없음 */
+export interface RiderInfo {
+  nameMasked: string | null;
+  riderNumber: string | null;
+  phoneMasked: string | null;
+  joinedAt: string | null;
+  restriction: string | null;
+}
+
 export interface MetricsSummary {
   /** 전달 완료(지금까지) */
   completed: number;
@@ -153,6 +168,10 @@ export interface World {
    * 실서버 = order-service(이 PC·관제 계정, 열람은 사유 필수·audit 기록), MOCK = 가상 값. 화면 메모리에만.
    */
   readonly orders?: OrderLookup;
+  /** 오늘(서울) 라이더 운행·접속·대기 합 — 실서버 직원용 /rider-operating-time(이 PC·관제 계정, 1분마다 새로). 해당 없으면 none */
+  operatingTime?(riderId: string): OperatingTimeView;
+  /** 라이더 정보(직원용 /riders?riderIds= — 이 PC·관제 계정, 1분마다 한 번에). 모르면 null */
+  riderInfo?(riderId: string): RiderInfo | null;
   readonly apiLog: readonly ApiCallRecord[];
   readonly eventLog: readonly DomainEventRecord[];
   readonly notes: readonly NoteRecord[];

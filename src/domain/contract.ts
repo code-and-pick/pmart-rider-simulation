@@ -5,9 +5,10 @@
 //   contracts/openapi/delivery-dispatch-service.yaml   0.4.7 (0.4.5~0.4.7: 제안 요약에 dropEtaSeconds·pickupPoint·dropAreaPoint·order(주문 요약) 추가 — 아직 안 씀)
 //   contracts/openapi/delivery-execution-service.yaml  0.7.2 (0.6.0~0.7.2: 도움요청 대화 messages·배송별 도움요청 목록 GET·수행 조회 orderSummary 추가 — 아직 안 씀)
 //   contracts/openapi/delivery-tracking-service.yaml   0.11.0 (0.10.0: ControlRider.riderNumber 화면 번호 — 백엔드 c902fb2f. 0.8.0: 라이더 관제 GET /rider-locations — RIDER_OPS·OPERATOR_ADMIN, 실서버 화면이 관제 계정으로 읽음 RR-08. 백엔드 aaa2ff8c)
-//   contracts/openapi/rider-service.yaml               0.5.0 (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
+//   contracts/openapi/rider-service.yaml               0.5.0 → 0.16.0 직원용 라이더 찾기 GET /riders?riderIds= 만 추가로 읽음(2026-11-19 백엔드 a767ad5f, 관제 계정 — 기본 화면 라이더 상세). (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
 //   contracts/openapi/mfc-fulfillment-service.yaml     0.7.0 (출고 조회·포장 인계 부분만 — 0.6~0.7 변경은 작업 줄 바코드 등이라 인계 API 그대로)
 //   contracts/openapi/center-master-service.yaml       0.2.0 (MFC 위치: 라이더용 GET /mfc-pickup-points 먼저, 실패하면 관찰 계정 GET /centers/{centerId})
+//   contracts/openapi/delivery-execution-service.yaml  → 0.31.0 직원용 라이더 운행시간 GET /rider-operating-time 만 추가로 읽음(2026-11-19 a767ad5f)
 //   contracts/openapi/order-service.yaml               0.13.1 (직원용 주문 상세 GET /orders/lookups/{id}·원문 열람 POST …/pii-reveals 만 — 주문 창 "주문" 탭, 관제 계정, 2026-11-19 백엔드 637abcb5 에서 읽음)
 //   contracts/openapi/_common.yaml                     0.1.0
 // 모든 경로는 게이트웨이 /api/v1 아래. POST·PUT 은 Idempotency-Key·X-Source-System 필수, 상태 전이는 X-Expected-Version(선택).
@@ -577,6 +578,45 @@ export interface StaffDropLocation {
   lng?: number | null;
   coordinateSource?: 'ORDER_PIN' | 'ADDRESS_GEOCODE' | null;
   piiAccessLogId: string;
+}
+
+/**
+ * (execution 0.31.0) 직원용 라이더 운행시간 GET /rider-operating-time?riderId=&from=&to= — RIDER_OPS·OPERATOR_ADMIN·CS_AGENT.
+ * 관제 계정, 이 PC 만(사용자 2026-11-19 "똑같이 해봐" — 기본 화면 라이더 상세 칸).
+ */
+export interface OperatingTime {
+  from: string;
+  to: string;
+  /** 운행시간 = 배차 수락 ~ 전달 완료(겹치면 한 번) */
+  totalSeconds: number;
+  /** 접속 시간 = 운행(ON_DUTY) 켜 둔 시간 — rider 를 못 부르면 null */
+  connectedSeconds?: number | null;
+  /** 대기 시간 = 운행 중 + 신규배차 켬 + 맡은 배송 0건 — 못 부르면 null */
+  waitingSeconds?: number | null;
+}
+
+/**
+ * (rider-service 0.16.0) 직원용 라이더 찾기 GET /riders?riderIds=(쉼표, 50개까지) 한 줄 — 이름·전화는 가린 값. 관제 계정, 이 PC 만.
+ * 운행을 끈 라이더도 이름·번호가 나온다(관제 목록은 운행 중만).
+ */
+export interface StaffRiderSummary {
+  riderId?: string;
+  riderNumber?: string | null;
+  nameMasked?: string | null;
+  /** 예 010****5678 */
+  phoneMasked?: string;
+  vehicleType?: string;
+  operatingStatus?: string;
+  newDispatchEnabled?: boolean;
+  restriction?: string;
+  joinedAt?: string;
+}
+
+export interface StaffRiderSearchResult {
+  items?: StaffRiderSummary[];
+  page?: number;
+  size?: number;
+  hasNext?: boolean;
 }
 
 /** GET /deliveries (직원 배송 찾기) 목록 한 줄 — 개인정보 없음. */

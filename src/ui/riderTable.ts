@@ -24,8 +24,10 @@ export interface RiderRow {
   /** 운행 시작·대기 시작(관제 응답 — 모르면 null) */
   onDutySince: string | null;
   waitingSince: string | null;
-  /** 진행 중 배송(관제 단계·도착 예정) */
-  deliveries: { deliveryId: string; stage: string; etaPickup: string | null; etaDrop: string | null }[];
+  /** 지금 위치(지도·목록 좌표) — 모르면 null */
+  pos: { lat: number; lng: number } | null;
+  /** 진행 중 배송(관제 단계·도착 예정). stageKey = 관제 단계 값(TO_STORE·AT_STORE·TO_CUSTOMER·AT_CUSTOMER — 단계 칩) */
+  deliveries: { deliveryId: string; stage: string; stageKey: string | null; etaPickup: string | null; etaDrop: string | null }[];
 }
 
 const STAGE: Record<string, string> = {
@@ -38,6 +40,19 @@ const STAGE: Record<string, string> = {
 };
 
 const VEHICLE: Record<string, string> = { MOTORCYCLE: '오토바이', BICYCLE: '자전거', E_BIKE: '전기자전거', KICKBOARD: '킥보드', CAR: '자동차', WALK: '도보' };
+
+/** 화면 라이더 단계 → 관제 단계 값(단계 칩) */
+const PHASE_STAGE: Partial<Record<string, string>> = {
+  TO_STORE: 'TO_STORE',
+  AT_STORE_WAIT_READY: 'AT_STORE',
+  AT_STORE: 'AT_STORE',
+  WAIT_ASSIGN_REFLECT: 'TO_STORE',
+  HANDOVER: 'AT_STORE',
+  WAIT_PICKUP_REFLECT: 'AT_STORE',
+  TO_PICKUP: 'TO_STORE',
+  TO_CUSTOMER: 'TO_CUSTOMER',
+  AT_CUSTOMER: 'AT_CUSTOMER',
+};
 
 export function vehicleName(v: string | null): string {
   return v ? (VEHICLE[v] ?? v) : '—';
@@ -56,9 +71,11 @@ export function rowsFromControl(items: readonly ControlRider[], isSim: (id: stri
     sinceSec: c.staleSinceSeconds ?? null,
     onDutySince: c.onDutySince ?? null,
     waitingSince: c.waitingSince ?? null,
+    pos: c.location?.lat !== undefined && c.location?.lng !== undefined ? { lat: c.location.lat, lng: c.location.lng } : null,
     deliveries: (c.activeDeliveries ?? []).map((d) => ({
       deliveryId: d.deliveryId,
       stage: STAGE[d.stage ?? ''] ?? (d.pickedUp ? '픽업 뒤' : '진행 중'),
+      stageKey: d.stage ?? (d.pickedUp ? 'TO_CUSTOMER' : 'TO_STORE'),
       etaPickup: d.etaPickup ?? null,
       etaDrop: d.etaDrop ?? null,
     })),
@@ -81,7 +98,8 @@ export function rowsFromRiders(riders: readonly RiderView[], isSim: (id: string)
     sinceSec: r.locationAgeSec ?? null,
     onDutySince: null,
     waitingSince: null,
-    deliveries: r.deliveryId ? [{ deliveryId: r.deliveryId, stage: PHASE_LABEL[r.phase], etaPickup: null, etaDrop: null }] : [],
+    pos: r.pos ? { lat: r.pos.lat, lng: r.pos.lng } : null,
+    deliveries: r.deliveryId ? [{ deliveryId: r.deliveryId, stage: PHASE_LABEL[r.phase], stageKey: PHASE_STAGE[r.phase] ?? null, etaPickup: null, etaDrop: null }] : [],
   }));
 }
 

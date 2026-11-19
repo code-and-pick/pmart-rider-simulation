@@ -4,10 +4,11 @@ import { ConsoleHeader } from '../ui/ConsoleHeader';
 import { ConsolePanel, LogsPage } from '../ui/ConsolePanel';
 import { KpiCards } from '../ui/KpiCards';
 import { MapDetail } from '../ui/MapDetail';
+import { RiderKpis, RiderList, RiderPanel } from '../ui/RiderBoard';
 import { RiderControlPage } from '../ui/RiderControlPage';
 import { ScenarioBar } from '../ui/ScenarioBar';
 import { PHASE_COLOR } from '../render/colors';
-import type { AppController } from './controller';
+import type { AppController, AppView } from './controller';
 
 const Ctx = createContext<AppController | null>(null);
 
@@ -20,7 +21,7 @@ export function useApp(): AppController {
 }
 
 /** 왼쪽 메뉴 화면 — 지도는 숨기기만 한다(떼지 않음 — 시뮬레이션은 계속 돈다). */
-export type View = 'field' | 'riders' | 'analyze' | 'logs';
+export type View = AppView;
 
 /** 이 브라우저에 기억하는 편의 설정(못 읽으면 기본값) */
 function useStored<T extends string>(key: string, fallback: T, allowed: readonly T[]): [T, (v: T) => void] {
@@ -44,7 +45,8 @@ function useStored<T extends string>(key: string, fallback: T, allowed: readonly
 }
 
 const RAIL: readonly (readonly [View, string, string])[] = [
-  ['field', '🗺', '지도 관제'],
+  ['control', '🛵', '라이더 관제'],
+  ['field', '🗺', '배송 관제'],
   ['riders', '☰', '목록 관제'],
   ['analyze', '▥', '분석'],
   ['logs', '⧉', '기록'],
@@ -52,7 +54,7 @@ const RAIL: readonly (readonly [View, string, string])[] = [
 
 /**
  * 관제 화면 뼈대(Onfleet 대시보드·바로고 허브컨트롤룸을 참고 — docs/worklog 2026-11-19):
- *   [왼쪽 아이콘 메뉴 | 머리 → (지도 관제) 숫자 카드 → [지도 | 오른쪽 관제 패널] / 목록 관제 / 분석 / 기록]
+ *   [왼쪽 아이콘 메뉴 | 머리 → (라이더 관제 — 기본) 숫자 카드 → [라이더 목록 | 지도 | 라이더 상세] / (배송 관제) 숫자 카드 → [지도 | 오른쪽 관제 패널] / 목록 관제 / 분석 / 기록]
  * 기본 어두운 테마(전환 가능). 패널은 ] 키나 지도 오른쪽 가장자리 버튼으로 접는다.
  */
 export function App({ controller }: { controller: AppController }) {
@@ -113,13 +115,18 @@ function Rail({ theme, onTheme }: { theme: 'dark' | 'light'; onTheme: () => void
 function Views({ panelOpen, onPanel }: { panelOpen: boolean; onPanel: () => void }) {
   const app = useApp();
   const view = app.view;
+  // 지도는 라이더 관제(기본)·배송 관제가 같이 쓴다 — 옆 칸만 바뀐다(지도를 떼지 않음)
+  const control = view === 'control';
   return (
     <>
+      {control && <RiderKpis />}
       {view === 'field' && <KpiCards />}
-      {view === 'field' && <ScenarioSlot />}
-      <div className={`c-main ${panelOpen ? '' : 'closed'}`} hidden={view !== 'field'}>
-        <MapView panelOpen={panelOpen} onPanel={onPanel} />
-        {panelOpen && <ConsolePanel />}
+      {(control || view === 'field') && <ScenarioSlot />}
+      <div className={`c-main ${control ? 'rb-main' : panelOpen ? '' : 'closed'}`} hidden={!control && view !== 'field'}>
+        {control && <RiderList />}
+        <MapView panelOpen={panelOpen} onPanel={onPanel} noPanel={control} />
+        {control && <RiderPanel />}
+        {view === 'field' && panelOpen && <ConsolePanel />}
       </div>
       {view === 'riders' && <RiderControlPage onShowOnMap={() => app.setView('field')} />}
       {view === 'analyze' && <AnalyzePage />}
@@ -142,7 +149,7 @@ const LEGEND: readonly (readonly [string, string])[] = [
   ['전달', PHASE_COLOR.AT_CUSTOMER],
 ];
 
-function MapView(p: { panelOpen: boolean; onPanel: () => void }) {
+function MapView(p: { panelOpen: boolean; onPanel: () => void; noPanel?: boolean }) {
   const app = useApp();
   const b = app.board();
   const ref = useRef<HTMLDivElement>(null);
@@ -172,6 +179,7 @@ function MapView(p: { panelOpen: boolean; onPanel: () => void }) {
         {st.kind === 'plane' && <span className="c-legend-f">좌표 평면 대체 화면</span>}
       </div>
       <MapDetail />
+      {!p.noPanel && (
       <button className={`c-panel-toggle ${p.panelOpen ? 'open' : ''}`} onClick={p.onPanel} aria-expanded={p.panelOpen} title={p.panelOpen ? '패널 접기 — 지도 넓게 ( ] )' : '패널 펴기 ( ] )'}>
         {p.panelOpen ? '›' : (
           <>
@@ -179,6 +187,7 @@ function MapView(p: { panelOpen: boolean; onPanel: () => void }) {
           </>
         )}
       </button>
+      )}
     </section>
   );
 }

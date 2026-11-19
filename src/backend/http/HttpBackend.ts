@@ -35,6 +35,8 @@ import {
   type Shipment,
   type StaffDeliveryListResponse,
   type StaffOrderDetail,
+  type OperatingTime,
+  type StaffRiderSearchResult,
   type StaffPiiReveal,
   type StaffPiiRevealRequest,
   type Withdrawal,
@@ -86,6 +88,16 @@ export class HttpBackend implements RiderPort {
   /** execution 0.24.0 직원용 전달지(주소·좌표, 열람 기록) — 관제 계정, 이 PC 만. 응답은 화면 메모리에만(로그에는 경로·상태만) */
   getStaffDropLocation(deliveryId: string): Promise<StaffDropLocation> {
     return this.request<StaffDropLocation>('control', 'GET', `/deliveries/${enc(deliveryId)}/drop-location`);
+  }
+
+  /** execution 0.31.0 직원용 라이더 운행·접속·대기 시간 — 관제 계정, 이 PC 만. date = 서울 날짜(YYYY-MM-DD) */
+  getRiderOperatingTime(riderId: string, date: string): Promise<OperatingTime> {
+    return this.request<OperatingTime>('control', 'GET', '/rider-operating-time', { query: { riderId, from: date, to: date } });
+  }
+
+  /** rider 0.16.0 직원용 라이더 찾기 — 라이더 ID 여럿(50개까지) 한 번에, 가린 이름·전화·가입일. 관제 계정, 이 PC 만 */
+  listRidersByIds(riderIds: readonly string[]): Promise<StaffRiderSearchResult> {
+    return this.request<StaffRiderSearchResult>('control', 'GET', '/riders', { query: { riderIds: riderIds.join(','), size: riderIds.length } });
   }
 
   /** order 0.13.1 직원용 주문 상세(품목·금액·결제 — 배송지·요청사항은 가린 값, 조회는 기록 안 함) — 관제 계정, 이 PC 만 */
