@@ -19,7 +19,10 @@ type Tab = 'detail' | 'order' | 'flow' | 'raw';
  *   흐름 단계는 시각·걸린 시간·출처. 원래 상태 = 배차·수행 두 서비스 값(docs/design.md §4).
  *   조치 = 지도에서 따라가기 · 백오피스에서 배송/라이더 열기(쓰기 조치는 백오피스) · 번호 복사.
  */
-export function MapDetail() {
+/**
+ * variant: overlay = 지도 위 오른쪽 창(라이더 관제), panel = 배송 관제 오른쪽 칸에 크게(사용자 2026-11-19 "배송 상세가 오른쪽에 뜨게 해서 크게").
+ */
+export function MapDetail({ variant = 'overlay' }: { variant?: 'overlay' | 'panel' } = {}) {
   const app = useApp();
   const [tab, setTab] = useState<Tab>('detail');
   const [copied, setCopied] = useState(false);
@@ -52,7 +55,7 @@ export function MapDetail() {
     );
   };
   return (
-    <aside className="map-detail md2" aria-label="고른 배송 상세">
+    <aside className={variant === 'panel' ? 'md2 dd-panel' : 'map-detail md2'} aria-label="고른 배송 상세">
       <div className="md-head">
         <div>
           <span className="md-kicker">주문 {orderLabel(c) ?? '—'}</span>

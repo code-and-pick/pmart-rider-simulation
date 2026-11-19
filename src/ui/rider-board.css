@@ -595,3 +595,49 @@
 .rb-recent .c-page-h3 {
   margin-top: 0;
 }
+
+/* ───────── 배송 관제 — [배송 목록 | 지도 | 배송 상세] (2026-11-19, 라이더 관제와 같은 짜임) ───────── */
+.c-main.dd-main {
+  grid-template-columns: 380px minmax(0, 1fr) 440px;
+}
+.dd-list {
+  min-height: 0;
+}
+.dd-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 6px;
+}
+.dd-list-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+.md2.dd-panel {
+  position: static;
+  width: auto;
+  max-height: none;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--c-panel);
+  color: var(--c-ink);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  box-shadow: var(--c-shadow);
+  padding: 16px 18px;
+}
+.md2.dd-panel .md-title {
+  font-size: 18px;
+}
+@media (max-width: 1280px) {
+  .c-main.dd-main {
+    grid-template-columns: 320px minmax(0, 1fr) 380px;
+  }
+}
+@media (max-width: 960px) {
+  .c-main.dd-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 50vh auto;
+  }
+}

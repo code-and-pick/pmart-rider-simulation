@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AnalyzePage } from '../ui/AnalyzePage';
 import { ConsoleHeader } from '../ui/ConsoleHeader';
-import { ConsolePanel, LogsPage } from '../ui/ConsolePanel';
+import { DeliveryListPanel, LogsPage } from '../ui/ConsolePanel';
 import { KpiCards } from '../ui/KpiCards';
 import { MapDetail } from '../ui/MapDetail';
 import { RiderHead, RiderList, RiderPanel } from '../ui/RiderBoard';
@@ -122,11 +122,10 @@ function Views({ panelOpen, onPanel }: { panelOpen: boolean; onPanel: () => void
       {control && <RiderHead />}
       {view === 'field' && <KpiCards />}
       {(control || view === 'field') && <ScenarioSlot />}
-      <div className={`c-main ${control ? 'rb-main' : panelOpen ? '' : 'closed'}`} hidden={!control && view !== 'field'}>
-        {control && <RiderList />}
-        <MapView panelOpen={panelOpen} onPanel={onPanel} noPanel={control} />
-        {control && <RiderPanel />}
-        {view === 'field' && panelOpen && <ConsolePanel />}
+      <div className={`c-main ${control ? 'rb-main' : 'dd-main'}`} hidden={!control && view !== 'field'}>
+        {control ? <RiderList /> : <DeliveryListPanel />}
+        <MapView panelOpen={panelOpen} onPanel={onPanel} noPanel mode={control ? 'rider' : 'delivery'} />
+        {control ? <RiderPanel /> : <DeliveryDetailSlot />}
       </div>
       {control && (
         <section className="rb-recent" aria-label="최근 배송">
@@ -161,7 +160,20 @@ const CONTROL_LEGEND: readonly (readonly [string, string])[] = [
   ['위치 끊김', '#ea7a0c'],
 ];
 
-function MapView(p: { panelOpen: boolean; onPanel: () => void; noPanel?: boolean }) {
+/** 배송 관제 오른쪽 칸 — 고른 배송 상세를 크게(없으면 안내) */
+function DeliveryDetailSlot() {
+  const app = useApp();
+  if (!app.selectedDelivery) {
+    return (
+      <aside className="rb-panel empty" aria-label="배송 상세">
+        왼쪽 목록이나 지도에서 배송을 고르면 상세(주문·흐름·배차 제안·원래 상태)가 여기에 크게 보여요.
+      </aside>
+    );
+  }
+  return <MapDetail variant="panel" />;
+}
+
+function MapView(p: { panelOpen: boolean; onPanel: () => void; noPanel?: boolean; mode: 'rider' | 'delivery' }) {
   const app = useApp();
   const b = app.board();
   const ref = useRef<HTMLDivElement>(null);
@@ -174,10 +186,10 @@ function MapView(p: { panelOpen: boolean; onPanel: () => void; noPanel?: boolean
   const st = app.mapStatus;
   const f = app.filter;
   return (
-    <section className={`c-map-wrap ${p.noPanel ? 'rb-map' : ''}`} aria-label="지도">
+    <section className={`c-map-wrap ${p.mode === 'rider' ? 'rb-map' : ''}`} aria-label="지도">
       <div ref={ref} className="map" />
       <div className="c-legend" aria-label="지도 범례">
-        {(p.noPanel ? CONTROL_LEGEND : LEGEND).map(([l, c]) => (
+        {(p.mode === 'rider' ? CONTROL_LEGEND : LEGEND).map(([l, c]) => (
           <span key={l}>
             <i style={{ background: c }} />
             {l}
@@ -187,10 +199,10 @@ function MapView(p: { panelOpen: boolean; onPanel: () => void; noPanel?: boolean
           <i className="solid" />
           경로
         </span>
-        {!p.noPanel && f && f !== 'failedCalls' && <span className="c-legend-f">핀: {filterName(f)}만</span>}
+        {p.mode === 'delivery' && f && f !== 'failedCalls' && <span className="c-legend-f">핀: {filterName(f)}만</span>}
         {st.kind === 'plane' && <span className="c-legend-f">좌표 평면 대체 화면</span>}
       </div>
-      <MapDetail />
+      {p.mode === 'rider' && <MapDetail />}
       {!p.noPanel && (
       <button className={`c-panel-toggle ${p.panelOpen ? 'open' : ''}`} onClick={p.onPanel} aria-expanded={p.panelOpen} title={p.panelOpen ? '패널 접기 — 지도 넓게 ( ] )' : '패널 펴기 ( ] )'}>
         {p.panelOpen ? '›' : (

@@ -136,7 +136,8 @@ export class AppController {
    * = 카드를 뺀 남은 지도 가운데. 카드가 없으면 0. 좁은 화면에서는 지도 폭의 1/4 까지만 [시뮬].
    */
   private detailOffsetPx(): number {
-    if (!this.selectedDelivery || !this.mapEl) return 0;
+    // 배송 관제는 상세가 지도 밖 오른쪽 칸 — 비켜 둘 필요 없음
+    if (!this.selectedDelivery || !this.mapEl || this.view === 'field') return 0;
     return Math.round(Math.min(DETAIL_CARD_PX / 2, this.mapEl.clientWidth / 4));
   }
 
@@ -284,6 +285,11 @@ export class AppController {
   setPanelTab(t: 'deliveries' | 'riders' | 'logs') {
     if (t === 'logs') {
       this.setView('logs');
+      return;
+    }
+    // 라이더 보기는 라이더 관제로 옮겼다(배송 관제에는 라이더 칸 없음 — 사용자 2026-11-19)
+    if (t === 'riders') {
+      this.setView('control');
       return;
     }
     this.panelTab = t;

@@ -57,6 +57,27 @@ export function ConsolePanel() {
   );
 }
 
+/**
+ * 배송 관제 왼쪽 배송 목록(사용자 2026-11-19 — 라이더는 라이더 관제로, 배송 관제는 [배송 목록 | 지도 | 배송 상세]):
+ * 위 이상 상황 띠 + 배송 목록(상태 칸·찾기·묶기·정렬·계층). 배송을 누르면 오른쪽 칸에 상세가 크게 뜬다.
+ */
+export function DeliveryListPanel() {
+  const app = useApp();
+  const b = app.board();
+  return (
+    <aside className="c-panel dd-list" aria-label="배송 목록">
+      <AlertStrip />
+      <div className="dd-list-head">
+        <h3>배송 목록</h3>
+        <span className="c-n">진행 중 {b.counts.active}</span>
+      </div>
+      <div className="c-body">
+        <DeliveriesView />
+      </div>
+    </aside>
+  );
+}
+
 /** 기록 화면(왼쪽 메뉴) — 주문 흐름·사건·API·엔진 기록·연결 상태·구간 평균 */
 export function LogsPage() {
   return (
