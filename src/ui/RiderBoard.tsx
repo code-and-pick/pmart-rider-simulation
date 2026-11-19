@@ -53,17 +53,19 @@ export function RiderHead() {
   const rows = useRiderRows();
   const [q, setQ] = useState('');
   const [miss, setMiss] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const find = () => {
-    const n = q.replace(/[\s-]/g, '').toLowerCase();
-    if (!n) return;
-    const rider = rows.find((r) => r.id.toLowerCase() === n || r.name.replace(/[\s·]/g, '').toLowerCase().includes(n));
-    const del = app.board().rows.find((r) => [r.card.orderNumber, r.card.deliveryNumber?.replace(/-/g, ''), r.card.deliveryId.toLowerCase()].some((x) => x && x.toLowerCase() === n));
-    if (rider) app.select(rider.id);
-    if (del) {
-      if (!rider && del.card.riderId) app.select(del.card.riderId);
-      app.selectDelivery(del.card.deliveryId, true);
-    }
-    setMiss(!rider && !del);
+    const r = findTarget(q, rows, app.board().rows);
+    setHint(r.kind === 'many' ? `${r.count}개가 맞아요 — 더 길게 적어 주세요(첫 번째를 보여 줘요).` : null);
+    setMiss(r.kind === 'none');
+    if (r.kind === 'none') return;
+    // 거르기 때문에 목록에서 안 보이면 안 되니 전체로
+    app.setRiderFilter('all');
+    if (r.riderId) app.select(r.riderId);
+    if (r.deliveryId) app.selectDelivery(r.deliveryId, true);
+    // 목록에서 그 라이더 줄로 내려 준다
+    const id = r.riderId;
+    if (id) requestAnimationFrame(() => document.getElementById(`rb-${id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
   };
   return (
     <>
@@ -82,12 +84,13 @@ export function RiderHead() {
           <label>
             <span>주문번호·라이더 찾기</span>
             <span className="rb-find-row">
-              <input value={q} onChange={(e) => (setQ(e.target.value), setMiss(false))} placeholder="주문번호 8자리 · 라이더 번호 6자리 · 라이더 ID" />
+              <input value={q} onChange={(e) => (setQ(e.target.value), setMiss(false), setHint(null))} placeholder="주문번호 8자리 · 라이더 번호 6자리 · 라이더 ID" />
               <button type="submit" disabled={!q.trim()}>
                 찾기
               </button>
             </span>
             {miss && <small className="rb-miss">지금 화면에서 못 찾았어요(운행 중 라이더·최근 배송 안).</small>}
+            {hint && <small className="rb-miss">{hint}</small>}
           </label>
           <label>
             <span>센터</span>
@@ -180,7 +183,7 @@ export function RiderList() {
           const sel = app.selected === r.id;
           return (
             <li key={r.id}>
-              <button className={`rb-item ${sel ? 'sel' : ''} ${isStale(r) ? 'stale' : ''}`} onClick={() => app.select(r.id)} title={r.id}>
+              <button id={`rb-${r.id}`} className={`rb-item ${sel ? 'sel' : ''} ${isStale(r) ? 'stale' : ''}`} onClick={() => app.select(r.id)} title={r.id}>
                 <span className="rb-item-1">
                   <b>{r.name}</b>
                   {r.loc === 'ok' ? <span className="rb-badge ok">수신 중</span> : <span className="rb-badge bad">{r.loc === 'stale' ? '끊김' : '위치 없음'}</span>}
@@ -365,4 +368,37 @@ function stamp(iso: string): string {
   const d = new Date(t + 9 * 3600_000);
   const h = d.getUTCHours();
   return `${d.getUTCMonth() + 1}. ${d.getUTCDate()}. ${h < 12 ? '오전' : '오후'} ${h % 12 || 12}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+/** 찾기 비교용 — 대소문자·공백·하이픈·가운뎃점·가림 별표를 뺀다("RD-sim-01" = "rdsim01", "이* · 478597" = "이478597") */
+export function normKey(x: string | null | undefined): string {
+  return (x ?? '').toLowerCase().replace(/[\s\-·*]/g, '');
+}
+
+export type FindResult =
+  | { kind: 'none' }
+  | { kind: 'one' | 'many'; riderId: string | null; deliveryId: string | null; count: number };
+
+/**
+ * 주문번호·라이더 찾기(백오피스 "주문번호 8자리 · 라이더 번호 6자리 · 라이더 ID") — 지금 화면의 운행 라이더·배송 목록 안에서.
+ * 정확히 같은 것을 먼저, 없으면 들어 있는 것(4자 이상 — 번호 끝자리 등). 배송이 맞으면 그 라이더도 고른다.
+ * (예전엔 적은 쪽만 하이픈을 빼서 sim-01·RD-…·DLV-… 가 안 찾아졌다 — 사용자 2026-11-19 "원활하지 않은 것 같아")
+ */
+export function findTarget(q: string, riders: readonly RiderRow[], deliveries: readonly OpsRow[]): FindResult {
+  const n = normKey(q);
+  if (!n) return { kind: 'none' };
+  const riderKeys = (r: RiderRow) => [r.id, r.name, ...r.name.split('·')];
+  const delKeys = (d: OpsRow) => [d.card.orderNumber, d.card.deliveryNumber, d.card.deliveryId, d.card.orderId];
+  const exact = (keys: (string | null | undefined)[]) => keys.some((k) => k && normKey(k) === n);
+  const part = (keys: (string | null | undefined)[]) => n.length >= 4 && keys.some((k) => k && normKey(k).includes(n));
+  for (const test of [exact, part]) {
+    const rs = riders.filter((r) => test(riderKeys(r)));
+    const ds = deliveries.filter((d) => test(delKeys(d)));
+    const count = rs.length + ds.length;
+    if (!count) continue;
+    const d = ds[0];
+    const riderId = rs[0]?.id ?? d?.card.riderId ?? null;
+    return { kind: count > 1 ? 'many' : 'one', riderId, deliveryId: rs.length ? null : (d?.card.deliveryId ?? null), count };
+  }
+  return { kind: 'none' };
 }
