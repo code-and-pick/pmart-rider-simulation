@@ -3,6 +3,7 @@ import { AnalyzePage } from '../ui/AnalyzePage';
 import { ConsoleHeader } from '../ui/ConsoleHeader';
 import { DeliveryListPanel, LogsPage } from '../ui/ConsolePanel';
 import { FlowBar } from '../ui/FlowBar';
+import { IssueBar } from '../ui/IssueBar';
 import { FILTER_LABEL, type OpsFilter } from '../ui/ops';
 import { MapDetail } from '../ui/MapDetail';
 import { RiderHead, RiderList, RiderPanel } from '../ui/RiderBoard';
@@ -120,6 +121,7 @@ function Views({ panelOpen, onPanel }: { panelOpen: boolean; onPanel: () => void
   const control = view === 'control';
   return (
     <>
+      {(control || view === 'field') && <IssueBar />}
       {control && <RiderHead />}
       {view === 'field' && <FlowBar />}
       {(control || view === 'field') && <ScenarioSlot />}

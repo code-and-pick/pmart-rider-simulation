@@ -66,7 +66,7 @@ export function DeliveryListPanel() {
   const b = app.board();
   return (
     <aside className="c-panel dd-list" aria-label="배송 목록">
-      <AlertStrip />
+      {/* 이상 상황은 맨 위 "확인할 일" 바(IssueBar)로 옮김 */}
       <div className="dd-list-head">
         <h3>배송 목록</h3>
         <span className="c-n">진행 중 {b.counts.active}</span>
