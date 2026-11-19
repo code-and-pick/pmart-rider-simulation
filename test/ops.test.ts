@@ -94,7 +94,8 @@ describe('관제판', () => {
     const kinds = b.alerts.map((a) => a.kind);
     expect(kinds).toEqual(expect.arrayContaining(['DISPATCH_FAILED', 'DELIVERY_FAILED', 'RIDER_STALE', 'CALL_FAILURES']));
     expect(b.alerts.filter((a) => a.kind === 'RIDER_STALE')).toHaveLength(1); // 쉬는 라이더는 숫자만
-    expect(b.riders).toMatchObject({ total: 2, stale: 2, busy: 1 });
+    // R2 는 배송 없고 신규배차 모름 → 쉬는 중(끊김으로 세지 않음 — 2026-11-19). 신규배차를 켠 라이더면 센다
+    expect(b.riders).toMatchObject({ total: 2, stale: 1, busy: 1 });
     expect(b.recentFailures).toBe(3);
     expect(b.alerts.slice(0, 2).every((a) => a.level === 'bad')).toBe(true);
   });

@@ -9,7 +9,7 @@ import { ActiveOrders } from './ActiveOrders';
 import { OpsPanel } from './OpsPanel';
 import { RiderDetail } from './RiderDetail';
 import { Progress } from './Progress';
-import { rowMatchesRider, rowsFromControl, rowsFromRiders, vehicleName, type RiderRow, type RiderTableFilter } from './riderTable';
+import { locStatus, rowMatchesRider, rowsFromControl, rowsFromRiders, vehicleName, type RiderRow, type RiderTableFilter } from './riderTable';
 
 const FILTERS: readonly (readonly [RiderTableFilter, string])[] = [
   ['all', '전체'],
@@ -40,7 +40,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
   const ops = app.board();
   const cardOf = new Map(ops.rows.map((r) => [r.card.deliveryId, r]));
   const busy = rows.filter((r) => r.deliveries.length > 0).length;
-  const stale = rows.filter((r) => r.loc !== 'ok').length;
+  const stale = rows.filter((r) => rowMatchesRider(r, 'stale')).length;
   const openOnMap = (deliveryId: string) => {
     onShowOnMap();
     app.setPanelTab('deliveries');
@@ -121,7 +121,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
           </thead>
           <tbody>
             {shown.map((r) => (
-              <tr key={r.id} className={`${app.selected === r.id ? 'sel' : ''} ${r.loc !== 'ok' ? 'warn' : ''}`} onClick={() => app.select(app.selected === r.id ? null : r.id)} title="누르면 오른쪽에 라이더 상세">
+              <tr key={r.id} className={`${app.selected === r.id ? 'sel' : ''} ${rowMatchesRider(r, 'stale') ? 'warn' : ''}`} onClick={() => app.select(app.selected === r.id ? null : r.id)} title="누르면 오른쪽에 라이더 상세">
                 <td>
                   <b title={r.id}>{r.name}</b>
                   {r.external && <span className="c-tag">라이더 앱</span>}
@@ -130,7 +130,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
                 </td>
                 <td>{vehicleName(r.vehicle)}</td>
                 <td>{r.dispatchOn === null ? '—' : r.dispatchOn ? <span className="c-badge ok">받음</span> : <span className="c-badge">끔</span>}</td>
-                <td>{r.loc === 'ok' ? <span className="c-badge ok">수신 중</span> : r.loc === 'stale' ? <span className="c-badge bad">끊김</span> : <span className="c-badge bad">위치 없음</span>}</td>
+                <td>{r.loc === 'ok' ? <span className="c-badge ok">수신 중</span> : locStatus(r) === 'rest' ? <span className="c-badge" title="배송 없고 신규배차 꺼짐 — 문제 아님">쉬는 중</span> : r.loc === 'stale' ? <span className="c-badge bad">끊김</span> : <span className="c-badge bad">위치 없음</span>}</td>
                 <td className="num">{r.sinceSec === null ? '—' : `${dur(r.sinceSec)} 전`}</td>
                 <td>
                   {r.deliveries.length === 0 ? (

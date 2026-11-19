@@ -5,7 +5,7 @@ import { deliveryLabel } from '../domain/riderId';
 import type { OpsRow } from './ops';
 import { dur, seoulTime } from './format';
 import { DropAddress } from './MapDetail';
-import { rowMatchesRider, rowsFromControl, rowsFromRiders, vehicleName, type RiderRow, type RiderTableFilter } from './riderTable';
+import { locStatus, rowMatchesRider, rowsFromControl, rowsFromRiders, vehicleName, type RiderRow, type RiderTableFilter } from './riderTable';
 
 /*
  * 라이더 관제(기본 화면) — 라이더 백오피스 "라이더 관제"와 같은 짜임(사용자 2026-11-19 "똑같이 해봐"):
@@ -32,7 +32,21 @@ function useRiderRows(): RiderRow[] {
   });
 }
 
-const isStale = (r: RiderRow) => r.loc !== 'ok';
+/** 끊김(문제) = 배송 중이거나 신규배차를 켠 라이더의 위치 끊김·없음. 배송 없고 꺼 둔 라이더는 "쉬는 중"(riderTable.locStatus) */
+const isStale = (r: RiderRow) => locStatus(r) === 'stale' || locStatus(r) === 'none';
+
+/** 위치 칸 글자 — 수신 중(초록) · 끊김/위치 없음(빨강) · 쉬는 중(회색 — 배송 없음·신규배차 꺼짐, 문제 아님) */
+function LocBadge({ r }: { r: RiderRow }) {
+  const st = locStatus(r);
+  if (st === 'ok') return <span className="rb-badge ok">수신 중</span>;
+  if (st === 'rest')
+    return (
+      <span className="rb-badge rest" title="배송 없고 신규배차를 꺼 둔 라이더 — 위치가 안 들어와도 문제 아님(운행을 마쳤을 수 있음)">
+        쉬는 중
+      </span>
+    );
+  return <span className="rb-badge bad">{st === 'stale' ? '끊김' : '위치 없음'}</span>;
+}
 const isDelivering = (r: RiderRow) => r.deliveries.length > 0;
 
 /** "11. 19. 오후 3:14 · 3분 남음" */
@@ -186,7 +200,7 @@ export function RiderList() {
               <button id={`rb-${r.id}`} className={`rb-item ${sel ? 'sel' : ''} ${isStale(r) ? 'stale' : ''}`} onClick={() => app.select(r.id)} title={r.id}>
                 <span className="rb-item-1">
                   <b>{r.name}</b>
-                  {r.loc === 'ok' ? <span className="rb-badge ok">수신 중</span> : <span className="rb-badge bad">{r.loc === 'stale' ? '끊김' : '위치 없음'}</span>}
+                  <LocBadge r={r} />
                 </span>
                 <span className="rb-item-2">
                   {[vehicleName(r.vehicle), r.dispatchOn === null ? null : `신규배차 ${r.dispatchOn ? '켬' : '끔'}`, r.sinceSec === null ? null : `${dur(r.sinceSec)} 전`].filter(Boolean).join(' · ')}
@@ -264,9 +278,23 @@ export function RiderPanel() {
       <div className="rb-tiles">
         <Tile
           label="위치"
-          tone={!row ? undefined : row.loc === 'ok' ? 'ok' : 'bad'}
-          value={!row ? '—' : row.loc === 'ok' ? `수신 중${row.sinceSec !== null ? ` · ${dur(row.sinceSec)} 전` : ''}` : row.loc === 'stale' ? '끊김' : '위치 없음'}
-          hint={row && row.loc === 'stale' && row.sinceSec !== null ? `${dur(row.sinceSec)} 전` : undefined}
+          tone={!row ? undefined : row.loc === 'ok' ? 'ok' : locStatus(row) === 'rest' ? undefined : 'bad'}
+          value={
+            !row
+              ? '—'
+              : row.loc === 'ok'
+                ? `수신 중${row.sinceSec !== null ? ` · ${dur(row.sinceSec)} 전` : ''}`
+                : locStatus(row) === 'rest'
+                  ? <span className="rb-dim">쉬는 중 · 위치 꺼짐</span>
+                  : row.loc === 'stale'
+                    ? '끊김'
+                    : '위치 없음'
+          }
+          hint={
+            row && row.loc !== 'ok'
+              ? [row.sinceSec !== null ? `마지막 수신 ${dur(row.sinceSec)} 전` : null, locStatus(row) === 'rest' ? '배송 없고 신규배차 꺼짐 — 문제 아님' : null].filter(Boolean).join(' · ') || undefined
+              : undefined
+          }
         />
         <Tile
           label="전달 상황"

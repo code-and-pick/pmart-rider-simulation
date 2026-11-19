@@ -159,6 +159,7 @@ const CONTROL_LEGEND: readonly (readonly [string, string])[] = [
   ['대기', '#16a34a'],
   ['배송 중', '#2563eb'],
   ['위치 끊김', '#ea7a0c'],
+  ['쉬는 중', '#94a3b8'],
 ];
 
 /** 배송 관제 오른쪽 칸 — 고른 배송 상세를 크게(없으면 안내) */

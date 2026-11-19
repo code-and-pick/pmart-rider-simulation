@@ -112,7 +112,8 @@ export function buildBoard(input: {
 
   let stale = 0;
   for (const r of input.riders) {
-    if (!r.locationOffline) continue;
+    // 배송 없고 신규배차를 꺼 둔(모르는) 라이더는 "쉬는 중" — 끊김으로 세지 않는다(riderTable.isAlarmOffline)
+    if (!r.locationOffline || !(r.deliveryId || r.dispatchOn === true)) continue;
     stale++;
     // 배송 중인 라이더의 위치 끊김만 알린다(쉬는 라이더는 숫자만)
     if (r.deliveryId) {

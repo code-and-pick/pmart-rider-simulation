@@ -90,7 +90,7 @@ export function rowsFromRiders(riders: readonly RiderView[], isSim: (id: string)
     external: !!r.external,
     sim: isSim(r.id),
     vehicle: r.vehicle ?? (r.external ? null : 'MOTORCYCLE'),
-    dispatchOn: null,
+    dispatchOn: r.dispatchOn ?? null,
     restriction: null,
     // 끊김 판단은 라이더 쪽 locationOffline 하나만(숫자 카드·머리·알림과 같은 값 — 2026-11-19 사용자 "상세에는 복구된 라이더도 계속 위치 끊김").
     // 실서버 조회 라이더는 그 값이 '마지막 위치 3분 넘음'(tracking 끊김 기준), MOCK 은 위치 끊김 장면 중
@@ -115,12 +115,29 @@ export function riderIndex(control: readonly ControlRider[] | null, riders: read
 }
 
 /** waiting = 대기(맡은 배송 없음 · 위치 끊김 아님 — 백오피스 라이더 관제 숫자 카드와 같은 기준) */
+/**
+ * 위치 상태 — 배송 없고 신규배차를 켠 게 아니면(꺼 둠·모름) 위치가 안 들어와도 "쉬는 중"(rest — 문제 아님, 회색).
+ * "끊김"(stale·none)은 배송 중이거나 신규배차를 켠 라이더만(사용자 2026-11-19 "신규배차 끈 사람은 위치끊겨도 되지 않아? … 구분해야").
+ */
+export type LocStatus = 'ok' | 'stale' | 'none' | 'rest';
+
+export function locStatus(r: RiderRow): LocStatus {
+  if (r.loc === 'ok') return 'ok';
+  if (r.deliveries.length === 0 && r.dispatchOn !== true) return 'rest';
+  return r.loc;
+}
+
+/** 화면 라이더(RiderView) 기준 같은 판단 — 지도 색·머리 숫자 */
+export function isAlarmOffline(r: { locationOffline?: boolean; deliveryId: string | null; dispatchOn?: boolean | null }): boolean {
+  return !!r.locationOffline && (!!r.deliveryId || r.dispatchOn === true);
+}
+
 export type RiderTableFilter = 'all' | 'delivering' | 'waiting' | 'stale' | 'sim' | 'app';
 
 export function rowMatchesRider(r: RiderRow, f: RiderTableFilter): boolean {
   if (f === 'delivering') return r.deliveries.length > 0;
   if (f === 'waiting') return r.deliveries.length === 0 && r.loc === 'ok';
-  if (f === 'stale') return r.loc !== 'ok';
+  if (f === 'stale') return locStatus(r) === 'stale' || locStatus(r) === 'none';
   if (f === 'sim') return r.sim;
   if (f === 'app') return r.external;
   return true;

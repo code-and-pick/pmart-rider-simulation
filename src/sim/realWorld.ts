@@ -84,6 +84,8 @@ class AppRider implements RiderView {
   phase: RiderPhase = 'IDLE';
   /** 등록한 운송수단(관제 응답 vehicleType) */
   vehicle: string | null = null;
+  /** 신규배차 켬(관제 응답 newDispatchEnabled) */
+  dispatchOn: boolean | null = null;
   note = '';
   label: string;
   deliveryId: string | null = null;
@@ -567,6 +569,7 @@ export class RealWorld implements World {
         const d = c.activeDeliveries?.[0];
         r.deliveryId = d?.deliveryId ?? null;
         r.vehicle = c.vehicleType ?? null;
+        r.dispatchOn = c.newDispatchEnabled ?? null;
         r.locationOffline = !!c.stale;
         r.locationAgeSec = c.staleSinceSeconds ?? null;
         r.phase = d ? (STAGE_PHASE[d.stage ?? ''] ?? (d.pickedUp ? 'TO_CUSTOMER' : 'TO_STORE')) : 'IDLE';

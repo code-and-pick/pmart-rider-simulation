@@ -783,3 +783,10 @@
 .mk-rider.mk-spread .mk-rider-label {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
+
+/* 쉬는 중 — 배송 없고 신규배차 꺼짐(위치가 안 들어와도 문제 아님) */
+.rb-badge.rest {
+  background: var(--c-soft);
+  color: var(--c-sub);
+  border: 1px solid var(--c-line);
+}

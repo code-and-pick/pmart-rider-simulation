@@ -12,7 +12,7 @@ import type { DeliveryCard, ScenarioKnobs, World } from '../sim/world';
 import type { LatLng } from '../util/geo';
 import { buildBoard, rowMatches, type OpsBoard, type OpsFilter } from '../ui/ops';
 import { deliveryLabel } from '../domain/riderId';
-import type { RiderTableFilter } from '../ui/riderTable';
+import { isAlarmOffline, type RiderTableFilter } from '../ui/riderTable';
 
 /** 왼쪽 메뉴 화면 */
 export type AppView = 'control' | 'field' | 'riders' | 'analyze' | 'logs';
@@ -386,11 +386,12 @@ export class AppController {
       s.upsertRider(r.id, {
         pos: r.pos,
         heading: r.heading,
-        color: control ? (r.locationOffline ? CONTROL_COLOR.stale : r.deliveryId ? CONTROL_COLOR.delivering : CONTROL_COLOR.waiting) : PHASE_COLOR[r.phase],
+        color: control ? (isAlarmOffline(r) ? CONTROL_COLOR.stale : r.locationOffline ? CONTROL_COLOR.rest : r.deliveryId ? CONTROL_COLOR.delivering : CONTROL_COLOR.waiting) : PHASE_COLOR[r.phase],
         label: r.label ?? r.id.replace(/^RD-/, ''),
         selected: r.id === this.mapRider || r.id === this.selected,
         title: `${r.external ? '라이더 앱 ' : ''}${r.id} · ${PHASE_LABEL[r.phase]}${r.deliveryId ? ` · ${r.deliveryId}` : ''}${r.locationOffline ? ' · 위치 전송 끊김(백엔드가 위치를 못 받는 중)' : ''}`,
-        offline: r.locationOffline,
+        // 쉬는 중(배송 없음·신규배차 꺼짐)은 흐리게 하지 않는다 — 문제 아님
+        offline: isAlarmOffline(r),
         vehicle: r.vehicle ?? null,
         offset: offsets.get(r.id) ?? null,
       });
@@ -469,7 +470,7 @@ export function spreadOffsets(items: readonly { id: string; p: { x: number; y: n
 }
 
 /** 라이더 관제 지도 색 — 백오피스 라이더 관제와 같은 뜻(끊김·배송 중·대기) */
-const CONTROL_COLOR = { stale: '#ea7a0c', delivering: '#2563eb', waiting: '#16a34a' } as const;
+const CONTROL_COLOR = { stale: '#ea7a0c', delivering: '#2563eb', waiting: '#16a34a', rest: '#94a3b8' } as const;
 
 /** 배송 핀 자리 — 회수·다시 배송은 받기 전엔 잘못 둔 곳, 다시 배송은 받은 뒤 실제 집, 회수는 받은 뒤 없음(MFC 로) */
 function pinOf(c: DeliveryCard): LatLng | null {

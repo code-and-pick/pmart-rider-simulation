@@ -1,7 +1,7 @@
 // 라이더 관제 표 — 백오피스 라이더 관제와 같은 칸.
 import { describe, expect, it } from 'vitest';
 import { isSimRiderId } from '../src/config';
-import { rowMatchesRider, rowsFromControl, rowsFromRiders } from '../src/ui/riderTable';
+import { locStatus, rowMatchesRider, rowsFromControl, rowsFromRiders } from '../src/ui/riderTable';
 
 describe('라이더 관제 표', () => {
   it('관제 응답 → 화면 번호 이름·위치 상태·진행 중 배송 단계', () => {
@@ -15,7 +15,11 @@ describe('라이더 관제 표', () => {
     expect(rows[0]).toMatchObject({ name: '김*수 · 482913', external: true, sim: false, dispatchOn: true, restriction: null, loc: 'ok', sinceSec: 4 });
     expect(rows[0]!.deliveries[0]).toMatchObject({ deliveryId: 'DLV-1', stage: '고객에게 가는 중' });
     expect(rows[1]).toMatchObject({ name: 'sim-01', sim: true, loc: 'none' });
-    expect(rows.filter((r) => rowMatchesRider(r, 'stale')).map((r) => r.id)).toEqual(['RD-sim-01']);
+    // 배송 없고 신규배차 모름 → 쉬는 중(끊김 아님 — 2026-11-19 사용자 "신규배차 끈 사람은 위치끊겨도 되지 않아?")
+    expect(locStatus(rows[1]!)).toBe('rest');
+    expect(rows.filter((r) => rowMatchesRider(r, 'stale'))).toHaveLength(0);
+    // 신규배차를 켠 라이더는 위치가 없으면 끊김
+    expect(locStatus({ ...rows[1]!, dispatchOn: true })).toBe('none');
     expect(rows.filter((r) => rowMatchesRider(r, 'delivering'))).toHaveLength(1);
   });
 

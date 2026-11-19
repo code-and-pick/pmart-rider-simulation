@@ -190,6 +190,11 @@ export class VirtualRider {
   /** 이 시각까지 위치를 못 올림(위치 끊김 장면) — 점은 모아 두었다가 풀리면 한꺼번에 */
   private offlineUntil = -Infinity;
   /** 위치 끊김 중인가(화면 표시) */
+  /** 신규배차 받는 중(운행 중) — 준비 전·멈춘 라이더는 아님 */
+  get dispatchOn(): boolean {
+    return this.phase !== 'PREPARING' && this.phase !== 'STOPPED';
+  }
+
   get locationOffline(): boolean {
     return this.clock.now < this.offlineUntil;
   }
