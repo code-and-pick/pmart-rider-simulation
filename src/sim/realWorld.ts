@@ -20,6 +20,7 @@ import type { RiderPhase } from './rider';
 import { shortRiderId } from '../domain/riderId';
 import type { DeliveryCard, DropLocationView, MetricsSummary, NoteRecord, PhaseSegment, RiderView, ScenarioKnobs, World } from './world';
 import type { AddressLocator } from './geocode';
+import { OrderLookup } from './orderLookup';
 import { assemble, dispatchSteps, summarySteps, type DeliveryTimeline, type TimelineStep } from './timeline';
 import type { RiderTrip } from './rider';
 
@@ -133,6 +134,17 @@ export class RealWorld implements World {
 
   /** 직원용 전달지 — 배송마다 한 번(열람 기록이 남으므로 박자마다 부르지 않는다). 화면 메모리에만 */
   private readonly drops = new Map<string, DropLocationView & { at: number }>();
+
+  /** 직원용 주문 상세·원문 열람(order 0.13.1) — 관제 계정, 이 PC 만. 값은 화면 메모리에만 */
+  readonly orders = new OrderLookup(
+    { getOrder: (id) => this.backend.getStaffOrder(id), reveal: (id, body, w) => this.backend.revealOrderPii(id, body, w) },
+    () =>
+      this.writeAccess === 'remote'
+        ? '다른 기기에서는 주문 상세를 보지 않음 — 개발 서버가 있는 PC 에서만(관제 계정)'
+        : this.controlAvailable
+          ? null
+          : '이 PC 에 관제 계정 비밀번호 파일이 없어 주문을 못 읽음',
+  );
 
   dropLocation(deliveryId: string): DropLocationView {
     if (this.writeAccess === 'remote') return { state: 'none', reason: '다른 기기에서는 전달지를 보지 않음 — 개발 서버가 있는 PC 에서만(관제 계정)' };

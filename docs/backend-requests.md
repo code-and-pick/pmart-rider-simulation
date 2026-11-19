@@ -78,6 +78,7 @@ P1(2026-11-16) MOCK 이 정한 값. 정본은 `src/config.ts`(`MockParams`·`Sim
 | 전달 실패 때 라이더 | 연락 2번(30초)·문 앞 사진 → `failures`(CUSTOMER_ABSENT, WITH_RIDER) → 확정 대기(최대 30분) → 상품 들고 MFC 복귀 | 같은 엔진 값(조절 바로만 켜짐) |
 | 라이더 배정 취소(조절 바) | 수락 뒤 가게로 가다가 30~90초 뒤 `assignment-cancellations`(RIDER, RIDER_UNABLE, reassign true) | 실서버는 안 함 |
 | 위치 끊김(조절 바) | 고객에게 가는 중 4분 위치 안 올림(점은 모았다가 풀리면 최근 200점). MOCK tracking 은 30초마다 보고 3분(서비스 문서 값) 넘으면 RiderLocationStale 한 번 | 실서버는 안 함 — tracking 이 실제로 낸다 |
+| 주문 창 "주문" 탭(2026-11-19) | 가상 주문 상세 — 배달팁 3,000원(상품 3만 원 이상 0원), 요청사항 있는 주문 50%, 배송지·수령인·전화·요청사항 모두 "(MOCK)" 가짜, 원문 열람은 바로 가짜 원문(열람 기록 없음). `src/config.ts` `MOCK_ORDER` | order-service 직원용 주문 상세·원문 열람(관제 계정, audit 기록) |
 | 포장 대기 도움요청 | 가게에서 10분 넘게 READY 를 기다리면 `help-requests` STORE_WAITING 한 번 | **실서버도 보냄**(사용자 2026-11-16 "진행해" — 실제 지원센터 사건이 열림) |
 | 오배송(조절 바) | 전달 완료의 n% 가 5분 뒤 MOCK 이 case 대신 MisdeliveryConfirmed. 귀책 반반(고객 잘못 / 라이더·시스템 잘못) | 상담원·지원센터가 case 에 기록 |
 | 다시 배송 실제 집 | 잘못 둔 곳에서 60~450m(200m 기준은 [확정] dispatch 0.4.2). 결제 대기는 3분 뒤 결제 70% / 거절 30% | order-orchestration·고객 앱 |

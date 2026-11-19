@@ -1,17 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../app/App';
 import { displayStage, purposeLabel } from '../domain/displayStage';
 import { deliveryLabel, orderLabel, shortId, shortRiderId } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
 import { dur, seoulTime } from './format';
 import { opsDeliveryUrl, opsRiderUrl } from './opsLinks';
+import { OrderTab } from './OrderTab';
 import { Timeline } from './Timeline';
 
-type Tab = 'detail' | 'flow' | 'raw';
+type Tab = 'detail' | 'order' | 'flow' | 'raw';
 
 /**
  * 고른 배송 상세 — 지도 위 오른쪽 창(Onfleet 주문 창처럼: 머리 + 탭 상세·흐름·원래 상태 + 조치 버튼).
  *   상세 = 픽업(MFC) → 전달지 세로 단계(지난 단계 ✓), 라이더·주문·시각, 지연 사유.
+ *   주문 = 품목·금액·결제·받는 분·배송지·요청사항(직원용 주문 상세 + 사유를 적은 원문 열람 — OrderTab).
  *   흐름 = 단계별 시각·걸린 시간·출처. 원래 상태 = 배차·수행 두 서비스 값(docs/design.md §4).
  *   조치 = 지도에서 따라가기 · 백오피스에서 배송/라이더 열기(쓰기 조치는 백오피스) · 번호 복사.
  */
@@ -20,6 +22,12 @@ export function MapDetail() {
   const [tab, setTab] = useState<Tab>('detail');
   const [copied, setCopied] = useState(false);
   const id = app.selectedDelivery;
+  const orderIdOfSel = id ? (app.board().rows.find((r) => r.card.deliveryId === id)?.card.orderId ?? null) : null;
+  // 열어 본 원문은 다른 배송을 고르거나 창을 닫으면 화면 메모리에서 지운다
+  useEffect(() => {
+    if (!orderIdOfSel) return;
+    return () => app.sim.orders?.hide(orderIdOfSel);
+  }, [app, orderIdOfSel]);
   if (!id) return null;
   const row = app.board().rows.find((r) => r.card.deliveryId === id);
   if (!row) return null;
@@ -63,6 +71,7 @@ export function MapDetail() {
         {(
           [
             ['detail', '상세'],
+            ['order', '주문'],
             ['flow', '흐름'],
             ['raw', '원래 상태'],
           ] as const
@@ -120,6 +129,7 @@ export function MapDetail() {
           </dl>
         </>
       )}
+      {tab === 'order' && <OrderTab orderId={c.orderId} />}
       {tab === 'flow' && (tl ? <Timeline t={tl} nowMs={app.sim.clock.epochMs()} /> : <p className="c-muted">흐름을 아직 못 읽었습니다.</p>)}
       {tab === 'raw' && (
         <dl className="md-facts">

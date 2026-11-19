@@ -8,6 +8,7 @@
 //   contracts/openapi/rider-service.yaml               0.5.0 (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
 //   contracts/openapi/mfc-fulfillment-service.yaml     0.7.0 (출고 조회·포장 인계 부분만 — 0.6~0.7 변경은 작업 줄 바코드 등이라 인계 API 그대로)
 //   contracts/openapi/center-master-service.yaml       0.2.0 (MFC 위치: 라이더용 GET /mfc-pickup-points 먼저, 실패하면 관찰 계정 GET /centers/{centerId})
+//   contracts/openapi/order-service.yaml               0.13.1 (직원용 주문 상세 GET /orders/lookups/{id}·원문 열람 POST …/pii-reveals 만 — 주문 창 "주문" 탭, 관제 계정, 2026-11-19 백엔드 637abcb5 에서 읽음)
 //   contracts/openapi/_common.yaml                     0.1.0
 // 모든 경로는 게이트웨이 /api/v1 아래. POST·PUT 은 Idempotency-Key·X-Source-System 필수, 상태 전이는 X-Expected-Version(선택).
 // 이름이 서비스 사이에서 겹치는 스키마만 이름을 바꿨다(주석에 계약 이름).
@@ -959,3 +960,120 @@ export type DomainEventType =
   // delivery.rider.v1
   | 'RiderStateChanged'
   | 'RiderRestricted';
+
+// ───────────────────────── order-service.yaml 0.13.1 (직원용 주문 찾기 — 주문 창 "주문" 탭) ─────────────────────────
+// 사용자 2026-11-19 "여기서 다 열람할 수 있게 해": 관제 계정(OPERATOR_ADMIN)으로 이 PC 에서만
+//   GET  /orders/lookups/{orderId}             직원용 주문 상세 — 배송지·요청사항은 가린 값, 조회 자체는 기록 안 함
+//   POST /orders/lookups/{orderId}/pii-reveals 원문 열람 — 사유 필수, audit 열람 기록이 남은 뒤에만 원문(못 남기면 503, 원문 없음)
+// 응답(특히 원문)은 화면 메모리에만 — 로그·일지·브라우저 저장소·다른 기기 금지.
+
+export type OrderStatus =
+  | 'DRAFT'
+  | 'RESOURCE_PENDING'
+  | 'PAYMENT_PENDING'
+  | 'PAYMENT_UNKNOWN'
+  | 'CONFIRMED'
+  | 'PREPARING'
+  | 'PARTIALLY_HANDED_OVER'
+  | 'IN_DELIVERY'
+  | 'PARTIALLY_DELIVERED'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'EXPIRED';
+
+/** 계약 이름 ShippingAddress — 주문 당시 배송지·수령 연락처 사본. 직원 상세에서는 가린 값 */
+export interface OrderShippingAddress {
+  roadAddress?: string;
+  detailAddress?: string;
+  postalCode?: string | null;
+  receiverName?: string;
+  receiverPhone?: string;
+  entranceMethod?: 'FREE' | 'PASSWORD' | 'CALL' | 'OTHER' | null;
+  entranceNote?: string | null;
+  geo?: { lat?: number; lng?: number } | null;
+  capturedAt?: string;
+}
+
+/** 계약 이름 OrderLine — 화면에 쓰는 필드만 */
+export interface StaffOrderLine {
+  orderLineId?: string;
+  sku?: string;
+  productName?: string | null;
+  optionLabel?: string | null;
+  lineAmount?: number;
+  unitPrice?: number;
+  discountShare?: number;
+  originalQty?: number;
+  unfulfilledQty?: number;
+  handedOverQty?: number;
+  cancelledBeforeShipQty?: number;
+  deliveredQty?: number;
+  returnedQty?: number;
+}
+
+export interface StaffOrderAmounts {
+  itemAmount: number;
+  deliveryTipBase: number;
+  deliveryTip: number;
+  /** STANDARD·OVER_30000·FIRST_PURCHASE·NONE */
+  deliveryTipReason: string;
+  bagFee: number;
+  totalAmount: number;
+  /** PG 승인액 */
+  approvedAmount: number;
+  firstPurchaseApplied: boolean;
+}
+
+/** 계약 이름 FulfillmentIssue — 이행 확인 필요 기록 */
+export interface OrderFulfillmentIssue {
+  issueId?: string;
+  sku?: string;
+  blockedQty?: number;
+  /** QUALITY_HOLD·COUNT_LOSS·SHORT·DAMAGED·BLOCKED·UNKNOWN(목록 밖이면 코드 그대로) */
+  reason?: string;
+  state?: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED';
+  blockedAt?: string;
+}
+
+export interface StaffOrderDetail {
+  orderNumber?: string | null;
+  orderId: string;
+  customerId: string;
+  status: OrderStatus;
+  version: number;
+  mfcId: string;
+  deliveryMode: 'SINGLE' | 'BUNDLED' | 'SCHEDULED';
+  arrivalWindow?: { date: string; start: string; end: string } | null;
+  confirmedAt: string;
+  outOfStockPreference?: 'CANCEL_OOS_ONLY' | 'CANCEL_ALL';
+  /** 0.5.0 부터 직원 상세에서는 null(가림) — 원문은 ENTRANCE 열람 */
+  deliveryNote?: string | null;
+  deliveryNoteMasked?: boolean;
+  amounts: StaffOrderAmounts;
+  payment: { paymentAttemptId: string; pgTransactionId?: string };
+  /** 가린 값(0.4.0) — 사본 없는 옛 주문은 null */
+  shippingAddress?: OrderShippingAddress | null;
+  shippingAddressMasked: boolean;
+  lines: StaffOrderLine[];
+  fulfillmentIssues: OrderFulfillmentIssue[];
+}
+
+/** 원문으로 볼 항목 — NAME 수령인 · PHONE 연락처 · ADDRESS 상세 주소 + 핀 · ENTRANCE 출입 메모 + 배송 요청사항 */
+export type StaffPiiField = 'NAME' | 'PHONE' | 'ADDRESS' | 'ENTRANCE';
+
+export interface StaffPiiRevealRequest {
+  /** 2~200자, audit 에 그대로 남는다 */
+  reason: string;
+  /** 없으면 네 항목 모두 */
+  fields?: StaffPiiField[];
+}
+
+export interface StaffPiiReveal {
+  orderId: string;
+  piiAccessLogId: string;
+  recordedAt: string;
+  fields: StaffPiiField[];
+  shippingAddress: OrderShippingAddress | null;
+  /** ENTRANCE 를 열었을 때만 배송 요청사항 원문 */
+  deliveryNote?: string | null;
+}

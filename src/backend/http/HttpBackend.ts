@@ -34,6 +34,9 @@ import {
   type RiderProfile,
   type Shipment,
   type StaffDeliveryListResponse,
+  type StaffOrderDetail,
+  type StaffPiiReveal,
+  type StaffPiiRevealRequest,
   type Withdrawal,
 } from '../../domain/contract';
 import type {
@@ -83,6 +86,19 @@ export class HttpBackend implements RiderPort {
   /** execution 0.24.0 직원용 전달지(주소·좌표, 열람 기록) — 관제 계정, 이 PC 만. 응답은 화면 메모리에만(로그에는 경로·상태만) */
   getStaffDropLocation(deliveryId: string): Promise<StaffDropLocation> {
     return this.request<StaffDropLocation>('control', 'GET', `/deliveries/${enc(deliveryId)}/drop-location`);
+  }
+
+  /** order 0.13.1 직원용 주문 상세(품목·금액·결제 — 배송지·요청사항은 가린 값, 조회는 기록 안 함) — 관제 계정, 이 PC 만 */
+  getStaffOrder(orderId: string): Promise<StaffOrderDetail> {
+    return this.request<StaffOrderDetail>('control', 'GET', `/orders/lookups/${enc(orderId)}`);
+  }
+
+  /**
+   * order 0.13.1 원문 열람 — 사유 필수, audit 열람 기록이 남은 뒤에만 원문(못 남기면 503 → 결과 불명, 같은 키로 다시).
+   * 사용자 2026-11-19 "여기서 다 열람할 수 있게 해". 응답은 화면 메모리에만 — API 기록에는 경로·상태만(본문 없음).
+   */
+  revealOrderPii(orderId: string, body: StaffPiiRevealRequest, w: WriteOptions): Promise<StaffPiiReveal> {
+    return this.request<StaffPiiReveal>('control', 'POST', `/orders/lookups/${enc(orderId)}/pii-reveals`, { body, write: w });
   }
 
   /** tracking 0.8.0 라이더 관제 — 운행 중 라이더(라이더 앱 포함)의 현재 위치. RIDER_OPS·OPERATOR_ADMIN 만(관제 계정, 이 PC 만) */

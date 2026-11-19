@@ -13,7 +13,7 @@
 //    고객 잘못이면 다시 배송(ADR-0065 — 200m 미만 원래 기사 먼저 0원, 이상 결제 대기 → order-orchestration 대신 결제·거절).
 //  - 운영자 상태 정정·고객 반품 회수(CLAIM_RETURN)는 만들지 않는다.
 
-import { CONTRACT, isSimRiderId, type MockParams } from '../../config';
+import { CONTRACT, isSimRiderId, MOCK_ORDER, type MockParams } from '../../config';
 import {
   ApiProblem,
   ResultUnknown,
@@ -28,6 +28,11 @@ import {
   type DeliveryListResponse,
   type DeliveryPurpose,
   type DeliveryType,
+  type OrderShippingAddress,
+  type OrderStatus,
+  type StaffOrderDetail,
+  type StaffPiiField,
+  type StaffPiiReveal,
   type DispatchAttempt,
   type DispatchSettings,
   type DispatchState,
@@ -274,7 +279,23 @@ interface MOrderSummary {
   orderNumber: string;
   items: { name: string; optionLabel: string | null; qty: number; lineAmount: number }[];
   itemAmount: number;
+  /** 주문 확정(시뮬레이션 초) — 주문 창 "주문" 탭 */
+  confirmedAt: number;
+  /** 요청사항이 있나(가짜 문구) */
+  hasNote: boolean;
 }
+
+/** MOCK 배송지 — 가린 값(직원 상세 가림 규칙대로: 이름 첫·끝 글자, 전화 앞 3·끝 4, 상세 주소 ***) */
+const MOCK_ADDRESS_MASKED: OrderShippingAddress = {
+  roadAddress: '(MOCK) 부산 부산진구 가상대로 123',
+  detailAddress: '***',
+  postalCode: '47000',
+  receiverName: '김*상',
+  receiverPhone: '010-****-0000',
+  entranceMethod: 'PASSWORD',
+  entranceNote: null,
+  geo: null,
+};
 
 /** MOCK 품목 이름(가짜) */
 const MOCK_ITEM_NAMES = ['우유 1L', '계란 10구', '두부', '바나나', '생수 2L', '식빵', '양파 1.5kg', '닭가슴살', '요거트', '감자 1kg', '사과 4입', '라면 5입'];
@@ -603,6 +624,89 @@ export class MockBackend implements RiderPort {
       orderNumber: String(r.int(10_000_000, 99_999_999)),
       items,
       itemAmount: items.reduce((s, it) => s + it.lineAmount, 0),
+      confirmedAt: this.clock.now,
+      hasNote: r.next() < MOCK_ORDER.noteRate,
+    };
+  }
+
+  /**
+   * MOCK 직원용 주문 상세(order 0.13.1 GET /orders/lookups/{id} 흉내) — 가린 배송지·요청사항, 가짜 금액. 없는 주문은 null.
+   * 상태는 이 주문 배송들의 수행 상태로 짐작한다(실서버는 order 원장).
+   */
+  staffOrder(orderId: string): StaffOrderDetail | null {
+    const s = this.orderSummaries.get(orderId);
+    if (!s) return null;
+    const dels = [...this.deliveries.values()].filter((d) => d.orderId === orderId && d.purpose !== 'MISDELIVERY_RECOVERY');
+    const xs = dels.map((d) => d.x.state);
+    const status: OrderStatus = xs.includes('COMPLETED')
+      ? 'COMPLETED'
+      : xs.some((x) => x === 'PICKED_UP' || x === 'ARRIVED_AT_CUSTOMER' || x === 'FAILURE_REPORTED')
+        ? 'IN_DELIVERY'
+        : 'PREPARING';
+    const tip = s.itemAmount >= MOCK_ORDER.freeTipOverWon ? 0 : MOCK_ORDER.deliveryTipWon;
+    return {
+      orderNumber: s.orderNumber,
+      orderId,
+      customerId: 'AC-mock',
+      status,
+      version: 1,
+      mfcId: this.mfcId,
+      deliveryMode: 'SINGLE',
+      arrivalWindow: null,
+      confirmedAt: this.clock.iso(s.confirmedAt),
+      outOfStockPreference: 'CANCEL_OOS_ONLY',
+      deliveryNote: null,
+      deliveryNoteMasked: s.hasNote,
+      amounts: {
+        itemAmount: s.itemAmount,
+        deliveryTipBase: MOCK_ORDER.deliveryTipWon,
+        deliveryTip: tip,
+        deliveryTipReason: tip ? 'STANDARD' : 'OVER_30000',
+        bagFee: 0,
+        totalAmount: s.itemAmount + tip,
+        approvedAmount: s.itemAmount + tip,
+        firstPurchaseApplied: false,
+      },
+      payment: { paymentAttemptId: `PA-mock-${orderId}` },
+      shippingAddress: { ...MOCK_ADDRESS_MASKED },
+      shippingAddressMasked: true,
+      lines: s.items.map((it, i) => ({
+        orderLineId: `${orderId}-L${i + 1}`,
+        sku: `SKU-MOCK-${i + 1}`,
+        productName: it.name,
+        optionLabel: it.optionLabel,
+        lineAmount: it.lineAmount,
+        unitPrice: Math.round(it.lineAmount / it.qty),
+        discountShare: 0,
+        originalQty: it.qty,
+        unfulfilledQty: 0,
+        cancelledBeforeShipQty: 0,
+        deliveredQty: status === 'COMPLETED' ? it.qty : 0,
+      })),
+      fulfillmentIssues: [],
+    };
+  }
+
+  /** MOCK 원문 열람(pii-reveals 흉내) — 요청한 항목만 가짜 원문, 열람 기록 ID 도 가짜 */
+  staffOrderReveal(orderId: string, fields: readonly StaffPiiField[]): StaffPiiReveal {
+    const s = this.orderSummaries.get(orderId);
+    if (!s) throw new ApiProblem(404, { code: 'ORDER_NOT_FOUND', title: '없는 주문' });
+    const del = [...this.deliveries.values()].find((d) => d.orderId === orderId);
+    const has = (f: StaffPiiField) => fields.includes(f);
+    return {
+      orderId,
+      piiAccessLogId: this.ids.next('PAL'),
+      recordedAt: this.clock.iso(),
+      fields: [...fields],
+      shippingAddress: {
+        ...MOCK_ADDRESS_MASKED,
+        receiverName: has('NAME') ? '김가상(MOCK)' : MOCK_ADDRESS_MASKED.receiverName,
+        receiverPhone: has('PHONE') ? '010-0000-0000(MOCK)' : MOCK_ADDRESS_MASKED.receiverPhone,
+        detailAddress: has('ADDRESS') ? '101동 1001호(MOCK)' : MOCK_ADDRESS_MASKED.detailAddress,
+        geo: has('ADDRESS') && del ? { ...del.customer } : null,
+        entranceNote: has('ENTRANCE') ? '공동현관 #0000(MOCK)' : null,
+      },
+      deliveryNote: has('ENTRANCE') && s.hasNote ? '문 앞에 두고 벨 눌러 주세요(MOCK)' : null,
     };
   }
 

@@ -6,6 +6,7 @@ import type { ControlRider, DeliveryPurpose, DispatchState, ExecutionState } fro
 import type { LatLng } from '../util/geo';
 import type { SimClock } from './clock';
 import type { RiderJob, RiderPhase } from './rider';
+import type { OrderLookup } from './orderLookup';
 import type { DeliveryTimeline } from './timeline';
 
 export interface RiderView {
@@ -147,6 +148,11 @@ export interface World {
    * 처음 부르면 읽기 시작(loading). 화면 메모리에만 두고 로그·저장소에 남기지 않는다. 사용자 2026-11-18 "주소까지 보이게".
    */
   dropLocation?(deliveryId: string): DropLocationView;
+  /**
+   * 주문 창 "주문" 탭 — 직원용 주문 상세·원문 열람(사용자 2026-11-19 "여기서 다 열람할 수 있게 해").
+   * 실서버 = order-service(이 PC·관제 계정, 열람은 사유 필수·audit 기록), MOCK = 가상 값. 화면 메모리에만.
+   */
+  readonly orders?: OrderLookup;
   readonly apiLog: readonly ApiCallRecord[];
   readonly eventLog: readonly DomainEventRecord[];
   readonly notes: readonly NoteRecord[];

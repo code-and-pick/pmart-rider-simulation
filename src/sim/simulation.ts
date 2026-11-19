@@ -8,10 +8,12 @@
 import { MockBackend, type MDelivery } from '../backend/mock/MockBackend';
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
 import { DEFAULT_PARAMS, simRiderId, type SimParams } from '../config';
+import { ApiProblem } from '../domain/contract';
 import { destination, type LatLng } from '../util/geo';
 import { Rng } from '../util/rng';
 import { mockStartEpochMs, SimClock } from './clock';
 import { VirtualRider, type RiderTrip } from './rider';
+import { OrderLookup } from './orderLookup';
 import { straightRoutes, type RouteProvider } from './route';
 import type { DeliveryCard, DropLocationView, IncidentCounts, MetricsSummary, NoteRecord, PhaseSegment, ScenarioKnobs, World } from './world';
 import { mockLocator } from './geocode';
@@ -126,6 +128,16 @@ export class Simulation implements World {
   deliveryCards(): DeliveryCard[] {
     return [...this.backend.deliveries.values()].map((d) => card(d, this.backend.ridersOf(d.deliveryId), this.backend.displayNumbers(d))).sort((a, b) => b.createdAt - a.createdAt);
   }
+
+  /** MOCK 주문 상세·열람 — 가상 값(MockBackend.staffOrder·staffOrderReveal), 열람 기록 없음 */
+  readonly orders = new OrderLookup({
+    getOrder: async (id) => {
+      const o = this.backend.staffOrder(id);
+      if (!o) throw new ApiProblem(404, { code: 'ORDER_NOT_FOUND' });
+      return o;
+    },
+    reveal: async (id, body) => this.backend.staffOrderReveal(id, body.fields ?? ['NAME', 'PHONE', 'ADDRESS', 'ENTRANCE']),
+  });
 
   /** MOCK 전달지 — 가상 좌표·가상 주소(실서버 직원용 drop-location 흉내, 열람 기록 없음) */
   dropLocation(deliveryId: string): DropLocationView {

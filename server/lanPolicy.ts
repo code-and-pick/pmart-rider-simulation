@@ -104,16 +104,22 @@ export function decideLanRequest(method: string, url: string, remoteAddress: str
 }
 
 /**
- * 관제 계정(라이더 운영·관리자 권한 — RR-08)으로 붙여도 되는 요청인가: 이 PC 의 `GET /api/v1/rider-locations`(관제)와
- * `GET /api/v1/deliveries/{id}/drop-location`(직원용 전달지 — 주소·좌표, 열람 기록) 두 가지만.
- * (직원용 운행시간 /rider-operating-time 은 넣었다가 뺐다 — 사용자 2026-11-18 "이거 없어도 될 것 같아". 이제 403 CONTROL_READ_ONLY)
- * 관리자 권한 토큰이라 다른 경로·쓰기에는 절대 붙이지 않는다. 다른 기기는 이 경로가 허용 목록에 없어 위에서 이미 막힌다
- * (백엔드가 라이더 위치를 라이더 운영·관리자에게만 보이므로, LAN 아무 기기에나 넘기지 않는다).
+ * 관제 계정(라이더 운영·관리자 권한 — RR-08)으로 붙여도 되는 요청인가 — 이 PC 에서만, 아래 넷만:
+ *   GET  /api/v1/rider-locations                       라이더 관제(위치)
+ *   GET  /api/v1/deliveries/{id}/drop-location         직원용 전달지(주소·좌표 — 백엔드가 열람 기록, 사용자 2026-11-18 "주소까지 보이게")
+ *   GET  /api/v1/orders/lookups/{orderId}              직원용 주문 상세(품목·금액·결제 — 배송지·요청사항은 가린 값)   ┐ 사용자 2026-11-19
+ *   POST /api/v1/orders/lookups/{orderId}/pii-reveals  배송지·연락처·요청사항 원문 열람(사유 필수, audit 기록 뒤에만) ┘ "여기서 다 열람할 수 있게 해"
+ * (직원용 운행시간 /rider-operating-time 은 넣었다가 뺐다 — 사용자 2026-11-18. 이제 403 CONTROL_READ_ONLY)
+ * 관리자 권한 토큰이라 그 밖의 경로·쓰기에는 절대 붙이지 않는다. 다른 기기는 이 경로들이 허용 목록에 없어 위에서 이미 막힌다
+ * (개인정보·관리자 권한 — LAN 아무 기기에나 넘기지 않는다).
  */
-export function isControlRead(method: string, url: string): boolean {
+export function isControlRequest(method: string, url: string): boolean {
   const m = method.toUpperCase();
   const sub = apiSubPath(url);
-  if (m !== 'GET' && m !== 'HEAD') return false;
-  // 라이더 관제(위치) + 직원용 전달지(주소·좌표 — 응답 전에 백엔드가 개인정보 열람 기록, 사용자 2026-11-18 "주소까지 보이게")
-  return sub === '/rider-locations' || (sub !== null && /^\/deliveries\/[^/]+\/drop-location$/.test(sub));
+  if (sub === null) return false;
+  if (m === 'GET' || m === 'HEAD') {
+    return sub === '/rider-locations' || /^\/deliveries\/[^/]+\/drop-location$/.test(sub) || /^\/orders\/lookups\/[^/]+$/.test(sub);
+  }
+  if (m === 'POST') return /^\/orders\/lookups\/[^/]+\/pii-reveals$/.test(sub);
+  return false;
 }

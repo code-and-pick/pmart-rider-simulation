@@ -238,6 +238,18 @@ export const OPS_BACKOFFICE = {
  * 관제 화면 지연·이상 기준(화면 알림만 — 배송 상태를 바꾸지 않는다). 업무 문서에 정한 값이 없어 모두 [가정](2026-11-18 관제 화면 개선).
  * 시간은 실서버 = 실제 초, MOCK = 시뮬레이션 초.
  */
+/**
+ * MOCK 주문 창 "주문" 탭의 가상 주문(실서버 order-service 직원용 주문 상세 흉내, 2026-11-19) — 금액·배송지·요청사항 모두 가짜.
+ */
+export const MOCK_ORDER = {
+  /** 기본 배달팁(원) [시뮬] */
+  deliveryTipWon: 3000,
+  /** 상품 금액이 이 값 이상이면 배달팁 0(사유 OVER_30000) [가정 — 계약 deliveryTipReason 이름에서] */
+  freeTipOverWon: 30000,
+  /** 요청사항이 있는 주문 비율 [시뮬] */
+  noteRate: 0.5,
+} as const;
+
 export const OPS_THRESHOLDS = {
   /** 배차 요청 뒤 라이더를 못 찾은 채 이만큼 지나면 주의 [가정] — 반경 1→2→3km 단계가 도는 시간쯤 */
   searchWarnSec: 5 * 60,
