@@ -1103,3 +1103,98 @@ i.k-other {
 .od-head .c-muted {
   font-size: 11.5px;
 }
+
+/* 흐름 탭 — 배차 제안 목록(누가 거절·만료·수락, 2026-11-19) */
+.of {
+  margin-top: 12px;
+  border-top: 1px solid var(--c-line);
+  padding-top: 8px;
+  font-size: 12px;
+}
+.of h4 {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 800;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.of h4 .c-muted {
+  font-weight: 400;
+}
+.of-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 7px;
+  border-radius: 999px;
+}
+.of-pill.rej {
+  background: color-mix(in srgb, var(--c-red) 16%, transparent);
+  color: var(--c-red);
+}
+.of-pill.exp {
+  background: color-mix(in srgb, var(--c-orange) 16%, transparent);
+  color: var(--c-orange);
+}
+.of-pill.ok {
+  background: color-mix(in srgb, var(--c-green) 16%, transparent);
+  color: var(--c-green);
+}
+.of-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.of-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--c-sub);
+  font-size: 11px;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--c-line);
+}
+.of-table td {
+  padding: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
+  vertical-align: baseline;
+}
+.of-table td.num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.of-attempt td {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-sub);
+  background: var(--c-soft);
+}
+.of-st {
+  font-weight: 700;
+}
+.of-st.s-REJECTED {
+  color: var(--c-red);
+}
+.of-st.s-EXPIRED {
+  color: var(--c-orange);
+}
+.of-st.s-ACCEPTED {
+  color: var(--c-green);
+}
+.of-st.s-SENT {
+  color: var(--c-blue);
+}
+.of-st.s-LATE,
+.of-st.s-SUPERSEDED,
+.of-st.s-SEND_FAILED {
+  color: var(--c-sub);
+}
+.of-note,
+.of-empty {
+  margin: 6px 0 0;
+  font-size: 11px;
+}
+/* 최근 배송 "끝남" 칸 — 아직 진행 중(.c-live 는 머리의 실시간 점이라 이름을 따로) */
+.c-ongoing {
+  color: var(--c-blue);
+  font-weight: 600;
+}

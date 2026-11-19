@@ -3,7 +3,7 @@
 // React 에 의존하지 않는다.
 
 import { shortRiderId } from '../domain/riderId';
-import type { Delivery, DeliveryPurpose, ExecutionState, StaffDeliverySummary, StatusHistoryEntry } from '../domain/contract';
+import type { Delivery, DeliveryPurpose, DispatchAttempt, ExecutionState, OfferState, StaffDeliverySummary, StatusHistoryEntry } from '../domain/contract';
 
 /** 단계 하나. atMs = epoch ms */
 export interface TimelineStep {
@@ -33,6 +33,54 @@ export interface DeliveryTimeline {
   basis: 'sim' | 'real';
   /** 이 화면에서 볼 수 없는 단계 안내(실서버 직원 목록에 없는 시각 등) */
   gaps: string[];
+  /** 배차 제안 한 줄씩(누가 거절·만료·수락했나) — 배차 관점을 못 읽었으면 빈 배열 */
+  offers?: OfferRow[];
+}
+
+/** 배차 제안 한 건 — dispatch GET /deliveries/{id}/dispatch 의 attempts[].offers[](계약엔 거절 사유 칸이 없다) */
+export interface OfferRow {
+  offerId: string;
+  riderId: string | null;
+  radiusKm: number | null;
+  sentAtMs: number | null;
+  state: OfferState | null;
+  /** 몇 번째 배차 시도인가(1부터) */
+  attempt: number;
+  /** 시도 계기 — 재배차(REASSIGN)·재시도(RETRY)면 표시 */
+  trigger: DispatchAttempt['trigger'] | null;
+  /** 배달리스트에서 직접 잡은 것(제안이 아님) */
+  fromList: boolean;
+}
+
+export const OFFER_STATE_LABEL: Record<OfferState, string> = {
+  SENT: '응답 기다림',
+  ACCEPTED: '수락',
+  REJECTED: '거절',
+  EXPIRED: '만료(1분 무응답)',
+  LATE: '늦은 수락(이미 배정됨)',
+  SEND_FAILED: '보내기 실패',
+  SUPERSEDED: '다른 라이더가 먼저',
+};
+
+/** 배차 관점에서 제안 목록 — 보낸 시각 순 */
+export function offerRows(d: Delivery | null): OfferRow[] {
+  if (!d) return [];
+  const out: OfferRow[] = [];
+  (d.attempts ?? []).forEach((a, i) => {
+    for (const o of a.offers ?? []) {
+      out.push({
+        offerId: o.offerId ?? `${i}-${out.length}`,
+        riderId: o.riderId ?? null,
+        radiusKm: o.radiusKm ?? null,
+        sentAtMs: ms(o.sentAt),
+        state: o.state ?? null,
+        attempt: i + 1,
+        trigger: a.trigger ?? null,
+        fromList: o.source === 'DELIVERY_LIST',
+      });
+    }
+  });
+  return out.sort((x, y) => (x.sentAtMs ?? 0) - (y.sentAtMs ?? 0));
 }
 
 /** 수행 상태 → 화면 단계 이름. ASSIGNED·UNASSIGNED 는 배차 쪽 배정과 겹쳐 뺀다. */

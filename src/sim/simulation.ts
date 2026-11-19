@@ -17,7 +17,7 @@ import { OrderLookup } from './orderLookup';
 import { straightRoutes, type RouteProvider } from './route';
 import type { DeliveryCard, DropLocationView, IncidentCounts, MetricsSummary, NoteRecord, PhaseSegment, ScenarioKnobs, World } from './world';
 import { mockLocator } from './geocode';
-import { assemble, dispatchSteps, executionSteps, type DeliveryTimeline } from './timeline';
+import { assemble, dispatchSteps, executionSteps, offerRows, type DeliveryTimeline } from './timeline';
 
 const SUBSTEP = 0.25;
 const RING = 300;
@@ -166,7 +166,7 @@ export class Simulation implements World {
       ['COMPLETED', 'FAILED', 'CANCELLED', 'RETURNED_TO_STORE'].includes(del.x.state) ||
       del.d.state === 'DISPATCH_FAILED' ||
       del.d.state === 'CANCELLED_BEFORE_PICKUP';
-    return assemble({ deliveryId, orderId: del.orderId, ...this.backend.displayNumbers(del), purpose: del.purpose, basis: 'sim', gaps: [] }, steps, terminal);
+    return { ...assemble({ deliveryId, orderId: del.orderId, ...this.backend.displayNumbers(del), purpose: del.purpose, basis: 'sim', gaps: [] }, steps, terminal), offers: offerRows(src.dispatch) };
   }
 
   diagnostics(): string[] {
