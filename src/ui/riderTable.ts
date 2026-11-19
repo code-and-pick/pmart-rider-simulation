@@ -114,10 +114,12 @@ export function riderIndex(control: readonly ControlRider[] | null, riders: read
   return m;
 }
 
-export type RiderTableFilter = 'all' | 'delivering' | 'stale' | 'sim' | 'app';
+/** waiting = 대기(맡은 배송 없음 · 위치 끊김 아님 — 백오피스 라이더 관제 숫자 카드와 같은 기준) */
+export type RiderTableFilter = 'all' | 'delivering' | 'waiting' | 'stale' | 'sim' | 'app';
 
 export function rowMatchesRider(r: RiderRow, f: RiderTableFilter): boolean {
   if (f === 'delivering') return r.deliveries.length > 0;
+  if (f === 'waiting') return r.deliveries.length === 0 && r.loc === 'ok';
   if (f === 'stale') return r.loc !== 'ok';
   if (f === 'sim') return r.sim;
   if (f === 'app') return r.external;

@@ -36,4 +36,17 @@ describe('라이더 관제 표', () => {
     const stale = rowsFromRiders([{ ...base, locationOffline: true, locationAgeSec: 200 }], isSimRiderId);
     expect(stale[0]!.loc).toBe('stale');
   });
+
+  it('대기 = 맡은 배송 없음 · 위치 끊김 아님(숫자 카드 "대기"를 누르면 이것만)', () => {
+    const base = { id: 'RD-sim-01', label: 'sim-01', phase: 'IDLE', pos: { lat: 35.15, lng: 129.06 }, heading: 0, target: null, path: null, pathKind: null, deliveryId: null, note: '' } as const;
+    const [idle, busy, stale] = rowsFromRiders(
+      [
+        { ...base, id: 'RD-sim-01' },
+        { ...base, id: 'RD-sim-02', deliveryId: 'DL-1', phase: 'TO_STORE' },
+        { ...base, id: 'RD-sim-03', locationOffline: true },
+      ],
+      isSimRiderId,
+    );
+    expect([idle, busy, stale].map((r) => rowMatchesRider(r!, 'waiting'))).toEqual([true, false, false]);
+  });
 });

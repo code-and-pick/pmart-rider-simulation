@@ -110,7 +110,7 @@ export function RiderKpis() {
   const board = sim.controlBoard?.() ?? null;
   const f = app.riderFilter;
   const card = (key: RiderTableFilter | null, label: string, n: number, dot: string, hint?: string) => (
-    <button className={`rb-kpi ${key && f === key ? 'on' : ''} ${dot === 'red' && n > 0 ? 'alert' : ''}`} onClick={() => key && app.setRiderFilter(key)} disabled={!key}>
+    <button className={`rb-kpi ${key && f === key ? 'on' : ''} ${dot === 'red' && n > 0 ? 'alert' : ''}`} onClick={() => key && app.setRiderFilter(f === key && key !== 'all' ? 'all' : key)} disabled={!key}>
       <span className="rb-kpi-l">
         {dot && <i className={`rb-dot ${dot}`} />}
         {label}
@@ -123,15 +123,26 @@ export function RiderKpis() {
     <div className="rb-kpis">
       {card('all', '운행 중', rows.length, '', board ? `${seoulTime(Date.parse(board.asOf))} 기준` : sim.mode === 'mock' ? '가상(MOCK)' : '시뮬레이터 라이더만')}
       {card('delivering', '배송 중', rows.filter(isDelivering).length, 'blue')}
-      {card(null, '대기', rows.filter((r) => !isDelivering(r) && !isStale(r)).length, 'green')}
+      {card('waiting', '대기', rows.filter((r) => rowMatchesRider(r, 'waiting')).length, 'green')}
       {card('stale', '위치 끊김·없음', rows.filter(isStale).length, 'red')}
     </div>
   );
 }
 
+/** 거른 목록이 비었을 때 */
+const EMPTY: Record<RiderTableFilter, string> = {
+  all: '운행 중인 라이더가 없어요.',
+  delivering: '배송 중인 라이더가 없어요.',
+  waiting: '대기 중인 라이더가 없어요.',
+  stale: '위치가 끊긴 라이더가 없어요.',
+  sim: '시뮬레이터 라이더가 없어요.',
+  app: '라이더 앱 라이더가 없어요.',
+};
+
 const LIST_FILTERS: readonly (readonly [RiderTableFilter, string])[] = [
   ['all', '전체'],
   ['delivering', '배송 중'],
+  ['waiting', '대기'],
   ['stale', '위치 끊김·없음'],
   ['sim', '시뮬 라이더만'],
 ];
@@ -196,7 +207,7 @@ export function RiderList() {
             </li>
           );
         })}
-        {shown.length === 0 && <li className="rb-empty">{rows.length ? '조건에 맞는 라이더가 없어요.' : '운행 중인 라이더가 없어요.'}</li>}
+        {shown.length === 0 && <li className="rb-empty">{rows.length ? EMPTY[app.riderFilter] : '운행 중인 라이더가 없어요.'}</li>}
       </ul>
       <p className="rb-list-foot">{sim.mode === 'http' ? (sim.controlBoard?.() ? '10초마다 새로 불러와요' : '이 기기에서는 시뮬레이터 라이더만(라이더 앱 위치는 개발 서버 PC 에서만)') : '가상(MOCK) 라이더'}</p>
     </section>
