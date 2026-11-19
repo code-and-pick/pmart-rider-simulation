@@ -75,8 +75,9 @@ export function rowsFromRiders(riders: readonly RiderView[], isSim: (id: string)
     vehicle: r.external ? null : 'MOTORCYCLE',
     dispatchOn: null,
     restriction: null,
-    // 서버 끊김 기준(3분 — tracking stale-after)과 같게 [확정: delivery-tracking 0.8.0 설명]
-    loc: !r.pos ? 'none' : r.locationOffline || (r.locationAgeSec ?? 0) > 180 ? 'stale' : 'ok',
+    // 끊김 판단은 라이더 쪽 locationOffline 하나만(숫자 카드·머리·알림과 같은 값 — 2026-11-19 사용자 "상세에는 복구된 라이더도 계속 위치 끊김").
+    // 실서버 조회 라이더는 그 값이 '마지막 위치 3분 넘음'(tracking 끊김 기준), MOCK 은 위치 끊김 장면 중
+    loc: !r.pos ? 'none' : r.locationOffline ? 'stale' : 'ok',
     sinceSec: r.locationAgeSec ?? null,
     onDutySince: null,
     waitingSince: null,

@@ -10,7 +10,7 @@
 
 import { HttpBackend } from '../backend/http/HttpBackend';
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
-import { DEFAULT_PARAMS, isSimRiderId, REAL_RIDER_GATE, simRiderId, type SimParams } from '../config';
+import { CONTRACT, DEFAULT_PARAMS, isSimRiderId, REAL_RIDER_GATE, simRiderId, type SimParams } from '../config';
 import { ApiProblem, type ControlRider, type Delivery, type DomainEventType, type StaffDeliverySummary } from '../domain/contract';
 import { SimClock } from './clock';
 import { VirtualRider } from './rider';
@@ -53,6 +53,10 @@ class RemoteRider implements RiderView {
   readonly phase = 'REMOTE' as const;
   note = '위치 조회 전';
   locationAgeSec: number | null = null;
+  /** 위치 끊김 = 서버가 받은 마지막 위치가 3분(tracking 끊김 기준)보다 오래됨 — 숫자 카드·표·상세가 모두 이 값 하나만 본다 */
+  get locationOffline(): boolean {
+    return this.locationAgeSec !== null && this.locationAgeSec > CONTRACT.locationStaleSec;
+  }
   deliveryId: string | null = null;
   readonly target = null;
   readonly path = null;

@@ -27,4 +27,13 @@ describe('라이더 관제 표', () => {
     expect(rows[0]).toMatchObject({ name: 'sim-02', loc: 'ok', dispatchOn: null, sinceSec: null });
     expect(rows[0]!.deliveries[0]!.stage).toBe('MFC 로 이동');
   });
+
+  it('끊김 판단은 라이더의 locationOffline 하나만 — 숫자 카드와 상세가 어긋나지 않게(복구되면 바로 수신 중)', () => {
+    const base = { id: 'RD-sim-01', label: 'sim-01', phase: 'IDLE', pos: { lat: 35.15, lng: 129.06 }, heading: 0, target: null, path: null, pathKind: null, deliveryId: null, note: '' } as const;
+    // 예전엔 나이(locationAgeSec > 180)도 따로 봐서 숫자 카드(locationOffline)와 달랐다
+    const recovered = rowsFromRiders([{ ...base, locationOffline: false, locationAgeSec: 999 }], isSimRiderId);
+    expect(recovered[0]!.loc).toBe('ok');
+    const stale = rowsFromRiders([{ ...base, locationOffline: true, locationAgeSec: 200 }], isSimRiderId);
+    expect(stale[0]!.loc).toBe('stale');
+  });
 });
