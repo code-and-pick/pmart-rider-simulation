@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useApp } from '../app/App';
 import { dur } from './format';
 import { deliveringStage, rowMatches, STAGE_FILTERS, type OpsFilter, type OpsRow } from './ops';
@@ -24,6 +25,7 @@ export function FlowBar() {
   const b = app.board();
   const m = sim.metrics();
   const f = app.filter;
+  const [ask, setAsk] = useState(false);
   const rows = b.rows;
   const c = b.counts;
   const late = (pred: (r: OpsRow) => boolean) => rows.filter((r) => pred(r) && r.alert).length;
@@ -71,16 +73,45 @@ export function FlowBar() {
         <button className={`fb-issue red ${f === 'failed' ? 'on' : ''} ${failed ? 'hot' : ''}`} onClick={() => pick('failed')} title={`배차 실패 ${c.dispatchFailed} · 전달 실패 ${c.deliveryFailed}`}>
           실패 <b>{failed}</b>
         </button>
-        <button
-          className={`fb-issue ${f === 'failedCalls' ? 'on' : ''}`}
-          onClick={() => {
-            app.setFilter('failedCalls', true);
-            app.setView('logs');
-          }}
-          title={real ? '이 화면이 실서버에 보낸 요청 중 응답 없음·서버 오류(5xx) 누적 — 누르면 기록 화면' : '쓰기 응답이 사라진 횟수(MOCK 장면) — 누르면 기록 화면'}
-        >
-          {real ? '요청 실패' : '응답 끊김'} <b>{m.responseLost}</b>
-        </button>
+        <span className="fb-pop-anchor">
+          <button
+            className={`fb-issue ${f === 'failedCalls' || ask ? 'on' : ''}`}
+            onClick={() => setAsk((v) => !v)}
+            aria-expanded={ask}
+            title={real ? '이 화면이 실서버에 보낸 요청 중 응답 없음·서버 오류(5xx) 누적' : '쓰기 응답이 사라진 횟수(MOCK 장면)'}
+          >
+            {real ? '요청 실패' : '응답 끊김'} <b>{m.responseLost}</b>
+          </button>
+          {/* 이 칸만 다른 화면(기록)으로 가서 당황스럽다 — 먼저 알리고 고르게(사용자 2026-11-19). 브라우저 확인창 대신 화면 안 작은 창 */}
+          {ask && (
+            <div className="fb-pop" role="dialog" aria-label="기록 화면으로 이동">
+              <p>
+                <b>
+                  {real ? '요청 실패' : '응답 끊김'} {m.responseLost}건
+                </b>
+                은 배송이 아니라 서버 요청 기록이에요.
+                <br />
+                <b>기록 화면(API)</b>으로 넘어갑니다.
+              </p>
+              <div className="fb-pop-f">
+                <button className="c-btn-s" onClick={() => setAsk(false)}>
+                  취소
+                </button>
+                <button
+                  className="c-btn-s primary"
+                  autoFocus
+                  onClick={() => {
+                    setAsk(false);
+                    app.setFilter('failedCalls', true);
+                    app.setView('logs');
+                  }}
+                >
+                  기록으로 가기
+                </button>
+              </div>
+            </div>
+          )}
+        </span>
         <button className={`fb-issue ${f === null ? 'on' : ''}`} onClick={() => app.setFilter(null, true)} title="끝난 배송까지 전부">
           전체 <b>{rows.length}</b>
         </button>
