@@ -153,14 +153,11 @@ export function MapDetail() {
       <div className="md-actions" aria-label="조치">
         {c.riderId && (
           <button
-            className={`c-btn-s ${app.follow && app.selected === c.riderId ? 'on' : ''}`}
-            onClick={() => {
-              if (app.selected !== c.riderId) app.select(c.riderId);
-              app.toggleFollow();
-            }}
+            className={`c-btn-s ${app.follow && app.mapRider === c.riderId ? 'on' : ''}`}
+            onClick={() => app.toggleFollow()}
             title="지도가 이 라이더를 계속 따라간다"
           >
-            {app.follow && app.selected === c.riderId ? '따라가는 중' : '라이더 따라가기'}
+            {app.follow && app.mapRider === c.riderId ? '따라가는 중' : '라이더 따라가기'}
           </button>
         )}
         <a className="c-btn-s" href={opsDeliveryUrl(mode, c.deliveryId)} target="_blank" rel="noopener noreferrer" title="라이더 백오피스 배송 상세 — 전달 실패 확정·배차 취소·상태 정정 같은 조치는 거기서">

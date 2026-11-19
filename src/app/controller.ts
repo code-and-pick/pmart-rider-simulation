@@ -206,7 +206,7 @@ export class AppController {
   private lastFollowAt = 0;
 
   toggleFollow() {
-    if (!this.selected) return;
+    if (!this.mapRider) return;
     this.follow = !this.follow;
     this.lastFollowAt = 0;
     this.ticker.emit();
@@ -215,17 +215,30 @@ export class AppController {
   /** 오른쪽에서 고른 배송 — 지도에서 고객 핀을 강조하고 MFC·고객·라이더가 다 보이게 맞춘다 */
   selectedDelivery: string | null = null;
 
+  /**
+   * 고른 배송의 라이더 — 지도 강조·따라가기만(목록은 거르지 않음).
+   * 예전엔 배송을 누르면 selected(라이더 고르기)까지 바꿔 목록이 그 라이더 배송만 남았다(사용자 2026-11-19 "자꾸 그 기사만 보게 바꿔").
+   */
+  private deliveryRider: string | null = null;
+
+  /** 지도에서 강조·따라가는 라이더 = 고른 배송의 라이더, 없으면 고른 라이더 */
+  get mapRider(): string | null {
+    return (this.selectedDelivery && this.deliveryRider) || this.selected;
+  }
+
   /** keep = 이미 고른 배송이어도 풀지 않는다(다른 화면에서 "지도에서 보기") */
   selectDelivery(deliveryId: string | null, keep = false) {
     if (!deliveryId || (!keep && this.selectedDelivery === deliveryId)) {
+      if (this.deliveryRider && this.deliveryRider !== this.selected) this.follow = false;
       this.selectedDelivery = null;
+      this.deliveryRider = null;
       this.ticker.emit();
       return;
     }
     this.selectedDelivery = deliveryId;
     const card = this.sim.deliveryCards().find((c) => c.deliveryId === deliveryId);
-    // 배정 라이더가 있으면 그 라이더로 거른다(오른쪽 탭·지도 강조) — 따라가기는 끈다
-    if (card?.riderId && this.sim.riders.some((r) => r.id === card.riderId)) this.selected = card.riderId;
+    // 배정 라이더는 지도 강조만 — 목록 거르기(selected)는 사용자가 라이더를 직접 고를 때만. 따라가기는 끈다
+    this.deliveryRider = card?.riderId && this.sim.riders.some((r) => r.id === card.riderId) ? card.riderId : null;
     this.follow = false;
     // 지도는 기사에게(사용자 2026-11-18 "지도 위치가 기사에게 맞춰지게") — 상세 카드가 오른쪽에 뜨므로 기사를 그만큼 왼쪽에.
     // 기사가 아직 없거나 위치를 모르면 픽업지(회수·다시 배송) 또는 MFC
@@ -337,12 +350,12 @@ export class AppController {
         heading: r.heading,
         color: PHASE_COLOR[r.phase],
         label: r.label ?? r.id.replace(/^RD-/, ''),
-        selected: r.id === this.selected,
+        selected: r.id === this.mapRider || r.id === this.selected,
         title: `${r.external ? '라이더 앱 ' : ''}${r.id} · ${PHASE_LABEL[r.phase]}${r.deliveryId ? ` · ${r.deliveryId}` : ''}${r.locationOffline ? ' · 위치 전송 끊김(백엔드가 위치를 못 받는 중)' : ''}`,
         offline: r.locationOffline,
       });
       // 따라가기 — 매 프레임 옮기면 지도가 흔들려서 약 1초마다
-      if (this.follow && r.id === this.selected && performance.now() - this.lastFollowAt > 1000) {
+      if (this.follow && r.id === this.mapRider && performance.now() - this.lastFollowAt > 1000) {
         this.lastFollowAt = performance.now();
         // 상세 카드가 떠 있으면 카드에 안 가리게 왼쪽으로 — 배율은 사용자가 정한 그대로(당기지 않음)
         if (this.selectedDelivery) s.focusOn(r.pos, this.detailOffsetPx(), false);
