@@ -1,7 +1,7 @@
 // 라이더 관제 표 — 백오피스 라이더 관제와 같은 칸.
 import { describe, expect, it } from 'vitest';
 import { isSimRiderId } from '../src/config';
-import { locStatus, rowMatchesRider, rowsFromControl, rowsFromRiders } from '../src/ui/riderTable';
+import { isAlarmOffline, isResting, locStatus, rowMatchesRider, rowsFromControl, rowsFromRiders } from '../src/ui/riderTable';
 
 describe('라이더 관제 표', () => {
   it('관제 응답 → 화면 번호 이름·위치 상태·진행 중 배송 단계', () => {
@@ -21,6 +21,27 @@ describe('라이더 관제 표', () => {
     // 신규배차를 켠 라이더는 위치가 없으면 끊김
     expect(locStatus({ ...rows[1]!, dispatchOn: true })).toBe('none');
     expect(rows.filter((r) => rowMatchesRider(r, 'delivering'))).toHaveLength(1);
+  });
+
+  it('서버가 준 locationShared(tracking 0.12.0)를 먼저 따른다', () => {
+    const [off, on] = rowsFromControl(
+      [
+        // 신규배차 켬인데 서버가 공유 안 함 → 쉬는 중(서버 판단이 정본)
+        { riderId: 'RD-a', newDispatchEnabled: true, locationShared: false, stale: false, location: null, activeDeliveries: [] },
+        // 배송·신규배차 정보가 없어도 서버가 공유 중이라 하면 위치 상태 그대로(끊김)
+        { riderId: 'RD-b', locationShared: true, stale: true, location: { lat: 1, lng: 2 }, activeDeliveries: [] },
+      ],
+      isSimRiderId,
+    );
+    expect(off!.shared).toBe(false);
+    expect(locStatus(off!)).toBe('rest');
+    expect(locStatus(on!)).toBe('stale');
+    expect(isResting({ deliveryId: null, dispatchOn: true, locationShared: false })).toBe(true);
+    expect(isResting({ deliveryId: null, dispatchOn: false, locationShared: true })).toBe(false);
+    expect(isAlarmOffline({ locationOffline: true, deliveryId: null, dispatchOn: true, locationShared: false })).toBe(false);
+    // 값이 없으면 예전 규칙(배송 없음 + 신규배차 켠 게 아님 = 쉬는 중)
+    expect(isResting({ deliveryId: null, dispatchOn: null })).toBe(true);
+    expect(isResting({ deliveryId: 'DLV-1', dispatchOn: false })).toBe(false);
   });
 
   it('관제 응답이 없으면 화면 라이더로(모르는 칸은 null)', () => {

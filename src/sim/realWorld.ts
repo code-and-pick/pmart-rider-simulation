@@ -86,6 +86,8 @@ class AppRider implements RiderView {
   vehicle: string | null = null;
   /** 신규배차 켬(관제 응답 newDispatchEnabled) */
   dispatchOn: boolean | null = null;
+  /** 위치 공유 중(관제 응답 locationShared, 0.12.0) — 모르면 null */
+  locationShared: boolean | null = null;
   note = '';
   label: string;
   deliveryId: string | null = null;
@@ -570,6 +572,7 @@ export class RealWorld implements World {
         r.deliveryId = d?.deliveryId ?? null;
         r.vehicle = c.vehicleType ?? null;
         r.dispatchOn = c.newDispatchEnabled ?? null;
+        r.locationShared = c.locationShared ?? null;
         r.locationOffline = !!c.stale;
         r.locationAgeSec = c.staleSinceSeconds ?? null;
         r.phase = d ? (STAGE_PHASE[d.stage ?? ''] ?? (d.pickedUp ? 'TO_CUSTOMER' : 'TO_STORE')) : 'IDLE';
@@ -577,7 +580,7 @@ export class RealWorld implements World {
         r.note = [
           '라이더 앱',
           d ? `${STAGE_LABEL[d.stage ?? ''] ?? '진행 중'}` : '배송 없음',
-          p ? `위치 ${age ?? '?'}초 전${c.stale ? ' — 끊김' : ''}` : '위치 아직 없음',
+          c.locationShared === false ? '쉬는 중 · 위치 공유 안 함' : p ? `위치 ${age ?? '?'}초 전${c.stale ? ' — 끊김' : ''}` : '위치 아직 없음',
         ].join(' · ');
       }
       for (const id of [...this.appRiders.keys()]) if (!seen.has(id)) this.appRiders.delete(id); // 운행 끈 라이더는 목록에서 빠진다

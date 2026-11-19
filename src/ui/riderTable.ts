@@ -17,6 +17,8 @@ export interface RiderRow {
   vehicle: string | null;
   /** 신규 배차 받음 — 모르면 null */
   dispatchOn: boolean | null;
+  /** 위치 공유 중(관제 응답 locationShared, tracking 0.12.0) — 모르면 null(배송·신규배차로 판단) */
+  shared?: boolean | null;
   restriction: string | null;
   loc: LocState;
   /** 마지막 수신 뒤 초 — 모르면 null */
@@ -66,6 +68,7 @@ export function rowsFromControl(items: readonly ControlRider[], isSim: (id: stri
     sim: isSim(c.riderId),
     vehicle: c.vehicleType ?? null,
     dispatchOn: c.newDispatchEnabled ?? null,
+    shared: c.locationShared ?? null,
     restriction: c.restriction && c.restriction !== 'NORMAL' ? c.restriction : null,
     loc: !c.location ? 'none' : c.stale ? 'stale' : 'ok',
     sinceSec: c.staleSinceSeconds ?? null,
@@ -91,6 +94,7 @@ export function rowsFromRiders(riders: readonly RiderView[], isSim: (id: string)
     sim: isSim(r.id),
     vehicle: r.vehicle ?? (r.external ? null : 'MOTORCYCLE'),
     dispatchOn: r.dispatchOn ?? null,
+    shared: r.locationShared ?? null,
     restriction: null,
     // 끊김 판단은 라이더 쪽 locationOffline 하나만(숫자 카드·머리·알림과 같은 값 — 2026-11-19 사용자 "상세에는 복구된 라이더도 계속 위치 끊김").
     // 실서버 조회 라이더는 그 값이 '마지막 위치 3분 넘음'(tracking 끊김 기준), MOCK 은 위치 끊김 장면 중
@@ -122,19 +126,23 @@ export function riderIndex(control: readonly ControlRider[] | null, riders: read
 export type LocStatus = 'ok' | 'stale' | 'none' | 'rest';
 
 export function locStatus(r: RiderRow): LocStatus {
-  // 위치 공유 = 맡은 배송이 있음 또는 신규배차 켬(백엔드 tracking 0.12.0 규칙, PR #237 — PC 5 백엔드 알림 2026-11-19). 그 밖은 쉬는 중
+  // 서버가 정한 값(tracking 0.12.0 locationShared, 백엔드 4c8748fd)이 있으면 그대로.
+  // 없으면(옛 서버·MOCK) 같은 규칙으로 판단 — 위치 공유 = 맡은 배송이 있음 또는 신규배차 켬
+  if (r.shared === false) return 'rest';
+  if (r.shared === true) return r.loc;
   if (r.deliveries.length === 0 && r.dispatchOn !== true) return 'rest';
   return r.loc;
 }
 
 /** 화면 라이더가 쉬는 중인가(맡은 배송 없음 · 신규배차 켠 게 아님) — 지도에 그리지 않는다 */
-export function isResting(r: { deliveryId: string | null; dispatchOn?: boolean | null }): boolean {
+export function isResting(r: { deliveryId: string | null; dispatchOn?: boolean | null; locationShared?: boolean | null }): boolean {
+  if (typeof r.locationShared === 'boolean') return !r.locationShared;
   return !r.deliveryId && r.dispatchOn !== true;
 }
 
 /** 화면 라이더(RiderView) 기준 같은 판단 — 지도 색·머리 숫자 */
-export function isAlarmOffline(r: { locationOffline?: boolean; deliveryId: string | null; dispatchOn?: boolean | null }): boolean {
-  return !!r.locationOffline && (!!r.deliveryId || r.dispatchOn === true);
+export function isAlarmOffline(r: { locationOffline?: boolean; deliveryId: string | null; dispatchOn?: boolean | null; locationShared?: boolean | null }): boolean {
+  return !!r.locationOffline && !isResting(r);
 }
 
 export type RiderTableFilter = 'all' | 'delivering' | 'waiting' | 'stale' | 'sim' | 'app';

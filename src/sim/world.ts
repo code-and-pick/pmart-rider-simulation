@@ -28,6 +28,8 @@ export interface RiderView {
   readonly vehicle?: string | null;
   /** 신규배차를 켜 두었나(운행 중) — 모르면 없음. 배송 없고 꺼 두었으면 위치가 안 들어와도 "쉬는 중"(문제 아님) */
   readonly dispatchOn?: boolean | null;
+  /** 위치 공유 중인가(관제 응답 locationShared, tracking 0.12.0) — 모르면 없음(그때는 배송·신규배차로 판단) */
+  readonly locationShared?: boolean | null;
   /** 서버가 받은 마지막 위치가 몇 초 전인가(실서버 조회 라이더만 — 모르면 없음) */
   readonly locationAgeSec?: number | null;
   /** 진행 중 주문 요약(주문번호·품목 수·금액·예상 소요) — 없으면 표시 안 함 */
