@@ -13,13 +13,25 @@ describe('시나리오 조절 바', () => {
   it('조절해도 기본 설정(DEFAULT_PARAMS)은 그대로 — 시뮬레이션마다 사본', () => {
     const before = JSON.stringify(DEFAULT_PARAMS);
     const sim = new Simulation({ ...DEFAULT_PARAMS }, { startEpochMs: START });
-    const k = { ordersPerHour: 55, acceptProbability: 0.2, packTimeScale: 3, customerAbsentRate: 0.5, networkDropRate: 0.3, riderCancelRate: 0.4, locationOutageRate: 0.6, misdeliveryRate: 0.7 };
+    const k = { ordersPerHour: 55, acceptProbability: 0.2, packTimeScale: 3, customerAbsentRate: 0.5, networkDropRate: 0.3, riderCancelRate: 0.4, locationOutageRate: 0.6, misdeliveryRate: 0.7, handoverByCodeRate: 0.8 };
     sim.setKnobs(k);
     expect(sim.getKnobs()).toEqual(k);
     expect(JSON.stringify(DEFAULT_PARAMS)).toBe(before);
     sim.setKnobs({ acceptProbability: 7, networkDropRate: -1 }); // 범위 밖은 자름
     expect(sim.getKnobs()).toMatchObject({ acceptProbability: 1, networkDropRate: 0 });
   });
+
+  it('QR 안 찍힘(번호로 인계 100%): 라벨 숫자로 허가해도 배송이 끝까지 간다 — 틀린 번호 뒤 남은 횟수 안내', async () => {
+    const sim = new Simulation({ ...DEFAULT_PARAMS, handoverCodeTypoRate: 1 }, { startEpochMs: START });
+    sim.setKnobs({ ordersPerHour: 20, handoverByCodeRate: 1 });
+    sim.startRiders(3);
+    await sim.runFor(60 * 60);
+    expect(sim.deliveryCards().filter((c) => c.executionState === 'COMPLETED').length).toBeGreaterThan(0);
+    const notes = sim.notes.map((n) => n.text);
+    expect(notes.some((t) => t.includes('번호 틀림(409 HANDOVER_CODE_MISMATCH · 남은 4번)'))).toBe(true);
+    expect(notes.some((t) => /번호 [0-9]{4} 로 인계 허가/.test(t))).toBe(true);
+    expect(notes.some((t) => /배정 반영 \d+초/.test(t))).toBe(true);
+  }, 60_000);
 
   it('주문량 0 이면 새 주문이 생기지 않는다', async () => {
     const sim = new Simulation({ ...DEFAULT_PARAMS }, { startEpochMs: START });

@@ -825,6 +825,8 @@ export interface Package {
   state?: PackageState;
   /** `PKG:<packageId>:<packageVersion>` — 인계 허가 scannedCode */
   qrCode?: string;
+  /** 라벨 숫자(fulfillment 0.13.0 F-8) — 새 포장 4자리(0.23.0), 그 전 6자리. QR 이 안 찍힐 때 라이더가 입력 */
+  handoverCode?: string | null;
   contents?: PackageContentLine[];
   bagCount?: number;
   containsAlcohol?: boolean;
@@ -891,6 +893,17 @@ export interface HandoverAuthorization {
   deliveryId?: string;
   fenceExpiresAt?: string;
   authorizedAt?: string;
+}
+
+/**
+ * POST /packages/handover-code-authorizations 본문(fulfillment 0.13.0 F-8, 0.23.0 R-26) — 라벨 숫자로 QR 과 같은 허가.
+ * 틀리면 409 HANDOVER_CODE_MISMATCH(details attemptsLeft), 같은 라이더·배송 5번 틀리면 409 HANDOVER_CODE_LOCKED.
+ */
+export interface HandoverCodeAuthorizationRequest {
+  riderId: string;
+  deliveryId: string;
+  /** `^([0-9]{4}|[0-9]{6})$` */
+  handoverCode: string;
 }
 
 /** POST /packages/{id}/handover-commits 본문. */

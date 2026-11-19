@@ -252,6 +252,8 @@ export class HttpBackend implements RiderPort {
       listMfcPickupPoints: () => r<PickupPointList>('GET', '/mfc-pickup-points'),
       // mfc-fulfillment 0.4.11 인계
       authorizeHandover: (pkg, body, w) => r<HandoverAuthorization>('POST', `/packages/${enc(pkg)}/handover-authorizations`, { body, write: w }),
+      // fulfillment 0.13.0 F-8 / 0.23.0 R-26 — 라벨 숫자(4·6자리)로 같은 허가
+      authorizeHandoverByCode: (body, w) => r<HandoverAuthorization>('POST', '/packages/handover-code-authorizations', { body, write: w }),
       commitHandover: (pkg, body, w) => r<HandoverCommitResult>('POST', `/packages/${enc(pkg)}/handover-commits`, { body, write: w }),
       getHandoverResolution: (pkg) => r<HandoverResolution>('GET', `/packages/${enc(pkg)}/handover-resolution`),
     };

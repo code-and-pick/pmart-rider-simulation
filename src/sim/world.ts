@@ -92,6 +92,8 @@ export interface ScenarioKnobs {
   riderCancelRate: number;
   /** 고객에게 가는 중 위치 전송이 4분 끊길 확률(0~1) → RiderLocationStale */
   locationOutageRate: number;
+  /** QR 대신 라벨 숫자로 인계할 확률(0~1) — 라이더 앱 "번호로 인계" */
+  handoverByCodeRate: number;
   /** 전달 완료가 나중에 오배송으로 확인될 확률(0~1) → 회수·재발송·다시 배송 */
   misdeliveryRate: number;
 }

@@ -387,7 +387,8 @@ export class RealWorld implements World {
         this.clock,
         // 실서버에는 장면을 일부러 만들지 않는다(조절 바는 MOCK 만): 가짜 전달 실패·배정 취소·위치 끊김 없음.
         // 포장 10분 넘으면 도움요청 STORE_WAITING 은 보낸다(실제 지원센터 사건이 열림 — 사용자 결정 2026-11-16 "진행해")
-        { ...this.params, customerAbsentRate: 0, riderCancelRate: 0, locationOutageRate: 0 },
+        // 번호로 인계(handoverByCodeRate)는 실서버도 — 맞는 번호로 같은 허가를 받는 다른 길. 일부러 틀리는 것(handoverCodeTypoRate)은 하지 않는다.
+        { ...this.params, customerAbsentRate: 0, riderCancelRate: 0, locationOutageRate: 0, handoverCodeTypoRate: 0 },
         home,
         r.pos ?? home,
         {
@@ -414,6 +415,7 @@ export class RealWorld implements World {
       riderCancelRate: 0,
       locationOutageRate: 0,
       misdeliveryRate: 0,
+      handoverByCodeRate: this.params.handoverByCodeRate,
     };
   }
 

@@ -44,6 +44,7 @@ import {
   type FenceState,
   type HandoverAuthorization,
   type HandoverAuthorizationRequest,
+  type HandoverCodeAuthorizationRequest,
   type HandoverCommitRequest,
   type HandoverCommitResult,
   type HandoverResolution,
@@ -128,6 +129,8 @@ interface MPackage {
   version: number;
   state: PackageState;
   qrCode: string;
+  /** 라벨 숫자 4자리(fulfillment 0.23.0) — QR 이 안 찍힐 때 라이더 입력 */
+  handoverCode: string;
   fence: MFence;
   handoverId: string | null;
   handedOverAt: number | null;
@@ -255,6 +258,9 @@ type IdemOutcome = { ok: unknown } | { err: unknown };
 
 const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 const CUSTOMER_REASONS = new Set(['CUSTOMER_ABSENT', 'UNREACHABLE', 'ADDRESS_ERROR', 'REFUSED']);
+
+/** 라벨 숫자 인계 — 같은 라이더·배송이 이만큼 틀리면 잠김(fulfillment 0.23.0 R-26) */
+const MAX_CODE_FAILURES = 5;
 
 function fail(status: number, code: string, title?: string, details?: ReadonlyArray<{ field: string; reason: string }>): never {
   throw new ApiProblem(status, { status, code, title: title ?? code, type: 'about:blank', traceId: 'mock', ...(details ? { details: [...details] } : {}) });
@@ -580,6 +586,7 @@ export class MockBackend implements RiderPort {
         version: 0,
         state: 'OPEN',
         qrCode: `PKG:${packageId}:1`,
+        handoverCode: this.newHandoverCode(),
         fence: { state: 'NONE', authId: null, fenceVersion: 0, riderId: null, deliveryId: null, expiresAt: null, authorizedAt: null },
         handoverId: null,
         handedOverAt: null,
@@ -1255,6 +1262,41 @@ export class MockBackend implements RiderPort {
     return this.authView(pk);
   }
 
+  /** 라이더·배송별 숫자 틀린 횟수(fulfillment 0.23.0 — 5번이면 잠김). */
+  private readonly codeFailures = new Map<string, number>();
+
+  /**
+   * 라벨 숫자로 인계 허가(fulfillment 0.13.0 F-8, 0.23.0 R-26 흉내): 그 배송 출고에서 숫자가 같은 밀봉 포장을 찾아 QR 과 같은 허가로.
+   * 이 센터 출고의 배송이 아니면 409 DELIVERY_MISMATCH, 같은 숫자 밀봉 포장이 없으면 409 HANDOVER_CODE_MISMATCH(details attemptsLeft),
+   * 같은 라이더·배송이 5번 틀리면 409 HANDOVER_CODE_LOCKED(맞는 번호도 거절).
+   */
+  private authorizeByCode(riderId: string, body: HandoverCodeAuthorizationRequest): HandoverAuthorization {
+    if (body.riderId !== riderId) fail(403, 'FORBIDDEN', '토큰 주체와 riderId 가 다름');
+    if (!/^([0-9]{4}|[0-9]{6})$/.test(body.handoverCode)) fail(400, 'VALIDATION_FAILED', undefined, [{ field: 'handoverCode', reason: 'pattern' }]);
+    const key = `${riderId}|${body.deliveryId}`;
+    const failures = this.codeFailures.get(key) ?? 0;
+    if (failures >= MAX_CODE_FAILURES) fail(409, 'HANDOVER_CODE_LOCKED');
+    const ship = [...this.shipments.values()].find((s) => s.deliveryId === body.deliveryId);
+    if (!ship) fail(409, 'DELIVERY_MISMATCH');
+    const pk = ship.packages.find((p) => p.state === 'SEALED' && p.handoverCode === body.handoverCode);
+    if (!pk) {
+      const next = failures + 1;
+      this.codeFailures.set(key, next);
+      fail(409, 'HANDOVER_CODE_MISMATCH', undefined, [{ field: 'attemptsLeft', reason: String(MAX_CODE_FAILURES - next) }]);
+    }
+    return this.authorize(riderId, pk.packageId, { riderId, deliveryId: body.deliveryId, scannedCode: pk.qrCode });
+  }
+
+  /** 센터 안 지금 쓰는(OPEN·SEALED) 포장과 겹치지 않는 4자리(앞자리 0 포함 — 0.23.0). */
+  private newHandoverCode(): string {
+    const used = new Set<string>();
+    for (const s of this.shipments.values()) for (const p of s.packages) if (p.state === 'OPEN' || p.state === 'SEALED') used.add(p.handoverCode);
+    for (;;) {
+      const c = String(this.rng.int(0, 9999)).padStart(4, '0');
+      if (!used.has(c)) return c;
+    }
+  }
+
   private authView(pk: MPackage): HandoverAuthorization {
     return {
       handoverAuthorizationId: pk.fence.authId ?? undefined,
@@ -1514,6 +1556,7 @@ export class MockBackend implements RiderPort {
         version: pk.version,
         state: pk.state,
         qrCode: pk.qrCode,
+        handoverCode: pk.handoverCode,
         bagCount: 1,
         containsAlcohol: false,
         fence: {
@@ -2079,6 +2122,8 @@ export class MockBackend implements RiderPort {
           key: o.idempotencyKey,
           body: { ...body, scannedAt: undefined },
         }, 201),
+      authorizeHandoverByCode: (body: HandoverCodeAuthorizationRequest, o: WriteOptions) =>
+        b.call(me, 'POST', '/packages/handover-code-authorizations', () => b.authorizeByCode(me, body), { key: o.idempotencyKey, body }, 201),
       commitHandover: (packageId: string, body: HandoverCommitRequest, o: WriteOptions) =>
         b.call(me, 'POST', `/packages/${packageId}/handover-commits`, () => b.commit(me, packageId, body, o.idempotencyKey), {
           key: o.idempotencyKey,

@@ -14,6 +14,7 @@ import type {
   FailureRequest,
   HandoverAuthorization,
   HandoverAuthorizationRequest,
+  HandoverCodeAuthorizationRequest,
   HandoverCommitRequest,
   HandoverCommitResult,
   HandoverResolution,
@@ -135,6 +136,8 @@ export interface RiderApi {
 
   // ── mfc-fulfillment 0.4.11 (인계) ──
   authorizeHandover(packageId: string, body: HandoverAuthorizationRequest, opts: WriteOptions): Promise<HandoverAuthorization>;
+  /** 라벨 숫자로 인계 허가(QR 이 안 찍힐 때) — 응답은 QR 허가와 같다(packageId 포함). */
+  authorizeHandoverByCode(body: HandoverCodeAuthorizationRequest, opts: WriteOptions): Promise<HandoverAuthorization>;
   commitHandover(packageId: string, body: HandoverCommitRequest, opts: WriteOptions): Promise<HandoverCommitResult>;
   getHandoverResolution(packageId: string): Promise<HandoverResolution>;
 }

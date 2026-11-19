@@ -161,6 +161,40 @@ describe('MockBackend — 수행·인계(execution 0.5.0·fulfillment 0.4.11 흉
     return { w, a, ...ids };
   }
 
+  // fulfillment 0.13.0 F-8·0.23.0 R-26 — 라벨 숫자로 인계(라이더 앱 "번호로 인계", pmart-clients #268)
+  it('라벨 숫자(4자리)로 QR 과 같은 허가 — 틀리면 남은 횟수, 5번 틀리면 잠김(맞는 번호도 거절)', async () => {
+    const { w, a, deliveryId, shipmentId } = await assigned();
+    await w.advance(1.5);
+    await a.reportStoreArrival(deliveryId, {}, { idempotencyKey: w.key() });
+    await w.advance(3 * 60);
+    const ship = await w.mock.observer.getShipment(shipmentId);
+    const [pk0, pk1] = ship.packages!;
+    expect(pk0!.handoverCode).toMatch(/^[0-9]{4}$/);
+    expect(pk0!.handoverCode).not.toBe(pk1!.handoverCode); // 센터 안 겹치지 않음
+
+    // 맞는 번호 → 그 포장 허가(응답에 packageId) → 확정은 QR 과 같다
+    const auth = await a.authorizeHandoverByCode({ riderId: a.riderId, deliveryId, handoverCode: pk0!.handoverCode! }, { idempotencyKey: w.key() });
+    expect(auth.packageId).toBe(pk0!.packageId);
+    const res = await a.commitHandover(
+      pk0!.packageId!,
+      { handoverAuthorizationId: auth.handoverAuthorizationId!, fenceVersion: auth.fenceVersion!, riderId: a.riderId },
+      { idempotencyKey: w.key() },
+    );
+    expect(res.status).toBe('APPLIED');
+
+    // 틀린 번호: 409 MISMATCH + 남은 횟수 4,3,2,1,0 → 그다음은 맞는 번호도 LOCKED
+    const wrong = pk1!.handoverCode === '0000' ? '0001' : '0000';
+    for (const left of [4, 3, 2, 1, 0]) {
+      const e = await problem(a.authorizeHandoverByCode({ riderId: a.riderId, deliveryId, handoverCode: wrong }, { idempotencyKey: w.key() }));
+      expect([e.status, e.code]).toEqual([409, 'HANDOVER_CODE_MISMATCH']);
+      expect(e.problem.details).toContainEqual({ field: 'attemptsLeft', reason: String(left) });
+    }
+    const locked = await problem(a.authorizeHandoverByCode({ riderId: a.riderId, deliveryId, handoverCode: pk1!.handoverCode! }, { idempotencyKey: w.key() }));
+    expect(locked.code).toBe('HANDOVER_CODE_LOCKED');
+    // 형식이 틀리면 400(횟수 안 셈 — 잠김 검사 전)
+    expect((await problem(a.authorizeHandoverByCode({ riderId: a.riderId, deliveryId, handoverCode: '12' }, { idempotencyKey: w.key() }))).status).toBe(400);
+  });
+
   it('수락 직후 execution 은 아직 배정 전(사건 반영 지연) — 조금 뒤 ASSIGNED', async () => {
     const { w, a, deliveryId } = await assigned();
     expect((await problem(a.getExecution(deliveryId))).status).toBe(404);

@@ -69,6 +69,13 @@ export interface SimParams {
   riderCancelRate: number;
   /** 위치 끊김 확률 [시뮬] — 고객에게 가는 중 이 확률로 locationOutageSec 동안 위치를 못 올림(앱 위치 전송 멈춤). MOCK 조절 바, 실서버는 늘 0 */
   locationOutageRate: number;
+  /**
+   * 번호로 인계 비율 [시뮬] — QR 대신 포장 라벨 숫자로 픽업 허가(fulfillment `POST /packages/handover-code-authorizations`, F-8·R-26).
+   * 라이더 앱 "번호로 인계"(pmart-clients #268)와 같은 길. 실서버도 쓴다(맞는 번호만 — 다른 길로 같은 허가를 받는 것이지 실패를 만드는 게 아니다).
+   */
+  handoverByCodeRate: number;
+  /** 번호로 인계할 때 먼저 틀린 번호를 한 번 넣을 확률 [시뮬] — 409 HANDOVER_CODE_MISMATCH·남은 횟수 확인. MOCK 만, 실서버는 늘 0 */
+  handoverCodeTypoRate: number;
   /** 위치 끊김 길이(초) [시뮬] — 끊김 기준 3분 + 확인 간격 30초보다 길게 */
   locationOutageSec: number;
   /** 가게에서 포장을 이만큼(초) 넘게 기다리면 도움요청 STORE_WAITING 한 번 [시뮬]. null = 안 함. 실서버도 보낸다(실제 지원센터 사건이 열림 — 사용자 결정 2026-11-16) */
@@ -159,6 +166,8 @@ export const DEFAULT_PARAMS: SimParams = {
   customerAbsentRate: 0,
   riderCancelRate: 0,
   locationOutageRate: 0,
+  handoverByCodeRate: 0.3,
+  handoverCodeTypoRate: 0.3,
   locationOutageSec: 240,
   storeWaitHelpSec: 600,
   offerResponseDelaySec: [3, 15],

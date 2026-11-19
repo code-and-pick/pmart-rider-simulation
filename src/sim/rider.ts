@@ -530,7 +530,10 @@ export class VirtualRider {
 
     // execution 에 배정이 보일 때까지(사건 반영 대기)
     this.phase = 'WAIT_ASSIGN_REFLECT';
+    const reflectFrom = this.clock.now;
     let version = await this.waitExecution(deliveryId, (s) => s === 'ASSIGNED', this.params.assignmentReflectWaitSec);
+    // 수락 → execution 배정 반영까지(라이더 앱은 이 사이 GET /deliveries/{id} 가 404 — pmart-clients 라이더 앱 "수락 직후 다시 묻기")
+    if (version !== null) this.say(`배정 반영 ${Math.round(this.clock.now - reflectFrom)}초`);
     if (version === null) {
       this.say('배정이 execution 에 보이지 않음 — 이 배송을 놓고 대기로');
       this.hooks.onTripDone(trip);
@@ -550,7 +553,9 @@ export class VirtualRider {
     this.phase = 'HANDOVER';
     for (const pk of ship.packages ?? []) {
       if (pk.state === 'HANDED_OVER' || !pk.packageId || !pk.qrCode) continue;
-      await this.handover(pk.packageId, pk.qrCode, deliveryId);
+      // QR 이 안 찍히는 상황(조절 바 handoverByCodeRate) — 라벨 숫자로 같은 허가. 숫자가 없는 옛 포장은 QR 로.
+      const byCode = !!pk.handoverCode && this.params.handoverByCodeRate > 0 && this.rng.next() < this.params.handoverByCodeRate;
+      await this.handover(pk.packageId, pk.qrCode, deliveryId, byCode ? pk.handoverCode : null);
     }
 
     // 6. 픽업 확인 — execution 이 PickupCompleted 로 PICKED_UP 이 될 때까지
@@ -650,7 +655,10 @@ export class VirtualRider {
     await this.moveTo(wrong, this.params.riderSpeedMps, true);
 
     this.phase = 'WAIT_ASSIGN_REFLECT';
+    const reflectFrom = this.clock.now;
     let version = await this.waitExecution(deliveryId, (s) => s === 'ASSIGNED', this.params.assignmentReflectWaitSec);
+    // 수락 → execution 배정 반영까지(라이더 앱은 이 사이 GET /deliveries/{id} 가 404 — pmart-clients 라이더 앱 "수락 직후 다시 묻기")
+    if (version !== null) this.say(`배정 반영 ${Math.round(this.clock.now - reflectFrom)}초`);
     if (version === null) {
       this.say('배정이 execution 에 보이지 않음 — 이 배송을 놓고 대기로');
       this.hooks.onTripDone(trip);
@@ -798,12 +806,37 @@ export class VirtualRider {
     }
   }
 
-  /** 포장 하나: QR 허가 → 확정. 확정 결과를 모르면 판정 조회로 해소. fence 만료면 다시 찍는다. */
-  private async handover(packageId: string, qrCode: string, deliveryId: string) {
+  /**
+   * 라벨 숫자로 인계 허가(fulfillment F-8·R-26) — 라이더 앱 "번호로 인계"와 같은 길.
+   * handoverCodeTypoRate 이면 먼저 틀린 번호를 한 번 넣어 409 HANDOVER_CODE_MISMATCH·남은 횟수를 본다(MOCK 만 — 실서버는 0).
+   * 숫자마다 새 멱등 키(라이더 앱과 같게 — 같은 키·다른 본문은 409 IDEMPOTENCY_CONFLICT).
+   */
+  private async authorizeByCode(code: string, deliveryId: string) {
+    if (this.params.handoverCodeTypoRate > 0 && this.rng.next() < this.params.handoverCodeTypoRate) {
+      const wrong = String((Number(code) + 1) % 10 ** code.length).padStart(code.length, '0');
+      try {
+        await this.write(this.opts('ho-code'), (o) => this.api.authorizeHandoverByCode({ riderId: this.id, deliveryId, handoverCode: wrong }, o));
+        this.say(`틀린 번호 ${wrong} 가 통과됨 — 서버 확인 필요`);
+      } catch (e) {
+        if (!(e instanceof ApiProblem)) throw e;
+        const left = e.problem.details?.find((d) => d.field === 'attemptsLeft')?.reason;
+        this.say(`번호 틀림(${e.status} ${e.code ?? ''}${left !== undefined ? ` · 남은 ${left}번` : ''}) — 다시 입력`);
+        if (e.code === 'HANDOVER_CODE_LOCKED') throw e;
+      }
+    }
+    const auth = await this.write(this.opts('ho-code'), (o) => this.api.authorizeHandoverByCode({ riderId: this.id, deliveryId, handoverCode: code }, o));
+    this.say(`번호 ${code} 로 인계 허가 ${auth.packageId ?? ''}`);
+    return auth;
+  }
+
+  /** 포장 하나: QR(또는 라벨 숫자) 허가 → 확정. 확정 결과를 모르면 판정 조회로 해소. fence 만료면 다시 찍는다. */
+  private async handover(packageId: string, qrCode: string, deliveryId: string, handoverCode: string | null = null) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const authBody = { riderId: this.id, deliveryId, scannedCode: qrCode, scannedAt: this.clock.iso() }; // 한 번만 — 재전송 때 같은 본문
-      const auth = await this.write(this.opts('ho-auth'), (o) => this.api.authorizeHandover(packageId, authBody, o));
-      this.say(`QR 인계 ${packageId}`);
+      const auth = handoverCode
+        ? await this.authorizeByCode(handoverCode, deliveryId)
+        : await this.write(this.opts('ho-auth'), (o) => this.api.authorizeHandover(packageId, authBody, o));
+      if (!handoverCode) this.say(`QR 인계 ${packageId}`);
       await this.wait(3); // 포장을 받아 드는 시간 [시뮬]
       try {
         const res = await this.write(this.opts('ho-commit'), (o) =>
