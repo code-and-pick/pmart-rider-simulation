@@ -24,6 +24,8 @@ export interface RiderView {
   readonly pathKind: 'ROAD' | 'STRAIGHT' | null;
   /** 위치 끊김 장면 중(MOCK) — 지도 표시가 실제 위치보다 늦다는 뜻은 아니고, 백엔드가 이 라이더 위치를 못 받는 중 */
   readonly locationOffline?: boolean;
+  /** 등록한 운송수단(지도 그림 — 오토바이·자전거·전기자전거·킥보드·자동차·도보). 모르면 없음 */
+  readonly vehicle?: string | null;
   /** 서버가 받은 마지막 위치가 몇 초 전인가(실서버 조회 라이더만 — 모르면 없음) */
   readonly locationAgeSec?: number | null;
   /** 진행 중 주문 요약(주문번호·품목 수·금액·예상 소요) — 없으면 표시 안 함 */

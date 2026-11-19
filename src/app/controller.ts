@@ -375,6 +375,8 @@ export class AppController {
       for (const r of this.sim.riders) if (r.id === focusRider && r.deliveryId) focusDeliveries.add(r.deliveryId);
       if (this.selectedDelivery) focusDeliveries.add(this.selectedDelivery);
     }
+    // 같은 자리(화면에서 가까이)에 겹친 라이더는 둥글게 벌려 그린다 — 눌러 고르기 쉽게(사용자 2026-11-19 "같은 장소에 겹쳐 있으니까 클릭이 애매")
+    const offsets = spreadOffsets(this.sim.riders.flatMap((r) => (r.pos ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])));
     for (const r of this.sim.riders) {
       if (!r.pos) {
         s.removeRider(r.id);
@@ -389,6 +391,8 @@ export class AppController {
         selected: r.id === this.mapRider || r.id === this.selected,
         title: `${r.external ? '라이더 앱 ' : ''}${r.id} · ${PHASE_LABEL[r.phase]}${r.deliveryId ? ` · ${r.deliveryId}` : ''}${r.locationOffline ? ' · 위치 전송 끊김(백엔드가 위치를 못 받는 중)' : ''}`,
         offline: r.locationOffline,
+        vehicle: r.vehicle ?? null,
+        offset: offsets.get(r.id) ?? null,
       });
       // 따라가기 — 매 프레임 옮기면 지도가 흔들려서 약 1초마다
       if (this.follow && r.id === this.mapRider && performance.now() - this.lastFollowAt > 1000) {
@@ -430,6 +434,38 @@ export class AppController {
     }
     s.frame();
   }
+}
+
+/**
+ * 겹친 라이더 벌리기 — 화면 좌표가 SPREAD_NEAR_PX 안인 라이더를 한 무리로 묶어(먼저 온 라이더 기준) 무리 가운데 둘레에 고르게 놓는다.
+ * 돌려주는 값 = 그 라이더를 화면에서 옮길 만큼(px). 혼자면 없음. [시뮬] 거리·반지름
+ */
+const SPREAD_NEAR_PX = 40;
+
+export function spreadOffsets(items: readonly { id: string; p: { x: number; y: number } | null }[]): Map<string, { x: number; y: number }> {
+  const pts = items.flatMap((it) => (it.p ? [{ id: it.id, x: it.p.x, y: it.p.y }] : []));
+  // 가까운 것끼리 이어진 무리(이웃의 이웃도 같은 무리) — 경계에 걸친 라이더가 다른 무리와 또 겹치지 않게
+  const parent = pts.map((_, i) => i);
+  const root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i]!)));
+  for (let i = 0; i < pts.length; i++)
+    for (let j = i + 1; j < pts.length; j++) if (Math.hypot(pts[i]!.x - pts[j]!.x, pts[i]!.y - pts[j]!.y) < SPREAD_NEAR_PX) parent[root(i)] = root(j);
+  const groups = new Map<number, typeof pts>();
+  pts.forEach((p, i) => groups.set(root(i), [...(groups.get(root(i)) ?? []), p]));
+  const out = new Map<string, { x: number; y: number }>();
+  for (const members of groups.values()) {
+    const n = members.length;
+    if (n < 2) continue;
+    const cx = members.reduce((s, m) => s + m.x, 0) / n;
+    const cy = members.reduce((s, m) => s + m.y, 0) / n;
+    // 그림 폭 약 44px + 이름표 — 이웃끼리 안 겹치게 사람 수만큼 키운다
+    const radius = Math.max(36, 11 * n);
+    // 같은 무리 안 순서는 ID 순 — 매 프레임 자리가 바뀌지 않게
+    [...members].sort((p, q) => p.id.localeCompare(q.id)).forEach((m, i) => {
+      const ang = (i / n) * Math.PI * 2 - Math.PI / 2;
+      out.set(m.id, { x: cx + radius * Math.cos(ang) - m.x, y: cy + radius * Math.sin(ang) - m.y });
+    });
+  }
+  return out;
 }
 
 /** 라이더 관제 지도 색 — 백오피스 라이더 관제와 같은 뜻(끊김·배송 중·대기) */

@@ -76,6 +76,10 @@ export class PlaneSurface implements MapSurface {
     };
   }
 
+  screenPoint(pos: LatLng): { x: number; y: number } | null {
+    return this.toPx(pos);
+  }
+
   private toPx(p: LatLng): { x: number; y: number } {
     const m = this.toM(p);
     const w = this.container.clientWidth;
@@ -95,7 +99,7 @@ export class PlaneSurface implements MapSurface {
   upsertRider(id: string, s: RiderMarkerState): void {
     let r = this.riders.get(id);
     if (!r) {
-      const el = createRiderEl();
+      const el = createRiderEl(s.vehicle);
       el.classList.add('plane-anchor', 'anchor-rider');
       el.addEventListener('click', () => this.onRiderClick(id));
       this.layer.appendChild(el);
@@ -104,7 +108,7 @@ export class PlaneSurface implements MapSurface {
     }
     r.pos = s.pos;
     r.el.style.zIndex = s.selected ? '20' : '10';
-    updateRiderEl(r.el, s.color, s.label, s.heading, s.selected, s.title, s.offline);
+    updateRiderEl(r.el, s.color, s.label, s.heading, s.selected, s.title, s.offline, s.vehicle, s.offset);
   }
 
   removeRider(id: string): void {

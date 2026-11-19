@@ -241,6 +241,9 @@ export const OPS_BACKOFFICE = {
 /**
  * MOCK 주문 창 "주문" 탭의 가상 주문(실서버 order-service 직원용 주문 상세 흉내, 2026-11-19) — 금액·배송지·요청사항 모두 가짜.
  */
+/** MOCK 가상 라이더 운송수단 — 라이더 번호 순서로 돌아가며(지도 그림이 여러 가지로 보이게) [시뮬]. 이동 속도는 수단과 상관없이 같다 */
+export const MOCK_RIDER_VEHICLES = ['MOTORCYCLE', 'BICYCLE', 'E_BIKE', 'KICKBOARD', 'CAR', 'WALK'] as const;
+
 export const MOCK_ORDER = {
   /** 기본 배달팁(원) [시뮬] */
   deliveryTipWon: 3000,

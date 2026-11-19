@@ -49,6 +49,8 @@ interface Row {
 
 class RemoteRider implements RiderView {
   pos: RiderView['pos'] = null;
+  /** 시뮬레이터 라이더는 오토바이로 가입(rider.ts 가입 본문) */
+  readonly vehicle = 'MOTORCYCLE';
   heading = 0;
   readonly phase = 'REMOTE' as const;
   note = '위치 조회 전';
@@ -80,6 +82,8 @@ const STAGE_PHASE: Record<string, RiderPhase> = {
  */
 class AppRider implements RiderView {
   phase: RiderPhase = 'IDLE';
+  /** 등록한 운송수단(관제 응답 vehicleType) */
+  vehicle: string | null = null;
   note = '';
   label: string;
   deliveryId: string | null = null;
@@ -562,6 +566,7 @@ export class RealWorld implements World {
         r.label = [c.nameMasked, c.riderNumber ?? shortRiderId(c.riderId)].filter(Boolean).join(" · ");
         const d = c.activeDeliveries?.[0];
         r.deliveryId = d?.deliveryId ?? null;
+        r.vehicle = c.vehicleType ?? null;
         r.locationOffline = !!c.stale;
         r.locationAgeSec = c.staleSinceSeconds ?? null;
         r.phase = d ? (STAGE_PHASE[d.stage ?? ''] ?? (d.pickedUp ? 'TO_CUSTOMER' : 'TO_STORE')) : 'IDLE';

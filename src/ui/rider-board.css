@@ -444,33 +444,8 @@
   }
 }
 
-/* 라이더 관제 지도 — 백오피스처럼 라이더·픽업 센터·전달지를 이름표(알약)로. 오토바이 그림·반경 원 없음 */
-.rb-map .mk-rider {
-  width: auto;
-  height: auto;
-}
-.rb-map .mk-rider-shadow,
-.rb-map .mk-rider-ring,
-.rb-map .mk-rider-body {
-  display: none;
-}
-.rb-map .mk-rider-label {
-  position: static;
-  transform: none;
-  display: inline-block;
-  background: var(--rider-color);
-  color: #fff;
-  font: 700 12px/1.2 system-ui, sans-serif;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-}
-.rb-map .mk-selected .mk-rider-label {
-  box-shadow:
-    0 0 0 3px #2563eb,
-    0 1px 4px rgba(0, 0, 0, 0.3);
-}
+/* 라이더 관제 지도 — 백오피스처럼 픽업 센터·전달지를 이름표(알약)로, 반경 원 없음 */
+/* 라이더 그림은 두 화면이 같다(운송수단 그림 + 이름 — 2026-11-19 "통일하자"). 라이더 관제는 MFC·전달지만 이름표 */
 .rb-map .mk-mfc {
   width: auto;
   height: auto;
@@ -802,4 +777,9 @@
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+}
+
+/* 겹쳐서 벌려 그린 라이더 — 이름표를 조금 더 또렷하게 */
+.mk-rider.mk-spread .mk-rider-label {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }

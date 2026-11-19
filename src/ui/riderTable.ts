@@ -89,7 +89,7 @@ export function rowsFromRiders(riders: readonly RiderView[], isSim: (id: string)
     name: r.label ?? shortRiderId(r.id),
     external: !!r.external,
     sim: isSim(r.id),
-    vehicle: r.external ? null : 'MOTORCYCLE',
+    vehicle: r.vehicle ?? (r.external ? null : 'MOTORCYCLE'),
     dispatchOn: null,
     restriction: null,
     // 끊김 판단은 라이더 쪽 locationOffline 하나만(숫자 카드·머리·알림과 같은 값 — 2026-11-19 사용자 "상세에는 복구된 라이더도 계속 위치 끊김").

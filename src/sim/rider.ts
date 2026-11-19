@@ -13,7 +13,7 @@
 
 import type { ObserverApi, RiderApi, WriteOptions } from '../backend/port';
 import { CONTRACT, simRiderPhone, type SimParams } from '../config';
-import { ApiProblem, ResultUnknown, type DeliveryPurpose, type Offer, type Shipment } from '../domain/contract';
+import { ApiProblem, ResultUnknown, type DeliveryPurpose, type Offer, type Shipment, type VehicleType } from '../domain/contract';
 import { bearingDeg, distanceM, moveToward, type LatLng } from '../util/geo';
 import { IdGen, Rng } from '../util/rng';
 import { RiderRestrictedError, STOP_RESTRICTIONS, withAuthRecovery } from './authGuard';
@@ -152,6 +152,8 @@ export interface RiderHooks {
 /** 시뮬 시각 기준 대기·이동 약속을 tick 이 풀어 준다(MFC 시뮬레이터 Agent 와 같은 방식). */
 export class VirtualRider {
   readonly id: string;
+  /** 가입할 때 등록하는 운송수단(지도 그림). 실서버 RD-sim-01·02 는 오토바이로 가입돼 있다 */
+  vehicle: VehicleType = 'MOTORCYCLE';
   pos: LatLng;
   heading = 0;
   phase: RiderPhase = 'PREPARING';
@@ -391,7 +393,7 @@ export class VirtualRider {
           {
             // 시험 전화번호 010-0000-00NN(사용자 2026-11-16, RR-02)
             phone: simRiderPhone(this.index),
-            vehicleType: 'MOTORCYCLE',
+            vehicleType: this.vehicle,
             deliveryAreas: [{ mfcId: this.params.mfcId }],
             consents: [{ consentType: 'TERMS', version: 'sim' }],
           },

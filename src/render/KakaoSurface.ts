@@ -65,7 +65,7 @@ export class KakaoSurface implements MapSurface {
   upsertRider(id: string, s: RiderMarkerState): void {
     let m = this.riders.get(id);
     if (!m) {
-      const el = createRiderEl();
+      const el = createRiderEl(s.vehicle);
       el.addEventListener('click', () => this.onRiderClick(id));
       const ov = new this.k.CustomOverlay({ position: this.ll(s.pos), content: el, xAnchor: 0.5, yAnchor: 0.8, zIndex: 10, map: this.map, clickable: true });
       m = { ov, el, lat: s.pos.lat, lng: s.pos.lng };
@@ -77,7 +77,7 @@ export class KakaoSurface implements MapSurface {
       m.lng = s.pos.lng;
     }
     m.ov.setZIndex(s.selected ? 20 : 10);
-    updateRiderEl(m.el, s.color, s.label, s.heading, s.selected, s.title, s.offline);
+    updateRiderEl(m.el, s.color, s.label, s.heading, s.selected, s.title, s.offline, s.vehicle, s.offset);
   }
 
   removeRider(id: string): void {
@@ -145,6 +145,11 @@ export class KakaoSurface implements MapSurface {
     const b = new this.k.LatLngBounds();
     for (const p of points) b.extend(this.ll(p));
     this.map.setBounds(b, 60, 60, 60, 60);
+  }
+
+  screenPoint(pos: LatLng): { x: number; y: number } | null {
+    const pt = this.map.getProjection().containerPointFromCoords(this.ll(pos));
+    return { x: pt.x, y: pt.y };
   }
 
   focusOn(pos: LatLng, offsetLeftPx: number, zoomIn = true): void {

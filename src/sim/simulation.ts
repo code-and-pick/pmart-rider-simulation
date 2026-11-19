@@ -7,7 +7,7 @@
 
 import { MockBackend, type MDelivery } from '../backend/mock/MockBackend';
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
-import { DEFAULT_PARAMS, simRiderId, type SimParams } from '../config';
+import { DEFAULT_PARAMS, MOCK_RIDER_VEHICLES, simRiderId, type SimParams } from '../config';
 import { ApiProblem } from '../domain/contract';
 import { destination, type LatLng } from '../util/geo';
 import { Rng } from '../util/rng';
@@ -88,6 +88,8 @@ export class Simulation implements World {
         // 다시 배송 전달지(핀 없음)는 MOCK 주소록으로 찾는다 — 실서버에는 이 길이 없다
         { allowSignup: true, routes: this.routes, locator: mockLocator((a) => this.backend.locateAddress(a)) },
       );
+      // MOCK 라이더 운송수단 — 여러 그림이 보이게 돌아가며 [시뮬] (config MOCK_RIDER_VEHICLES)
+      r.vehicle = MOCK_RIDER_VEHICLES[i % MOCK_RIDER_VEHICLES.length] ?? 'MOTORCYCLE';
       this.riders.push(r);
       made.push(r);
       void r.run();
