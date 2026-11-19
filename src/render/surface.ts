@@ -17,6 +17,8 @@ export interface RiderMarkerState {
   vehicle?: string | null;
   /** 같은 자리에 겹친 라이더를 화면에서 비켜 그릴 만큼(px) — 실제 위치는 pos 그대로 */
   offset?: { x: number; y: number } | null;
+  /** 많이 모인 라이더는 묶음("n명")으로만 보이고 낱개는 숨긴다 */
+  hidden?: boolean;
 }
 
 export interface CustomerPinState {
@@ -42,6 +44,11 @@ export interface MapSurface {
    */
   upsertRoute(id: string, points: LatLng[], kind: RouteKind, road: boolean): void;
   removeRoute(id: string): void;
+  /** 라이더 묶음 "n명"(한 자리에 많이 모인 라이더) — 누르면 그 자리로 확대 */
+  upsertCluster(id: string, pos: LatLng, count: number, title: string): void;
+  removeCluster(id: string): void;
+  /** 그 자리를 가운데로 두고 확대 */
+  zoomInAt(pos: LatLng): void;
   panTo(pos: LatLng): void;
   /** 지도 칸 안의 화면 좌표(px) — 겹친 라이더 벌리기에 쓴다. 지도가 아직 없으면 null */
   screenPoint(pos: LatLng): { x: number; y: number } | null;

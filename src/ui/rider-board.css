@@ -984,3 +984,31 @@
     border-right: 0;
   }
 }
+
+/* 라이더 묶음 "n명" — 한 자리에 많이 모인 라이더(벌리지 않고 하나로, 누르면 확대) */
+.mk-cluster {
+  min-width: 44px;
+  height: 44px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1px;
+  line-height: 44px;
+  color: #fff;
+  background: #2563eb;
+  border: 3px solid #fff;
+  box-shadow:
+    0 0 0 4px rgba(37, 99, 235, 0.25),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+  font: 800 16px/44px system-ui, sans-serif;
+  cursor: pointer;
+}
+.mk-cluster span {
+  font-size: 11px;
+  font-weight: 700;
+}
+.mk-cluster:hover {
+  background: #1d4ed8;
+}

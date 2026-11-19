@@ -2,7 +2,7 @@
 // MFC 를 원점으로 한 미터 격자(캔버스) 위에 카카오 화면과 같은 HTML 마커를 올린다. 휠 = 확대, 끌기 = 이동.
 
 import { ROUTE_COLOR } from './colors';
-import { createCustomerEl, createMfcEl, createRiderEl, updateCustomerEl, updateRiderEl } from './markers';
+import { createClusterEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl } from './markers';
 import type { CustomerPinState, MapSurface, RiderMarkerState, RouteKind } from './surface';
 import type { LatLng } from '../util/geo';
 
@@ -22,6 +22,7 @@ export class PlaneSurface implements MapSurface {
   private pxPerM = 0.12;
   private readonly riders = new Map<string, { el: HTMLElement; pos: LatLng }>();
   private readonly customers = new Map<string, { el: HTMLElement; pos: LatLng }>();
+  private readonly clusters = new Map<string, { el: HTMLElement; pos: LatLng }>();
   private readonly routes = new Map<string, { points: LatLng[]; kind: RouteKind; road: boolean }>();
   private readonly cleanup: (() => void)[] = [];
 
@@ -108,7 +109,7 @@ export class PlaneSurface implements MapSurface {
     }
     r.pos = s.pos;
     r.el.style.zIndex = s.selected ? '20' : '10';
-    updateRiderEl(r.el, s.color, s.label, s.heading, s.selected, s.title, s.offline, s.vehicle, s.offset);
+    updateRiderEl(r.el, s.color, s.label, s.heading, s.selected, s.title, s.offline, s.vehicle, s.offset, s.hidden);
   }
 
   removeRider(id: string): void {
@@ -127,6 +128,33 @@ export class PlaneSurface implements MapSurface {
     }
     updateCustomerEl(c.el, s.color, s.label, s.highlight);
     c.el.style.zIndex = s.highlight ? '15' : '5';
+  }
+
+  upsertCluster(id: string, pos: LatLng, count: number, title: string): void {
+    let c = this.clusters.get(id);
+    if (!c) {
+      const el = createClusterEl();
+      el.classList.add('plane-anchor');
+      el.addEventListener('click', () => {
+        const cur = this.clusters.get(id);
+        if (cur) this.zoomInAt(cur.pos);
+      });
+      this.layer.appendChild(el);
+      c = { el, pos };
+      this.clusters.set(id, c);
+    }
+    c.pos = pos;
+    updateClusterEl(c.el, count, title);
+  }
+
+  removeCluster(id: string): void {
+    this.clusters.get(id)?.el.remove();
+    this.clusters.delete(id);
+  }
+
+  zoomInAt(pos: LatLng): void {
+    this.pxPerM = Math.min(this.pxPerM * 2.5, 4);
+    this.panTo(pos);
   }
 
   removeCustomer(id: string): void {
@@ -232,6 +260,7 @@ export class PlaneSurface implements MapSurface {
     place(this.mfcLabelEl, o);
     for (const r of this.riders.values()) place(r.el, this.toPx(r.pos));
     for (const c of this.customers.values()) place(c.el, this.toPx(c.pos));
+    for (const c of this.clusters.values()) place(c.el, this.toPx(c.pos));
   }
 
   destroy(): void {

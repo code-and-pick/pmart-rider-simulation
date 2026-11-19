@@ -103,6 +103,7 @@ export class AppController {
     surface.setMfc(center, this.sim.params.mfcId, CONTRACT.radiusStepsKm);
     this.drawnMfc = { ...center };
     this.drawnMfcLabel = this.sim.params.mfcId;
+    this.drawnClusters = new Set();
     this.surface = surface;
     this.mapEl = container;
     this.ticker.emit();
@@ -194,6 +195,7 @@ export class AppController {
   private stopTicker: (() => void) | null = null;
   private drawnMfc: { lat: number; lng: number } | null = null;
   private drawnMfcLabel = '';
+  private drawnClusters = new Set<string>();
   private lastStep = 0;
 
   select(id: string | null) {
@@ -376,7 +378,26 @@ export class AppController {
       if (this.selectedDelivery) focusDeliveries.add(this.selectedDelivery);
     }
     // 같은 자리(화면에서 가까이)에 겹친 라이더는 둥글게 벌려 그린다 — 눌러 고르기 쉽게(사용자 2026-11-19 "같은 장소에 겹쳐 있으니까 클릭이 애매")
-    const offsets = spreadOffsets(this.sim.riders.flatMap((r) => (r.pos && !isResting(r) ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])));
+    const layout = riderLayout(this.sim.riders.flatMap((r) => (r.pos && !isResting(r) ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])));
+    const offsets = layout.offsets;
+    const hidden = new Set(layout.clusters.flat());
+    // 묶음 "n명" — 고른 라이더가 있으면 그 라이더는 묶음에서 빼고 낱개로 보인다
+    const seenClusters = new Set<string>();
+    for (const ids of layout.clusters) {
+      const members = ids.filter((id) => id !== this.mapRider && id !== this.selected);
+      for (const id of ids) if (!members.includes(id)) hidden.delete(id);
+      const ps = members.map((id) => this.sim.riders.find((x) => x.id === id)?.pos).filter((p): p is LatLng => !!p);
+      if (ps.length < 2) {
+        for (const id of members) hidden.delete(id);
+        continue;
+      }
+      const key = `cl:${members[0]}`;
+      seenClusters.add(key);
+      const center = { lat: ps.reduce((acc, p) => acc + p.lat, 0) / ps.length, lng: ps.reduce((acc, p) => acc + p.lng, 0) / ps.length };
+      s.upsertCluster(key, center, ps.length, `라이더 ${ps.length}명이 이 근처에 모여 있어요 — 누르면 확대`);
+    }
+    for (const key of this.drawnClusters) if (!seenClusters.has(key)) s.removeCluster(key);
+    this.drawnClusters = seenClusters;
     for (const r of this.sim.riders) {
       // 쉬는 라이더(맡은 배송 없음 · 신규배차 꺼짐)는 위치를 공유하지 않는다 — 지도에 그리지 않음(백엔드 tracking 0.12.0 규칙, 2026-11-19)
       if (!r.pos || isResting(r)) {
@@ -395,6 +416,7 @@ export class AppController {
         offline: isAlarmOffline(r),
         vehicle: r.vehicle ?? null,
         offset: offsets.get(r.id) ?? null,
+        hidden: hidden.has(r.id),
       });
       // 따라가기 — 매 프레임 옮기면 지도가 흔들려서 약 1초마다
       if (this.follow && r.id === this.mapRider && performance.now() - this.lastFollowAt > 1000) {
@@ -444,7 +466,17 @@ export class AppController {
  */
 const SPREAD_NEAR_PX = 40;
 
-export function spreadOffsets(items: readonly { id: string; p: { x: number; y: number } | null }[]): Map<string, { x: number; y: number }> {
+/** 이보다 많이 모이면 벌리지 않고 "n명" 묶음 하나로(50명을 벌리면 원이 바다·전국까지 커졌다 — 사용자 2026-11-19) [시뮬] */
+export const SPREAD_MAX = 8;
+
+export interface RiderLayout {
+  /** 화면에서 옮길 만큼(px) — 2~SPREAD_MAX 명 무리 */
+  offsets: Map<string, { x: number; y: number }>;
+  /** SPREAD_MAX 넘는 무리 — 낱개는 숨기고 묶음 하나(ID 순) */
+  clusters: string[][];
+}
+
+export function riderLayout(items: readonly { id: string; p: { x: number; y: number } | null }[]): RiderLayout {
   const pts = items.flatMap((it) => (it.p ? [{ id: it.id, x: it.p.x, y: it.p.y }] : []));
   // 가까운 것끼리 이어진 무리(이웃의 이웃도 같은 무리) — 경계에 걸친 라이더가 다른 무리와 또 겹치지 않게
   const parent = pts.map((_, i) => i);
@@ -453,21 +485,32 @@ export function spreadOffsets(items: readonly { id: string; p: { x: number; y: n
     for (let j = i + 1; j < pts.length; j++) if (Math.hypot(pts[i]!.x - pts[j]!.x, pts[i]!.y - pts[j]!.y) < SPREAD_NEAR_PX) parent[root(i)] = root(j);
   const groups = new Map<number, typeof pts>();
   pts.forEach((p, i) => groups.set(root(i), [...(groups.get(root(i)) ?? []), p]));
-  const out = new Map<string, { x: number; y: number }>();
+  const offsets = new Map<string, { x: number; y: number }>();
+  const clusters: string[][] = [];
   for (const members of groups.values()) {
     const n = members.length;
     if (n < 2) continue;
-    const cx = members.reduce((s, m) => s + m.x, 0) / n;
-    const cy = members.reduce((s, m) => s + m.y, 0) / n;
-    // 그림 폭 약 44px + 이름표 — 이웃끼리 안 겹치게 사람 수만큼 키운다
-    const radius = Math.max(36, 11 * n);
     // 같은 무리 안 순서는 ID 순 — 매 프레임 자리가 바뀌지 않게
-    [...members].sort((p, q) => p.id.localeCompare(q.id)).forEach((m, i) => {
+    const sorted = [...members].sort((p, q) => p.id.localeCompare(q.id));
+    if (n > SPREAD_MAX) {
+      clusters.push(sorted.map((m) => m.id));
+      continue;
+    }
+    const cx = members.reduce((acc, m) => acc + m.x, 0) / n;
+    const cy = members.reduce((acc, m) => acc + m.y, 0) / n;
+    // 그림 폭 약 44px + 이름표 — 이웃끼리 안 겹치게(최대 8명이라 반지름은 88px 까지)
+    const radius = Math.max(36, 11 * n);
+    sorted.forEach((m, i) => {
       const ang = (i / n) * Math.PI * 2 - Math.PI / 2;
-      out.set(m.id, { x: cx + radius * Math.cos(ang) - m.x, y: cy + radius * Math.sin(ang) - m.y });
+      offsets.set(m.id, { x: cx + radius * Math.cos(ang) - m.x, y: cy + radius * Math.sin(ang) - m.y });
     });
   }
-  return out;
+  return { offsets, clusters };
+}
+
+/** 벌릴 만큼만(시험·예전 이름) */
+export function spreadOffsets(items: readonly { id: string; p: { x: number; y: number } | null }[]): Map<string, { x: number; y: number }> {
+  return riderLayout(items).offsets;
 }
 
 /** 라이더 관제 지도 색 — 백오피스 라이더 관제와 같은 뜻(끊김·배송 중·대기) */

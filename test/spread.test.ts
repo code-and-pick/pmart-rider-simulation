@@ -29,3 +29,17 @@ describe('겹친 라이더 벌리기', () => {
     expect(spreadOffsets(items)).toEqual(spreadOffsets([...items].reverse()));
   });
 });
+
+describe('많이 모인 라이더 — 묶음', () => {
+  it('8명까지는 벌리고(반지름 88px 이하), 넘으면 벌리지 않고 묶음 하나', async () => {
+    const { riderLayout, SPREAD_MAX } = await import('../src/app/controller');
+    const at = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${String(i).padStart(2, '0')}`, p: { x: 500 + (i % 3), y: 500 } }));
+    const few = riderLayout(at(SPREAD_MAX));
+    expect(few.clusters).toEqual([]);
+    expect([...few.offsets.values()].every((o) => Math.hypot(o.x, o.y) <= 90)).toBe(true);
+    const many = riderLayout(at(50));
+    expect(many.offsets.size).toBe(0);
+    expect(many.clusters).toHaveLength(1);
+    expect(many.clusters[0]).toHaveLength(50);
+  });
+});

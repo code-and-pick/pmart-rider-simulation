@@ -3,7 +3,7 @@
 
 import { ROUTE_COLOR } from './colors';
 import type { KakaoMaps, KCircle, KCustomOverlay, KMap, KPolyline } from './kakao';
-import { createCustomerEl, createMfcEl, createRiderEl, updateCustomerEl, updateRiderEl } from './markers';
+import { createClusterEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl } from './markers';
 import type { CustomerPinState, MapSurface, RiderMarkerState, RouteKind } from './surface';
 import type { LatLng } from '../util/geo';
 
@@ -22,6 +22,7 @@ export class KakaoSurface implements MapSurface {
   private readonly map: KMap;
   private readonly riders = new Map<string, Marker>();
   private readonly customers = new Map<string, Marker>();
+  private readonly clusters = new Map<string, Marker & { pos: LatLng }>();
   private readonly routes = new Map<string, { line: KPolyline; kind: RouteKind; road: boolean; points: LatLng[] }>();
   private mfc: KCustomOverlay | null = null;
   private circles: KCircle[] = [];
@@ -77,7 +78,7 @@ export class KakaoSurface implements MapSurface {
       m.lng = s.pos.lng;
     }
     m.ov.setZIndex(s.selected ? 20 : 10);
-    updateRiderEl(m.el, s.color, s.label, s.heading, s.selected, s.title, s.offline, s.vehicle, s.offset);
+    updateRiderEl(m.el, s.color, s.label, s.heading, s.selected, s.title, s.offline, s.vehicle, s.offset, s.hidden);
   }
 
   removeRider(id: string): void {
@@ -95,6 +96,37 @@ export class KakaoSurface implements MapSurface {
     }
     updateCustomerEl(m.el, s.color, s.label, s.highlight);
     m.ov.setZIndex(s.highlight ? 15 : 5);
+  }
+
+  upsertCluster(id: string, pos: LatLng, count: number, title: string): void {
+    let m = this.clusters.get(id);
+    if (!m) {
+      const el = createClusterEl();
+      el.addEventListener('click', () => {
+        const cur = this.clusters.get(id);
+        if (cur) this.zoomInAt(cur.pos);
+      });
+      const ov = new this.k.CustomOverlay({ position: this.ll(pos), content: el, xAnchor: 0.5, yAnchor: 0.5, zIndex: 25, map: this.map, clickable: true });
+      m = { ov, el, lat: pos.lat, lng: pos.lng, pos };
+      this.clusters.set(id, m);
+    }
+    if (m.lat !== pos.lat || m.lng !== pos.lng) {
+      m.ov.setPosition(this.ll(pos));
+      m.lat = pos.lat;
+      m.lng = pos.lng;
+      m.pos = pos;
+    }
+    updateClusterEl(m.el, count, title);
+  }
+
+  removeCluster(id: string): void {
+    this.clusters.get(id)?.ov.setMap(null);
+    this.clusters.delete(id);
+  }
+
+  zoomInAt(pos: LatLng): void {
+    this.map.setCenter(this.ll(pos));
+    this.map.setLevel(Math.max(1, this.map.getLevel() - 2));
   }
 
   removeCustomer(id: string): void {
@@ -178,6 +210,7 @@ export class KakaoSurface implements MapSurface {
     this.ro.disconnect();
     for (const id of [...this.riders.keys()]) this.removeRider(id);
     for (const id of [...this.customers.keys()]) this.removeCustomer(id);
+    for (const id of [...this.clusters.keys()]) this.removeCluster(id);
     for (const id of [...this.routes.keys()]) this.removeRoute(id);
     this.mfc?.setMap(null);
     for (const c of this.circles) c.setMap(null);

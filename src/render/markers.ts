@@ -75,7 +75,11 @@ export function updateRiderEl(
   offline = false,
   vehicle?: string | null,
   offset?: { x: number; y: number } | null,
+  hidden = false,
 ): void {
+  // 많이 모인 라이더는 묶음("n명")으로만 — 낱개는 숨긴다(떼지 않음 — 다시 흩어지면 바로 보이게)
+  const disp = hidden ? 'none' : '';
+  if (el.style.display !== disp) el.style.display = disp;
   // 수단이 바뀌면(관제 응답을 읽은 뒤 등) 그림만 바꾼다
   const v = vehicle ?? 'MOTORCYCLE';
   if (el.dataset.vehicle !== v) {
@@ -95,6 +99,20 @@ export function updateRiderEl(
   el.classList.toggle('mk-selected', selected);
   const lab = el.querySelector('.mk-rider-label') as HTMLElement;
   if (lab.textContent !== label) lab.textContent = label;
+}
+
+/** 라이더 묶음(한 자리에 많이 모임) — "n명" 원. 누르면 그 자리로 확대(surface.zoomInAt) */
+export function createClusterEl(): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'mk-cluster';
+  el.innerHTML = '<b></b><span>명</span>';
+  return el;
+}
+
+export function updateClusterEl(el: HTMLElement, count: number, title: string): void {
+  const b = el.querySelector('b') as HTMLElement;
+  if (b.textContent !== String(count)) b.textContent = String(count);
+  if (el.title !== title) el.title = title;
 }
 
 export function createMfcEl(label: string): HTMLElement {
