@@ -100,8 +100,9 @@ function AlertStrip() {
                 className={`c-alert ${a.level}`}
                 onClick={() => {
                   if (a.deliveryId) {
-                    app.setPanelTab('deliveries');
-                    app.selectDelivery(a.deliveryId);
+                    // 라이더 알림(배송 중 위치 끊김)은 보던 라이더 탭에 두고 배송 상세만 연다 — 탭을 옮기면 바로 못 본다(사용자 2026-11-19)
+                    if (a.kind !== 'RIDER_STALE') app.setPanelTab('deliveries');
+                    app.selectDelivery(a.deliveryId, true);
                   } else if (a.riderId) {
                     app.setPanelTab('riders');
                     app.select(a.riderId);
@@ -610,9 +611,16 @@ function RiderItem({ r, row, done }: { r: RiderView; row: OpsRow | undefined; do
           <button className={`c-btn-s ${app.follow ? 'on' : ''}`} aria-pressed={app.follow} onClick={() => app.toggleFollow()}>
             {app.follow ? '따라가는 중' : '지도에서 따라가기'}
           </button>
-          <button className="c-btn-s" onClick={() => app.setPanelTab('deliveries')}>
-            이 라이더 배송 보기
-          </button>
+          {row ? (
+            // 배송 상세(주문 창)를 바로 연다 — 탭은 그대로(사용자 2026-11-19 "바로 옆 배송 칸으로 넘어가는 게 … 별로")
+            <button className={`c-btn-s ${app.selectedDelivery === row.card.deliveryId ? 'on' : ''}`} onClick={() => app.selectDelivery(row.card.deliveryId, true)}>
+              배송 상세 보기
+            </button>
+          ) : (
+            <button className="c-btn-s" onClick={() => app.setPanelTab('deliveries')} title="진행 중 배송이 없음 — 배송 탭에서 이 라이더의 지난 배송">
+              이 라이더 배송 목록
+            </button>
+          )}
         </div>
       )}
     </li>
