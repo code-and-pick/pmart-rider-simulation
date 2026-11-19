@@ -195,6 +195,14 @@ describe('MockBackend — 수행·인계(execution 0.5.0·fulfillment 0.4.11 흉
     expect((await problem(a.authorizeHandoverByCode({ riderId: a.riderId, deliveryId, handoverCode: '12' }, { idempotencyKey: w.key() }))).status).toBe(400);
   });
 
+  it('한 출고 안 포장끼리도 라벨 숫자가 겹치지 않는다', async () => {
+    const w = world();
+    const { shipmentId } = w.mock.createOrder({ pickSec: 1, packMinutes: 1, packages: 300, customer: offsetM(MFC, 500, 0) });
+    const ship = await w.mock.observer.getShipment(shipmentId);
+    const codes = ship.packages!.map((p) => p.handoverCode);
+    expect(new Set(codes).size).toBe(300);
+  });
+
   it('수락 직후 execution 은 아직 배정 전(사건 반영 지연) — 조금 뒤 ASSIGNED', async () => {
     const { w, a, deliveryId } = await assigned();
     expect((await problem(a.getExecution(deliveryId))).status).toBe(404);

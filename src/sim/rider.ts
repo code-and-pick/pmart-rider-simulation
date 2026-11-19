@@ -13,7 +13,7 @@
 
 import type { ObserverApi, RiderApi, WriteOptions } from '../backend/port';
 import { CONTRACT, simRiderPhone, type SimParams } from '../config';
-import { ApiProblem, ResultUnknown, type DeliveryPurpose, type Offer, type Shipment, type VehicleType } from '../domain/contract';
+import { ApiProblem, ResultUnknown, type DeliveryPurpose, type HandoverAuthorization, type Offer, type Shipment, type VehicleType } from '../domain/contract';
 import { bearingDeg, distanceM, moveToward, type LatLng } from '../util/geo';
 import { IdGen, Rng } from '../util/rng';
 import { RiderRestrictedError, STOP_RESTRICTIONS, withAuthRecovery } from './authGuard';
@@ -551,11 +551,17 @@ export class VirtualRider {
     const ship = await this.waitShipmentReady(dispatch.shipmentId, deliveryId);
     trip.readyAt = this.clock.now;
     this.phase = 'HANDOVER';
+    // 틀린 번호는 배송당 한 번만(MOCK) — 서버는 같은 라이더·배송의 틀린 횟수를 합쳐 5번이면 잠근다
+    let typo = this.params.handoverCodeTypoRate > 0 && this.rng.next() < this.params.handoverCodeTypoRate;
+    // 이 출고 포장 번호들 — 일부러 넣는 틀린 번호가 옆 포장 번호와 같으면 그 포장이 허가돼 버린다
+    const shipCodes = new Set((ship.packages ?? []).flatMap((p) => (p.handoverCode ? [p.handoverCode] : [])));
     for (const pk of ship.packages ?? []) {
       if (pk.state === 'HANDED_OVER' || !pk.packageId || !pk.qrCode) continue;
       // QR 이 안 찍히는 상황(조절 바 handoverByCodeRate) — 라벨 숫자로 같은 허가. 숫자가 없는 옛 포장은 QR 로.
       const byCode = !!pk.handoverCode && this.params.handoverByCodeRate > 0 && this.rng.next() < this.params.handoverByCodeRate;
-      await this.handover(pk.packageId, pk.qrCode, deliveryId, byCode ? pk.handoverCode : null);
+      const code = byCode && pk.handoverCode ? { code: pk.handoverCode, typo, taken: shipCodes } : null;
+      if (code?.typo) typo = false;
+      await this.handover(pk.packageId, pk.qrCode, deliveryId, code);
     }
 
     // 6. 픽업 확인 — execution 이 PickupCompleted 로 PICKED_UP 이 될 때까지
@@ -808,41 +814,56 @@ export class VirtualRider {
 
   /**
    * 라벨 숫자로 인계 허가(fulfillment F-8·R-26) — 라이더 앱 "번호로 인계"와 같은 길.
-   * handoverCodeTypoRate 이면 먼저 틀린 번호를 한 번 넣어 409 HANDOVER_CODE_MISMATCH·남은 횟수를 본다(MOCK 만 — 실서버는 0).
+   * typo 면 먼저 틀린 번호를 한 번 넣어 409 HANDOVER_CODE_MISMATCH·남은 횟수를 본다(MOCK 만 — 실서버는 handoverCodeTypoRate 0).
+   * 번호로 허가를 못 받으면(400·409 — 틀림·잠김·같은 번호 둘·다른 배송) null → 부른 쪽이 QR 로 다시 받는다(라이더 앱과 같게).
    * 숫자마다 새 멱등 키(라이더 앱과 같게 — 같은 키·다른 본문은 409 IDEMPOTENCY_CONFLICT).
    */
-  private async authorizeByCode(code: string, deliveryId: string) {
-    if (this.params.handoverCodeTypoRate > 0 && this.rng.next() < this.params.handoverCodeTypoRate) {
-      const wrong = String((Number(code) + 1) % 10 ** code.length).padStart(code.length, '0');
+  private async authorizeByCode(c: HandoverByCode, deliveryId: string): Promise<HandoverAuthorization | null> {
+    const send = (handoverCode: string) =>
+      this.write(this.opts('ho-code'), (o) => this.api.authorizeHandoverByCode({ riderId: this.id, deliveryId, handoverCode }, o));
+    if (c.typo) {
+      const wrong = wrongCode(c.code, c.taken);
       try {
-        await this.write(this.opts('ho-code'), (o) => this.api.authorizeHandoverByCode({ riderId: this.id, deliveryId, handoverCode: wrong }, o));
+        await send(wrong);
         this.say(`틀린 번호 ${wrong} 가 통과됨 — 서버 확인 필요`);
       } catch (e) {
         if (!(e instanceof ApiProblem)) throw e;
         const left = e.problem.details?.find((d) => d.field === 'attemptsLeft')?.reason;
         this.say(`번호 틀림(${e.status} ${e.code ?? ''}${left !== undefined ? ` · 남은 ${left}번` : ''}) — 다시 입력`);
-        if (e.code === 'HANDOVER_CODE_LOCKED') throw e;
       }
     }
-    const auth = await this.write(this.opts('ho-code'), (o) => this.api.authorizeHandoverByCode({ riderId: this.id, deliveryId, handoverCode: code }, o));
-    this.say(`번호 ${code} 로 인계 허가 ${auth.packageId ?? ''}`);
-    return auth;
+    try {
+      const auth = await send(c.code);
+      this.say(`번호 ${c.code} 로 인계 허가 ${auth.packageId ?? ''}`);
+      return auth;
+    } catch (e) {
+      if (!(e instanceof ApiProblem && (e.status === 400 || e.status === 409))) throw e;
+      this.say(`번호 인계 막힘(${e.status} ${e.code ?? ''}) — QR 로 다시`);
+      return null;
+    }
   }
 
   /** 포장 하나: QR(또는 라벨 숫자) 허가 → 확정. 확정 결과를 모르면 판정 조회로 해소. fence 만료면 다시 찍는다. */
-  private async handover(packageId: string, qrCode: string, deliveryId: string, handoverCode: string | null = null) {
+  private async handover(packageId: string, qrCode: string, deliveryId: string, byCode: HandoverByCode | null = null) {
+    let code = byCode;
     for (let attempt = 0; attempt < 3; attempt++) {
       const authBody = { riderId: this.id, deliveryId, scannedCode: qrCode, scannedAt: this.clock.iso() }; // 한 번만 — 재전송 때 같은 본문
-      const auth = handoverCode
-        ? await this.authorizeByCode(handoverCode, deliveryId)
-        : await this.write(this.opts('ho-auth'), (o) => this.api.authorizeHandover(packageId, authBody, o));
-      if (!handoverCode) this.say(`QR 인계 ${packageId}`);
+      let auth = code ? await this.authorizeByCode(code, deliveryId) : null;
+      // 다시 찍을 때 틀린 번호는 또 넣지 않고, 번호가 막혔으면 이 포장은 QR 로
+      if (code) code = auth ? { ...code, typo: false } : null;
+      if (!auth) {
+        auth = await this.write(this.opts('ho-auth'), (o) => this.api.authorizeHandover(packageId, authBody, o));
+        this.say(`QR 인계 ${packageId}`);
+      }
+      // 확정·판정 조회는 응답의 packageId 로(계약 — 번호 허가는 서버가 포장을 고른다)
+      const pkgId = auth.packageId ?? packageId;
+      const fence = auth;
       await this.wait(3); // 포장을 받아 드는 시간 [시뮬]
       try {
         const res = await this.write(this.opts('ho-commit'), (o) =>
           this.api.commitHandover(
-            packageId,
-            { handoverAuthorizationId: auth.handoverAuthorizationId ?? '', fenceVersion: auth.fenceVersion ?? 0, riderId: this.id },
+            pkgId,
+            { handoverAuthorizationId: fence.handoverAuthorizationId ?? '', fenceVersion: fence.fenceVersion ?? 0, riderId: this.id },
             o,
           ),
         );
@@ -850,11 +871,11 @@ export class VirtualRider {
         if (res.status === 'UNKNOWN_RESULT') {
           for (let i = 0; i < 10; i++) {
             await this.wait(2);
-            const v = await this.api.getHandoverResolution(packageId);
+            const v = await this.api.getHandoverResolution(pkgId);
             if (v.verdict === 'HANDED_OVER') return;
           }
         }
-        throw new Error(`인계 확정 ${res.status} (${packageId}) — 대사 필요`);
+        throw new Error(`인계 확정 ${res.status} (${pkgId}) — 대사 필요`);
       } catch (e) {
         if (e instanceof ApiProblem && e.code === 'FENCE_EXPIRED') {
           this.say('인계 허가 만료 — 다시 찍음');
@@ -865,6 +886,23 @@ export class VirtualRider {
     }
     throw new Error(`인계 반복 실패 (${packageId})`);
   }
+}
+
+/** 번호로 인계할 포장 — code 라벨 숫자, typo 먼저 틀린 번호 한 번(MOCK), taken 같은 출고 포장 번호들 */
+interface HandoverByCode {
+  code: string;
+  typo: boolean;
+  taken: ReadonlySet<string>;
+}
+
+/** 일부러 넣는 틀린 번호 — 같은 자릿수, 맞는 번호·같은 출고 다른 포장 번호와 겹치지 않게. */
+export function wrongCode(code: string, taken: ReadonlySet<string>): string {
+  const mod = 10 ** code.length;
+  for (let d = 1; d < mod; d++) {
+    const w = String((Number(code) + d) % mod).padStart(code.length, '0');
+    if (!taken.has(w)) return w;
+  }
+  return code; // 모든 번호가 쓰임 — 현실에선 없음
 }
 
 /** 시험용 증빙 사진(JPEG 머리만 있는 작은 바이트) — 실제 사진이 아니다. */

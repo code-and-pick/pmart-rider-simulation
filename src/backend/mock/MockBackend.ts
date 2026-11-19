@@ -586,7 +586,7 @@ export class MockBackend implements RiderPort {
         version: 0,
         state: 'OPEN',
         qrCode: `PKG:${packageId}:1`,
-        handoverCode: this.newHandoverCode(),
+        handoverCode: this.newHandoverCode(packages),
         fence: { state: 'NONE', authId: null, fenceVersion: 0, riderId: null, deliveryId: null, expiresAt: null, authorizedAt: null },
         handoverId: null,
         handedOverAt: null,
@@ -1287,9 +1287,12 @@ export class MockBackend implements RiderPort {
     return this.authorize(riderId, pk.packageId, { riderId, deliveryId: body.deliveryId, scannedCode: pk.qrCode });
   }
 
-  /** 센터 안 지금 쓰는(OPEN·SEALED) 포장과 겹치지 않는 4자리(앞자리 0 포함 — 0.23.0). */
-  private newHandoverCode(): string {
-    const used = new Set<string>();
+  /**
+   * 센터 안 지금 쓰는(OPEN·SEALED) 포장과 겹치지 않는 4자리(앞자리 0 포함 — 0.23.0).
+   * pending = 아직 출고에 넣기 전, 같은 주문에서 방금 만든 포장들(같은 출고 안에서도 겹치지 않게).
+   */
+  private newHandoverCode(pending: readonly MPackage[] = []): string {
+    const used = new Set<string>(pending.map((p) => p.handoverCode));
     for (const s of this.shipments.values()) for (const p of s.packages) if (p.state === 'OPEN' || p.state === 'SEALED') used.add(p.handoverCode);
     for (;;) {
       const c = String(this.rng.int(0, 9999)).padStart(4, '0');

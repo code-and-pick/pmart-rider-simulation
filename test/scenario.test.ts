@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARAMS } from '../src/config';
 import { customerColor } from '../src/render/colors';
 import { mockStartEpochMs } from '../src/sim/clock';
+import { ApiProblem } from '../src/domain/contract';
+import { wrongCode } from '../src/sim/rider';
 import { Simulation } from '../src/sim/simulation';
 import { distanceM, offsetM } from '../src/util/geo';
 
@@ -32,6 +34,32 @@ describe('시나리오 조절 바', () => {
     expect(notes.some((t) => /번호 [0-9]{4} 로 인계 허가/.test(t))).toBe(true);
     expect(notes.some((t) => /배정 반영 \d+초/.test(t))).toBe(true);
   }, 60_000);
+
+  it('번호 인계가 막히면(409 잠김) 라이더가 멈추지 않고 QR 로 다시 받아 끝까지 간다', async () => {
+    const sim = new Simulation({ ...DEFAULT_PARAMS, acceptProbability: 1, handoverCodeTypoRate: 0 }, { startEpochMs: START });
+    sim.backend.autoOrders = false;
+    sim.setKnobs({ handoverByCodeRate: 1 });
+    const asRider = sim.backend.asRider.bind(sim.backend);
+    sim.backend.asRider = (id: string) => ({
+      ...asRider(id),
+      authorizeHandoverByCode: () => Promise.reject(new ApiProblem(409, { status: 409, code: 'HANDOVER_CODE_LOCKED' })),
+    });
+    sim.startRiders(1, () => offsetM(MFC, 300, 0));
+    await sim.runFor(10);
+    sim.backend.createOrder({ pickSec: 1, packMinutes: 3, packages: 2, customer: offsetM(MFC, 1200, 0) });
+    await sim.runFor(40 * 60);
+    expect(sim.deliveryCards()[0]).toMatchObject({ executionState: 'COMPLETED' });
+    const notes = sim.notes.map((n) => n.text);
+    expect(notes.some((t) => t.includes('번호 인계 막힘(409 HANDOVER_CODE_LOCKED) — QR 로 다시'))).toBe(true);
+    expect(notes.some((t) => t.startsWith('멈춤'))).toBe(false);
+  }, 60_000);
+
+  it('틀린 번호는 맞는 번호·같은 출고 다른 포장 번호와 겹치지 않는다', () => {
+    expect(wrongCode('1234', new Set(['1234']))).toBe('1235');
+    expect(wrongCode('1234', new Set(['1234', '1235']))).toBe('1236');
+    expect(wrongCode('9999', new Set(['9999']))).toBe('0000');
+    expect(wrongCode('123456', new Set(['123456']))).toBe('123457');
+  });
 
   it('주문량 0 이면 새 주문이 생기지 않는다', async () => {
     const sim = new Simulation({ ...DEFAULT_PARAMS }, { startEpochMs: START });
