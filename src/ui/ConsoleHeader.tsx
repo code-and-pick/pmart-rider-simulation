@@ -12,37 +12,33 @@ function switchMode(mode: 'mock' | 'http') {
   window.location.search = s ? `?${s}` : '';
 }
 
+const TITLE: Record<View, string> = { field: '지도 관제', riders: '목록 관제', analyze: '분석', logs: '기록' };
+
 /**
- * 관제 머리(어두운 띠) — 왼쪽 이름·센터·데이터 출처, 가운데 보기(관제·운영 화면), 오른쪽 실시간 시각.
- * 시뮬레이터 조작(모드·정지·배속·라이더·시나리오·가상 라이더 운행)은 오른쪽 끝 한 묶음으로 — 관제 화면을 가리지 않게.
+ * 관제 머리 — 왼쪽 지금 화면 이름·센터·데이터 출처·라이더 수(바로고 리뷰 "전체 라이더 숫자"), 오른쪽 실시간 시각.
+ * 화면 바꾸기는 왼쪽 아이콘 메뉴(App Rail). 시뮬레이터 조작은 오른쪽 끝 한 묶음 — 관제 화면을 가리지 않게.
  */
-export function ConsoleHeader({ view, onView }: { view: View; onView: (v: View) => void }) {
+export function ConsoleHeader() {
   const app = useApp();
   const { sim } = app;
   const real = sim.mode === 'http';
   const st = app.mapStatus;
+  const b = app.board();
   return (
     <header className="c-head">
       <div className="c-brand">
-        <span className="c-logo" aria-hidden>
-          P
-        </span>
-        <span className="c-title">PMart 배송 관제</span>
+        <span className="c-title">{TITLE[app.view]}</span>
         <span className="c-center" title={`센터 ${sim.params.mfcId}`}>
           부산진구 MFC
         </span>
         <span className={`c-src ${real ? 'real' : 'mock'}`} title={real ? '실서버(LAN 백엔드)에서 읽은 값' : '가상(MOCK) — 시뮬레이터가 흉내 낸 값'}>
           {real ? '실서버' : '가상(MOCK)'}
         </span>
+        <span className="c-head-stat" title="운행 화면에 보이는 라이더 — 배송 중 / 전체">
+          라이더 <b>{b.riders.busy}</b>/{b.riders.total}
+          {b.riders.stale > 0 && <em> · 끊김 {b.riders.stale}</em>}
+        </span>
       </div>
-      <nav className="c-views" role="tablist" aria-label="보기">
-        <button role="tab" aria-selected={view === 'field'} className={view === 'field' ? 'on' : ''} onClick={() => onView('field')}>
-          지도 관제
-        </button>
-        <button role="tab" aria-selected={view === 'riders'} className={view === 'riders' ? 'on' : ''} onClick={() => onView('riders')} title="라이더 관제 표 — 라이더 백오피스 라이더 관제와 같은 내용">
-          라이더 관제
-        </button>
-      </nav>
       <div className="c-right">
         <span className="c-clock" title={real ? '실제 시각(서울)' : '시뮬레이션 시각(서울)'}>
           <span className={`c-live ${sim.paused ? 'paused' : ''}`} />

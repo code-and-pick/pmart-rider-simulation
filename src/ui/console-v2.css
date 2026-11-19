@@ -1,0 +1,740 @@
+/*
+ * 2026-11-19 전면 개선 — 왼쪽 아이콘 메뉴·계층 목록(Onfleet)·주문 창·분석·라이더 타임라인(루티).
+ * console.css 뒤에 읽힌다(같은 토큰을 쓴다). 차트 색은 dataviz 검증 통과 값(완료·진행 중·실패 — AnalyzePage 머리 주석).
+ */
+
+/* ───────── 뼈대: [왼쪽 아이콘 메뉴 | 화면] ───────── */
+.c-app {
+  flex-direction: row;
+  --ch-done: #0ca30c;
+  --ch-active: #2a78d6;
+  --ch-failed: #d03b3b;
+  --ch-other: #9aa3b2;
+  --ch-grid: #e1e0d9;
+  --ch-axis: #c3c2b7;
+}
+.c-app[data-theme='dark'] {
+  --ch-active: #3987e5;
+  --ch-other: #5d6573;
+  --ch-grid: #2c2c2a;
+  --ch-axis: #383835;
+}
+.c-shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.c-rail {
+  width: 72px;
+  flex-shrink: 0;
+  background: var(--c-rail);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 10px 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+.c-rail .c-logo {
+  margin: 0 auto 10px;
+}
+.c-rail button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #8a96ab !important;
+  padding: 8px 2px;
+  cursor: pointer;
+}
+.c-rail button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e5e9f2 !important;
+}
+.c-rail button.on {
+  background: rgba(91, 155, 255, 0.18);
+  color: #fff !important;
+}
+.c-rail button.on::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #5b9bff;
+}
+.c-rail-i {
+  font-size: 19px;
+  line-height: 1;
+}
+.c-rail-l {
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.c-rail-badge {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+}
+.c-rail-theme {
+  margin-top: auto;
+}
+.c-head-stat {
+  font-size: 12px;
+  color: var(--c-head-sub);
+  white-space: nowrap;
+}
+.c-head-stat b {
+  color: #fff;
+  font-size: 14px;
+}
+.c-head-stat em {
+  font-style: normal;
+  color: #fb923c;
+}
+
+/* ───────── 지도 관제 오른쪽 계층 목록(Onfleet) ───────── */
+.c-group.c-tree {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--c-line);
+  border-radius: 0;
+  margin: 0;
+}
+.c-group.c-tree.hot {
+  background: color-mix(in srgb, var(--c-red) 6%, transparent);
+}
+.c-group.c-tree > summary {
+  padding: 9px 4px;
+  font-weight: 400;
+  list-style: none;
+}
+.c-group.c-tree > summary::-webkit-details-marker {
+  display: none;
+}
+.c-group.c-tree > summary::before {
+  content: '▸';
+  color: var(--c-sub);
+  font-size: 11px;
+  width: 10px;
+}
+.c-group.c-tree[open] > summary::before {
+  content: '▾';
+}
+.c-ava {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--c-gray);
+}
+.c-ava.busy {
+  background: var(--c-blue);
+}
+.c-ava.bad {
+  background: var(--c-red);
+}
+.c-ava.warn {
+  background: var(--c-orange);
+}
+.c-ava.wait {
+  background: var(--c-violet);
+}
+.c-ava.idle {
+  background: var(--c-soft);
+  color: var(--c-sub);
+  border: 1px solid var(--c-line);
+}
+.c-tree-txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.c-tree-txt b {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.c-tree-sub {
+  font-size: 11px;
+  color: var(--c-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.c-tasks {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0 0 0 22px;
+}
+.c-task {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+.c-task:hover {
+  background: color-mix(in srgb, var(--c-blue) 8%, transparent);
+}
+.c-task.picked {
+  background: color-mix(in srgb, var(--c-blue) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--c-blue);
+}
+.c-task.al-warn {
+  background: var(--c-orange-bg);
+}
+.c-task.al-bad {
+  background: var(--c-red-bg);
+}
+.c-task-n {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--c-gray);
+}
+.c-task.b-searching .c-task-n {
+  background: var(--c-violet);
+}
+.c-task.b-delivering .c-task-n {
+  background: var(--c-blue);
+}
+.c-task.b-done .c-task-n {
+  background: var(--c-green);
+}
+.c-task.b-dispatchFailed .c-task-n,
+.c-task.b-deliveryFailed .c-task-n {
+  background: var(--c-red);
+}
+.c-task-n.idle {
+  background: transparent;
+  color: var(--c-sub);
+}
+.c-task-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.c-task-1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.c-task-1 .c-st {
+  font-size: 10px;
+  padding: 1px 7px;
+}
+.c-task-2 {
+  font-size: 11px;
+  color: var(--c-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.c-task-2 em {
+  font-style: normal;
+  font-weight: 700;
+}
+.c-task-2 em.warn {
+  color: var(--c-orange);
+}
+.c-task-2 em.bad {
+  color: var(--c-red);
+}
+.c-task-t {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-sub);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────── 주문 창(Onfleet) — 탭·세로 경로·조치 ───────── */
+.map-detail.md2 {
+  width: 380px;
+  padding: 14px 16px 12px;
+  background: var(--c-panel);
+  color: var(--c-ink);
+  border-color: var(--c-line);
+}
+.md-kicker {
+  font-size: 11px;
+  color: var(--c-sub);
+  font-weight: 600;
+}
+.md-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.md-tabs {
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid var(--c-line);
+  margin: 8px 0 10px;
+}
+.md-tabs button {
+  border: 0;
+  background: transparent;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-sub) !important;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.md-tabs button.on {
+  color: var(--c-ink) !important;
+  border-bottom-color: var(--c-blue);
+}
+.md-route {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+.md-route li {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 0 0 12px 0;
+}
+.md-route li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 18px;
+  bottom: 0;
+  width: 2px;
+  background: var(--c-line);
+}
+.md-dot {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--c-gray);
+  background: var(--c-panel);
+  margin-top: 2px;
+}
+.md-route li.now .md-dot {
+  border-color: var(--c-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-blue) 25%, transparent);
+}
+.md-route li.past .md-dot {
+  border-color: var(--c-green);
+  background: var(--c-green);
+}
+.md-route li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.md-route-l {
+  font-size: 11px;
+  color: var(--c-sub);
+  font-weight: 600;
+}
+.md-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--c-line);
+}
+a.c-btn-s {
+  text-decoration: none;
+}
+.c-btn-s {
+  color: var(--c-ink) !important;
+  background: var(--c-panel);
+}
+
+/* 기록 화면 카드 */
+.c-logs-card {
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: var(--c-shadow);
+}
+
+/* ───────── 분석(Onfleet Analyze) ───────── */
+.c-an-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.c-an-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  box-shadow: var(--c-shadow);
+}
+.c-an-tile .l {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-sub);
+}
+.c-an-tile .v {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.c-an-tile .v small {
+  font-size: 15px;
+  font-weight: 600;
+  margin-left: 2px;
+  color: var(--c-sub);
+}
+.c-an-tile .s {
+  font-size: 12px;
+  color: var(--c-sub);
+}
+.c-an-tile.bad .v {
+  color: var(--c-red);
+}
+.c-an-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.c-an-card {
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  box-shadow: var(--c-shadow);
+  padding: 14px 16px;
+}
+.c-an-card h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 800;
+}
+.c-an-card h3 .c-muted {
+  font-weight: 400;
+  margin-left: 6px;
+  font-size: 12px;
+}
+.c-an-h3b {
+  margin-top: 18px !important;
+}
+.c-an-chart {
+  position: relative;
+}
+.c-an-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.c-an-chart .grid {
+  stroke: var(--ch-grid);
+  stroke-width: 1;
+}
+.c-an-chart .axis {
+  stroke: var(--ch-axis);
+  stroke-width: 1;
+}
+.c-an-chart .tick {
+  fill: var(--c-sub);
+  font-size: 11px;
+}
+.c-an-chart .val {
+  fill: var(--c-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+.c-an-chart .hit {
+  fill: transparent;
+}
+.c-an-chart g:hover .hit {
+  fill: color-mix(in srgb, var(--c-blue) 8%, transparent);
+}
+rect.k-done {
+  fill: var(--ch-done);
+}
+rect.k-active {
+  fill: var(--ch-active);
+}
+rect.k-failed {
+  fill: var(--ch-failed);
+}
+rect.k-other {
+  fill: var(--ch-other);
+}
+i.k-done {
+  background: var(--ch-done);
+}
+i.k-active {
+  background: var(--ch-active);
+}
+i.k-failed {
+  background: var(--ch-failed);
+}
+i.k-other {
+  background: var(--ch-other);
+}
+.c-an-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--c-sub);
+  margin-bottom: 6px;
+}
+.c-an-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.c-an-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.c-an-legend i.now {
+  width: 2px;
+  height: 12px;
+  border-radius: 0;
+  background: var(--c-ink);
+}
+.c-an-tip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--c-ink);
+  color: var(--c-panel);
+  font-size: 12px;
+}
+.c-an-stack {
+  display: flex;
+  gap: 2px;
+  height: 18px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.c-an-stack i {
+  min-width: 4px;
+}
+.c-an-keys {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+.c-an-keys li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.c-an-keys i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.c-an-phases {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.c-an-phases li {
+  display: grid;
+  grid-template-columns: 130px 1fr 70px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.c-an-phases .l {
+  color: var(--c-sub);
+}
+.c-an-phases .bar {
+  height: 10px;
+  background: var(--c-soft);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.c-an-phases .bar i {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--ch-active);
+}
+.c-an-phases b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────── 라이더 타임라인(루티) ───────── */
+.c-tl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.c-tl-axis,
+.c-tl-row {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) 120px;
+  align-items: center;
+  gap: 10px;
+}
+.c-tl-axis {
+  font-size: 11px;
+  color: var(--c-sub);
+  height: 20px;
+}
+.c-tl-name {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.c-tl-track {
+  position: relative;
+  height: 26px;
+}
+.c-tl-axis .c-tl-track span {
+  position: absolute;
+  transform: translateX(-50%);
+  top: 3px;
+}
+.c-tl-row .c-tl-track {
+  background: var(--c-soft);
+  border-radius: 6px;
+}
+.c-tl-grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--ch-grid);
+}
+.c-tl-now {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--c-ink);
+}
+.c-tl-bar {
+  position: absolute;
+  top: 5px;
+  height: 16px;
+  /* 이어진 배송끼리 붙어 한 막대로 보이지 않게 바탕색 2px 틈(dataviz 막대 사이 틈) */
+  border: 0;
+  box-shadow: 0 0 0 1px var(--c-soft);
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+}
+.c-tl-bar:hover {
+  filter: brightness(1.15);
+}
+.c-tl-bar.al {
+  outline: 2px solid var(--c-orange);
+  outline-offset: 1px;
+}
+.c-tl-bar.k-done {
+  background: var(--ch-done);
+}
+.c-tl-bar.k-active {
+  background: var(--ch-active);
+}
+.c-tl-bar.k-failed {
+  background: var(--ch-failed);
+}
+.c-tl-bar.k-other {
+  background: var(--ch-other);
+}
+.c-tl-sum {
+  font-size: 12px;
+  color: var(--c-sub);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 어두운 화면에서도 예전 조각(흐름·로그·운영 화면)의 글자색이 맞게 */
+.c-app .log li,
+.c-app .timeline,
+.c-app .ops {
+  color: var(--c-ink);
+}
+
+@media (max-width: 1280px) {
+  .c-an-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .c-an-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 900px) {
+  .c-rail {
+    width: 56px;
+  }
+  .c-rail-l {
+    display: none;
+  }
+  .c-tl-axis,
+  .c-tl-row {
+    grid-template-columns: 90px minmax(0, 1fr) 70px;
+  }
+}

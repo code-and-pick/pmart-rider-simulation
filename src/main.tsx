@@ -10,6 +10,7 @@ import { Simulation } from './sim/simulation';
 import type { World } from './sim/world';
 import './ui/styles.css';
 import './ui/console.css';
+import './ui/console-v2.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root 가 없다');

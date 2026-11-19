@@ -22,19 +22,62 @@
   --c-orange-bg: #fff7ed;
   --c-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.05);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --c-bg: #0b0f17;
-    --c-panel: #141a24;
-    --c-soft: #1a2130;
-    --c-ink: #e6eaf2;
-    --c-sub: #93a0b6;
-    --c-line: #263043;
-    --c-head: #05080e;
-    --c-red-bg: #2a1416;
-    --c-orange-bg: #2a1d12;
-    --c-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  }
+/*
+ * 테마 — 관제 화면은 기본 어둡게(Onfleet·바로고 허브컨트롤룸, 사용자 2026-11-19). 머리의 전환 버튼이 .c-app[data-theme] 를 바꾼다.
+ * OS 설정보다 버튼이 이기도록 두 테마를 모두 .c-app 에 적고, 예전 화면 토큰(--panel·--ink …)도 같이 맞춘다(흐름·단계 점 등이 그 토큰을 씀).
+ */
+.c-app[data-theme='light'] {
+  --c-bg: #eef1f6;
+  --c-panel: #ffffff;
+  --c-soft: #f6f7fa;
+  --c-ink: #0f172a;
+  --c-sub: #64748b;
+  --c-line: #e2e6ee;
+  --c-head: #0b1220;
+  --c-red-bg: #fef2f2;
+  --c-orange-bg: #fff7ed;
+  --c-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.05);
+  --c-rail: #0b1220;
+  --bg: #eef1f6;
+  --panel: #ffffff;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --line: #e2e6ee;
+  --accent: #2563eb;
+  --warn: #c2410c;
+  --chip-ok: #e3f6ec;
+  --chip-ok-ink: #17663d;
+  --chip-warn: #fff1e0;
+  --chip-warn-ink: #9a4a07;
+  --marker-label-bg: rgba(255, 255, 255, 0.92);
+  color-scheme: light;
+}
+.c-app[data-theme='dark'] {
+  --c-bg: #0e1116;
+  --c-panel: #171b22;
+  --c-soft: #1f242d;
+  --c-ink: #e7eaf0;
+  --c-sub: #9aa3b2;
+  --c-line: #2b313b;
+  --c-head: #0a0c10;
+  --c-blue: #3987e5;
+  --c-red-bg: #2a1517;
+  --c-orange-bg: #2a1d12;
+  --c-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --c-rail: #0a0c10;
+  --bg: #0e1116;
+  --panel: #171b22;
+  --ink: #e7eaf0;
+  --muted: #9aa3b2;
+  --line: #2b313b;
+  --accent: #5b9bff;
+  --warn: #ff9b5e;
+  --chip-ok: #143224;
+  --chip-ok-ink: #8fe0b4;
+  --chip-warn: #3a2612;
+  --chip-warn-ink: #ffc58f;
+  --marker-label-bg: rgba(23, 27, 34, 0.92);
+  color-scheme: dark;
 }
 
 .c-app {

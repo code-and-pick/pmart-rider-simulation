@@ -115,7 +115,7 @@ export class AppController {
   private pendingView: MapView | null = null;
 
   /** 지도 범위 맞추기·옮기기 — 숨겨져 크기가 0 이면(그때 맞추면 세계 지도 배율로 튄다) 보일 때까지 미룬다 */
-  private view(v: MapView) {
+  private moveMap(v: MapView) {
     if (!this.surface || !this.mapEl || this.mapEl.clientWidth === 0 || this.mapEl.clientHeight === 0) {
       this.pendingView = v;
       return;
@@ -197,7 +197,7 @@ export class AppController {
       this.selectedDelivery = null;
     }
     const r = id ? this.sim.riders.find((x) => x.id === id) : undefined;
-    if (r?.pos) this.view({ pan: r.pos });
+    if (r?.pos) this.moveMap({ pan: r.pos });
     this.ticker.emit();
   }
 
@@ -230,7 +230,7 @@ export class AppController {
     // 지도는 기사에게(사용자 2026-11-18 "지도 위치가 기사에게 맞춰지게") — 상세 카드가 오른쪽에 뜨므로 기사를 그만큼 왼쪽에.
     // 기사가 아직 없거나 위치를 모르면 픽업지(회수·다시 배송) 또는 MFC
     const rider = card?.riderId ? this.sim.riders.find((r) => r.id === card.riderId) : undefined;
-    this.view({ focus: rider?.pos ?? card?.pickup ?? this.sim.mfcLocation, zoomIn: true });
+    this.moveMap({ focus: rider?.pos ?? card?.pickup ?? this.sim.mfcLocation, zoomIn: true });
     this.ticker.emit();
   }
 
@@ -259,11 +259,24 @@ export class AppController {
     this.ticker.emit();
   }
 
-  /** 오른쪽 패널 탭(배송·라이더·기록) — 위 숫자 카드에서도 옮긴다 */
-  panelTab: 'deliveries' | 'riders' | 'logs' = 'deliveries';
+  /** 오른쪽 패널 탭(배송·라이더) — 위 숫자 카드에서도 옮긴다. 'logs' 는 기록 화면으로(예전 탭 이름 호환) */
+  panelTab: 'deliveries' | 'riders' = 'deliveries';
 
   setPanelTab(t: 'deliveries' | 'riders' | 'logs') {
+    if (t === 'logs') {
+      this.setView('logs');
+      return;
+    }
     this.panelTab = t;
+    if (this.view !== 'field') this.view = 'field';
+    this.ticker.emit();
+  }
+
+  /** 왼쪽 메뉴 화면: 지도 관제 / 목록 관제(라이더·진행 중 주문 표) / 분석 / 기록 — 바로고 허브컨트롤룸 "지도관제·목록관제" 나눔 */
+  view: 'field' | 'riders' | 'analyze' | 'logs' = 'field';
+
+  setView(v: 'field' | 'riders' | 'analyze' | 'logs') {
+    this.view = v;
     this.ticker.emit();
   }
 
@@ -305,7 +318,7 @@ export class AppController {
     const s = this.surface;
     if (!s) return;
     // 숨겨진 동안 미룬 범위 맞추기 — 지도가 다시 보이면(크기 > 0) 한다
-    if (this.pendingView && this.mapEl && this.mapEl.clientWidth > 0 && this.mapEl.clientHeight > 0) this.view(this.pendingView);
+    if (this.pendingView && this.mapEl && this.mapEl.clientWidth > 0 && this.mapEl.clientHeight > 0) this.moveMap(this.pendingView);
     // MFC 위치가 바뀌면(실서버: center-master 를 읽은 뒤) 지도도 옮긴다
     const mfc = this.sim.mfcLocation;
     if (!this.drawnMfc || this.drawnMfc.lat !== mfc.lat || this.drawnMfc.lng !== mfc.lng) {

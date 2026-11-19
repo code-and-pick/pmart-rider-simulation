@@ -1,16 +1,24 @@
+import { useState } from 'react';
 import { useApp } from '../app/App';
 import { displayStage, purposeLabel } from '../domain/displayStage';
 import { deliveryLabel, orderLabel, shortId, shortRiderId } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
-import { dur } from './format';
+import { dur, seoulTime } from './format';
+import { opsDeliveryUrl, opsRiderUrl } from './opsLinks';
 import { Timeline } from './Timeline';
 
+type Tab = 'detail' | 'flow' | 'raw';
+
 /**
- * 고른 배송 상세 — 지도 위 오른쪽에 뜨는 카드(Locus·LogiNext·Urbantz 관제처럼 지도를 보면서 한 건을 본다).
- * 번호·상태·라이더·걸린 시간·지연, 두 서비스 상태(출처), 단계별 흐름. 닫으면 고르기가 풀린다.
+ * 고른 배송 상세 — 지도 위 오른쪽 창(Onfleet 주문 창처럼: 머리 + 탭 상세·흐름·원래 상태 + 조치 버튼).
+ *   상세 = 픽업(MFC) → 전달지 세로 단계(지난 단계 ✓), 라이더·주문·시각, 지연 사유.
+ *   흐름 = 단계별 시각·걸린 시간·출처. 원래 상태 = 배차·수행 두 서비스 값(docs/design.md §4).
+ *   조치 = 지도에서 따라가기 · 백오피스에서 배송/라이더 열기(쓰기 조치는 백오피스) · 번호 복사.
  */
 export function MapDetail() {
   const app = useApp();
+  const [tab, setTab] = useState<Tab>('detail');
+  const [copied, setCopied] = useState(false);
   const id = app.selectedDelivery;
   if (!id) return null;
   const row = app.board().rows.find((r) => r.card.deliveryId === id);
@@ -20,58 +28,153 @@ export function MapDetail() {
   const tag = purposeLabel(c.purpose);
   const tl = app.sim.deliveryTimeline(id);
   const rider = c.riderId ? app.sim.riders.find((r) => r.id === c.riderId) : undefined;
+  const mode = app.sim.mode;
+  const active = row.bucket === 'searching' || row.bucket === 'delivering';
+  const pickedUp = stage.index >= 3;
+  const copy = () => {
+    const text = c.orderNumber ?? c.deliveryNumber ?? c.deliveryId;
+    void navigator.clipboard?.writeText(text).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      },
+      () => undefined,
+    );
+  };
   return (
-    <aside className="map-detail" aria-label="고른 배송 상세">
+    <aside className="map-detail md2" aria-label="고른 배송 상세">
       <div className="md-head">
         <div>
-          <b className="md-no" title={`배송 ${c.deliveryId}`}>
-            {deliveryLabel(c)}
-          </b>
-          {tag && <span className="purpose-tag">{tag}</span>}
-          <span className={`md-status b-${row.bucket}`}>{row.bucket === 'closed' ? stage.text : BUCKET_LABEL[row.bucket]}</span>
+          <span className="md-kicker">주문 {orderLabel(c) ?? '—'}</span>
+          <div className="md-title">
+            <b className="md-no" title={`배송 ${c.deliveryId}`}>
+              {deliveryLabel(c)}
+            </b>
+            {tag && <span className="purpose-tag">{tag}</span>}
+            <span className={`md-status b-${row.bucket}`}>{row.bucket === 'closed' ? stage.text : BUCKET_LABEL[row.bucket]}</span>
+          </div>
         </div>
         <button className="chip-x" aria-label="상세 닫기" title="닫기" onClick={() => app.selectDelivery(null)}>
           ✕
         </button>
       </div>
-      <dl className="md-facts">
-        <dt>단계</dt>
-        <dd>{stage.text}</dd>
-        <dt>라이더</dt>
-        <dd>
-          {c.riderId ? (
-            <button className="link" title={c.riderId} onClick={() => app.select(c.riderId)}>
-              🛵 {rider?.label ?? shortRiderId(c.riderId)}
-              {rider?.external ? ' (라이더 앱)' : ''}
-            </button>
-          ) : (
-            '아직 없음'
-          )}
-          {rider?.locationOffline && <span className="warn-text"> · 위치 끊김</span>}
-        </dd>
-        <dt>걸린 시간</dt>
-        <dd>{row.totalSec === null ? '—' : `${dur(row.totalSec)}${row.bucket === 'searching' || row.bucket === 'delivering' ? '째' : ''}`}</dd>
-        {orderLabel(c) && (
-          <>
-            <dt>주문</dt>
-            <dd title={c.orderId ?? ''}>{orderLabel(c)}</dd>
-          </>
-        )}
-        <dt>전달지</dt>
-        <dd>
-          <DropAddress deliveryId={c.deliveryId} open={row.bucket === 'delivering' || row.bucket === 'deliveryFailed'} />
-        </dd>
-      </dl>
+
+      <div className="md-tabs" role="tablist">
+        {(
+          [
+            ['detail', '상세'],
+            ['flow', '흐름'],
+            ['raw', '원래 상태'],
+          ] as const
+        ).map(([k, l]) => (
+          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
+            {l}
+          </button>
+        ))}
+      </div>
+
       {row.alert && (
         <div className={`md-alert ${row.alert.level}`}>
           ⚠ {row.alert.title} — {row.alert.detail.split(' — ').at(-1)}
         </div>
       )}
-      <div className="raw-states">
-        배차 <code>{c.dispatchState ?? '—'}</code> · 수행 <code>{c.executionState ?? '사본 없음'}</code> · 출고{' '}
-        <code title={c.shipmentId ?? ''}>{c.shipmentId ? shortId(c.shipmentId) : '—'}</code>
+
+      {tab === 'detail' && (
+        <>
+          <ol className="md-route">
+            <li className={stage.index >= 2 ? 'past' : 'now'}>
+              <span className="md-dot" />
+              <div>
+                <span className="md-route-l">픽업 · {c.pickup ? '잘못 둔 곳(회수·다시 배송)' : 'MFC'}</span>
+                <b>{c.pickup ? '회수지' : '부산진구 MFC'}</b>
+                <span className="c-muted">{stage.index >= 3 ? '픽업 완료' : stage.index === 2 ? '가게 도착 — 인계 기다림' : '아직 안 감'}</span>
+              </div>
+            </li>
+            <li className={stage.index >= 5 ? 'past' : pickedUp ? 'now' : ''}>
+              <span className="md-dot" />
+              <div>
+                <span className="md-route-l">전달지</span>
+                <DropAddress deliveryId={c.deliveryId} open={row.bucket === 'delivering' || row.bucket === 'deliveryFailed'} />
+              </div>
+            </li>
+          </ol>
+          <dl className="md-facts">
+            <dt>라이더</dt>
+            <dd>
+              {c.riderId ? (
+                <button className="link" title={c.riderId} onClick={() => app.select(c.riderId)}>
+                  🛵 {rider?.label ?? shortRiderId(c.riderId)}
+                  {rider?.external ? ' (라이더 앱)' : ''}
+                </button>
+              ) : (
+                '아직 없음 — 라이더 찾는 중'
+              )}
+              {rider?.locationOffline && <span className="warn-text"> · 위치 끊김</span>}
+            </dd>
+            <dt>단계</dt>
+            <dd>{stage.text}</dd>
+            <dt>배차 요청</dt>
+            <dd>{row.startMs ? seoulTime(row.startMs) : '—'}</dd>
+            <dt>걸린 시간</dt>
+            <dd>{row.totalSec === null ? '—' : `${dur(row.totalSec)}${active ? '째' : ''}`}</dd>
+          </dl>
+        </>
+      )}
+      {tab === 'flow' && (tl ? <Timeline t={tl} nowMs={app.sim.clock.epochMs()} /> : <p className="c-muted">흐름을 아직 못 읽었습니다.</p>)}
+      {tab === 'raw' && (
+        <dl className="md-facts">
+          <dt>배차</dt>
+          <dd>
+            <code>{c.dispatchState ?? '—'}</code> <span className="c-muted">delivery-dispatch</span>
+          </dd>
+          <dt>수행</dt>
+          <dd>
+            <code>{c.executionState ?? '사본 없음'}</code> <span className="c-muted">delivery-execution</span>
+          </dd>
+          <dt>출고</dt>
+          <dd>
+            <code title={c.shipmentId ?? ''}>{c.shipmentId ? shortId(c.shipmentId) : '—'}</code>
+          </dd>
+          <dt>배송 ID</dt>
+          <dd>
+            <code>{c.deliveryId}</code>
+          </dd>
+          {c.orderId && (
+            <>
+              <dt>주문 ID</dt>
+              <dd>
+                <code>{c.orderId}</code>
+              </dd>
+            </>
+          )}
+        </dl>
+      )}
+
+      <div className="md-actions" aria-label="조치">
+        {c.riderId && (
+          <button
+            className={`c-btn-s ${app.follow && app.selected === c.riderId ? 'on' : ''}`}
+            onClick={() => {
+              if (app.selected !== c.riderId) app.select(c.riderId);
+              app.toggleFollow();
+            }}
+            title="지도가 이 라이더를 계속 따라간다"
+          >
+            {app.follow && app.selected === c.riderId ? '따라가는 중' : '라이더 따라가기'}
+          </button>
+        )}
+        <a className="c-btn-s" href={opsDeliveryUrl(mode, c.deliveryId)} target="_blank" rel="noopener noreferrer" title="라이더 백오피스 배송 상세 — 전달 실패 확정·배차 취소·상태 정정 같은 조치는 거기서">
+          배송 조치 ↗
+        </a>
+        {c.riderId && (
+          <a className="c-btn-s" href={opsRiderUrl(mode, c.riderId)} target="_blank" rel="noopener noreferrer" title="라이더 백오피스 라이더 상세 — 계정 제한·수행료·운행시간">
+            라이더 상세 ↗
+          </a>
+        )}
+        <button className="c-btn-s" onClick={copy} title="주문번호(없으면 배송번호)를 복사">
+          {copied ? '복사됨' : '번호 복사'}
+        </button>
       </div>
-      {tl && <Timeline t={tl} nowMs={app.sim.clock.epochMs()} />}
     </aside>
   );
 }

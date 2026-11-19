@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { AnalyzePage } from '../ui/AnalyzePage';
 import { ConsoleHeader } from '../ui/ConsoleHeader';
-import { ConsolePanel } from '../ui/ConsolePanel';
+import { ConsolePanel, LogsPage } from '../ui/ConsolePanel';
 import { KpiCards } from '../ui/KpiCards';
 import { MapDetail } from '../ui/MapDetail';
 import { RiderControlPage } from '../ui/RiderControlPage';
@@ -18,42 +19,51 @@ export function useApp(): AppController {
   return c;
 }
 
-/** 위쪽 보기: 관제(지도) / 라이더 관제(표 — 백오피스 라이더 관제와 같은 내용). 지도는 숨기기만 한다(떼지 않음 — 시뮬레이션은 계속 돈다). */
-export type View = 'field' | 'riders';
+/** 왼쪽 메뉴 화면 — 지도는 숨기기만 한다(떼지 않음 — 시뮬레이션은 계속 돈다). */
+export type View = 'field' | 'riders' | 'analyze' | 'logs';
 
-/** 패널 열림 기억(이 브라우저만 — 편의용, 못 읽으면 열림) */
-function usePanelOpen(key: string): [boolean, () => void] {
-  const [open, setOpen] = useState<boolean>(() => {
+/** 이 브라우저에 기억하는 편의 설정(못 읽으면 기본값) */
+function useStored<T extends string>(key: string, fallback: T, allowed: readonly T[]): [T, (v: T) => void] {
+  const [v, setV] = useState<T>(() => {
     try {
-      return localStorage.getItem(key) !== '0';
+      const s = localStorage.getItem(key) as T | null;
+      return s && allowed.includes(s) ? s : fallback;
     } catch {
-      return true;
+      return fallback;
     }
   });
-  const toggle = () =>
-    setOpen((v) => {
-      try {
-        localStorage.setItem(key, v ? '0' : '1');
-      } catch {
-        /* 저장 못 해도 화면은 그대로 */
-      }
-      return !v;
-    });
-  return [open, toggle];
+  const set = (n: T) => {
+    setV(n);
+    try {
+      localStorage.setItem(key, n);
+    } catch {
+      /* 저장 못 해도 이번 화면에선 바뀐다 */
+    }
+  };
+  return [v, set];
 }
 
+const RAIL: readonly (readonly [View, string, string])[] = [
+  ['field', '🗺', '지도 관제'],
+  ['riders', '☰', '목록 관제'],
+  ['analyze', '▥', '분석'],
+  ['logs', '⧉', '기록'],
+];
+
 /**
- * 관제 화면 배치(Onfleet·Locus·PayBell 관제를 참고 — docs/worklog 2026-11-18 16:45):
- *   어두운 머리 → 큰 숫자 카드 한 줄 → [지도(넓게) | 오른쪽 관제 패널(이상 상황 · 배송/라이더/기록 탭)]
- * 패널은 ] 키나 지도 오른쪽 가장자리 버튼으로 접어 지도를 넓게 본다.
+ * 관제 화면 뼈대(Onfleet 대시보드·바로고 허브컨트롤룸을 참고 — docs/worklog 2026-11-19):
+ *   [왼쪽 아이콘 메뉴 | 머리 → (지도 관제) 숫자 카드 → [지도 | 오른쪽 관제 패널] / 목록 관제 / 분석 / 기록]
+ * 기본 어두운 테마(전환 가능). 패널은 ] 키나 지도 오른쪽 가장자리 버튼으로 접는다.
  */
 export function App({ controller }: { controller: AppController }) {
-  const [view, setView] = useState<View>('field');
-  const [panelOpen, togglePanel] = usePanelOpen('rider-sim.panel.right');
+  const [panel, setPanel] = useStored<'open' | 'closed'>('rider-sim.panel', 'open', ['open', 'closed']);
+  const [theme, setTheme] = useStored<'dark' | 'light'>('rider-sim.theme', 'dark', ['dark', 'light']);
+  const panelOpen = panel === 'open';
+  const togglePanel = () => setPanel(panelOpen ? 'closed' : 'open');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
       if (e.key === ']') togglePanel();
     };
     window.addEventListener('keydown', onKey);
@@ -61,17 +71,60 @@ export function App({ controller }: { controller: AppController }) {
   });
   return (
     <Ctx.Provider value={controller}>
-      <div className="c-app">
-        <ConsoleHeader view={view} onView={setView} />
-        {view === 'field' && <KpiCards />}
-        {view === 'field' && <ScenarioSlot />}
-        <div className={`c-main ${panelOpen ? '' : 'closed'}`} hidden={view !== 'field'}>
-          <MapView panelOpen={panelOpen} onPanel={togglePanel} />
-          {panelOpen && <ConsolePanel />}
+      <div className="c-app" data-theme={theme}>
+        <Rail theme={theme} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+        <div className="c-shell">
+          <ConsoleHeader />
+          <Views panelOpen={panelOpen} onPanel={togglePanel} />
         </div>
-        {view === 'riders' && <RiderControlPage onShowOnMap={() => setView('field')} />}
       </div>
     </Ctx.Provider>
+  );
+}
+
+/** 왼쪽 아이콘 메뉴(Onfleet) — 화면 바꾸기, 맨 아래 테마 */
+function Rail({ theme, onTheme }: { theme: 'dark' | 'light'; onTheme: () => void }) {
+  const app = useApp();
+  const alerts = app.board().alerts.length;
+  return (
+    <nav className="c-rail" aria-label="화면">
+      <span className="c-logo" aria-hidden>
+        P
+      </span>
+      {RAIL.map(([v, icon, label]) => (
+        <button key={v} className={app.view === v ? 'on' : ''} aria-current={app.view === v ? 'page' : undefined} onClick={() => app.setView(v)} title={label}>
+          <span className="c-rail-i" aria-hidden>
+            {icon}
+          </span>
+          <span className="c-rail-l">{label}</span>
+          {v === 'field' && alerts > 0 && <span className="c-rail-badge">{alerts}</span>}
+        </button>
+      ))}
+      <button className="c-rail-theme" onClick={onTheme} title={theme === 'dark' ? '밝은 화면으로' : '어두운 화면으로'}>
+        <span className="c-rail-i" aria-hidden>
+          {theme === 'dark' ? '☀' : '☾'}
+        </span>
+        <span className="c-rail-l">{theme === 'dark' ? '밝게' : '어둡게'}</span>
+      </button>
+    </nav>
+  );
+}
+
+function Views({ panelOpen, onPanel }: { panelOpen: boolean; onPanel: () => void }) {
+  const app = useApp();
+  const view = app.view;
+  return (
+    <>
+      {view === 'field' && <KpiCards />}
+      {view === 'field' && <ScenarioSlot />}
+      <div className={`c-main ${panelOpen ? '' : 'closed'}`} hidden={view !== 'field'}>
+        <MapView panelOpen={panelOpen} onPanel={onPanel} />
+        {panelOpen && <ConsolePanel />}
+      </div>
+      {view === 'riders' && <RiderControlPage onShowOnMap={() => app.setView('field')} />}
+      {view === 'analyze' && <AnalyzePage />}
+      {view === 'logs' && <LogsPage />}
+    </>
   );
 }
 

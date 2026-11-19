@@ -14,7 +14,7 @@ import { Progress } from './Progress';
 import { FILTER_LABEL, rowMatches, type OpsFilter, type OpsRow } from './ops';
 import { OrdersTab } from './OrdersTab';
 import { riderIndex, type RiderRow } from './riderTable';
-import { groupRows, sortRows, type GroupBy, type SortBy } from './listView';
+import { groupRows, sortRows, type GroupBy, type RowGroup, type SortBy } from './listView';
 import { isSimRiderId } from '../config';
 import { apiFor, eventsFor, notesFor, roleOf } from './riderFilter';
 
@@ -33,12 +33,11 @@ const BUCKET_CHIP: Record<Bucket, string> = {
   closed: '끝남',
 };
 
-/** 오른쪽 관제 패널 — 위 이상 상황 띠, 아래 탭(배송·라이더·기록). */
+/** 오른쪽 관제 패널 — 위 이상 상황 띠, 아래 탭(배송·라이더). 기록은 왼쪽 메뉴의 기록 화면(LogsPage). */
 export function ConsolePanel() {
   const app = useApp();
   const b = app.board();
   const tab = app.panelTab;
-  const diagBad = app.sim.diagnostics().filter((l) => DIAG_BAD.test(l)).length;
   return (
     <aside className="c-panel" aria-label="관제 패널">
       <AlertStrip />
@@ -49,16 +48,29 @@ export function ConsolePanel() {
         <button role="tab" aria-selected={tab === 'riders'} className={tab === 'riders' ? 'on' : ''} onClick={() => app.setPanelTab('riders')}>
           라이더 <span className="c-n">{b.riders.total}</span>
         </button>
-        <button role="tab" aria-selected={tab === 'logs'} className={tab === 'logs' ? 'on' : ''} onClick={() => app.setPanelTab('logs')}>
-          기록{diagBad > 0 && <span className="c-n warn" title="연결 상태 확인 필요">{diagBad}</span>}
-        </button>
       </div>
       <div className="c-body">
         {tab === 'deliveries' && <DeliveriesView />}
         {tab === 'riders' && <RidersView />}
-        {tab === 'logs' && <LogsView />}
       </div>
     </aside>
+  );
+}
+
+/** 기록 화면(왼쪽 메뉴) — 주문 흐름·사건·API·엔진 기록·연결 상태·구간 평균 */
+export function LogsPage() {
+  return (
+    <section className="c-page" aria-label="기록">
+      <div className="c-page-head">
+        <div>
+          <h2>기록</h2>
+          <p>주문 흐름, 사건, API 요청, 가상 라이더 엔진 기록, 연결 상태, 구간 평균.</p>
+        </div>
+      </div>
+      <div className="c-logs-card">
+        <LogsView />
+      </div>
+    </section>
   );
 }
 
@@ -136,13 +148,149 @@ function RiderLoc({ r }: { r: RiderRow | undefined }) {
   );
 }
 
+/**
+ * 라이더 묶음 머리(Onfleet 팀·기사 줄) — 둥근 머리글자(상태 색: 지연 빨강·배송 중 파랑·대기 회색), 이름, 상태 한 줄, 건수·지연, "지도".
+ * 라이더 없는 묶음(배차 대기)은 Onfleet "Unassigned" 처럼.
+ */
+function TreeHead({ g, rider }: { g: RowGroup; rider: RiderRow | undefined }) {
+  const app = useApp();
+  if (!g.riderId) {
+    return (
+      <>
+        <span className="c-ava wait" aria-hidden>
+          ?
+        </span>
+        <span className="c-tree-txt">
+          <b>배차 대기</b>
+          <span className="c-tree-sub">라이더 찾는 중 · {g.rows.length}건</span>
+        </span>
+        {g.alerts > 0 && <span className="c-pill red">지연 {g.alerts}</span>}
+      </>
+    );
+  }
+  const tone = g.alerts ? 'bad' : rider?.loc && rider.loc !== 'ok' ? 'warn' : 'busy';
+  return (
+    <>
+      <span className={`c-ava ${tone}`} aria-hidden>
+        {/* 시뮬레이터 라이더는 번호(sim-01 → 01), 그 밖은 이름 첫 글자("김*수 · 482913" → 김) */}
+        {/^sim-\d+$/.test(g.label) ? g.label.slice(4) : (g.label.trim()[0] ?? '?').toUpperCase()}
+      </span>
+      <span className="c-tree-txt">
+        <b title={g.riderId}>{g.label}</b>
+        <span className="c-tree-sub">
+          배송 중 {g.rows.filter((r) => r.bucket === 'delivering').length}건
+          {rider && (
+            <>
+              {' · '}
+              <RiderLoc r={rider} />
+              {rider.sinceSec !== null && ` ${dur(rider.sinceSec)} 전`}
+            </>
+          )}
+        </span>
+      </span>
+      {g.alerts > 0 && <span className="c-pill red">지연 {g.alerts}</span>}
+      <button
+        className="c-link"
+        onClick={(e) => {
+          e.preventDefault();
+          app.select(g.riderId as string);
+        }}
+        title="이 라이더를 지도에서 찾고 배송 목록을 이 라이더로"
+      >
+        지도
+      </button>
+    </>
+  );
+}
+
+/** 라이더 묶음 안 배송 한 줄(Onfleet 작업 줄) — 순서 원·배송번호·단계·경과, 지연이면 붉게. 누르면 지도 위 상세 */
+function TaskRow({ r, n }: { r: OpsRow; n: number }) {
+  const app = useApp();
+  const c = r.card;
+  const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
+  const active = ACTIVE.has(r.bucket);
+  const picked = app.selectedDelivery === c.deliveryId;
+  const inStep = active && r.stepAtMs !== null ? Math.max(0, (app.sim.clock.epochMs() - r.stepAtMs) / 1000) : null;
+  const over = r.alert?.overSec !== undefined && r.alert.overSec > 0 ? Math.max(1, Math.round(r.alert.overSec / 60)) : null;
+  return (
+    <li>
+      <button className={`c-task b-${r.bucket} ${picked ? 'picked' : ''} ${r.alert ? `al-${r.alert.level}` : ''}`} onClick={() => app.selectDelivery(c.deliveryId)} title={`${c.deliveryId} — 누르면 지도에서 상세`}>
+        <span className="c-task-n">{n}</span>
+        <span className="c-task-main">
+          <span className="c-task-1">
+            <b>{deliveryLabel(c)}</b>
+            <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? stage.text : BUCKET_CHIP[r.bucket]}</span>
+          </span>
+          <span className="c-task-2">
+            {active ? (r.stepLabel ?? stage.text) : stage.text}
+            {inStep !== null && ` · ${dur(inStep)}째`}
+            {r.alert && (
+              <em className={r.alert.level}>
+                {' '}
+                · {over !== null ? `+${over}분 ` : ''}
+                {r.alert.title}
+              </em>
+            )}
+          </span>
+        </span>
+        <span className="c-task-t">{r.totalSec === null ? '' : active ? dur(r.totalSec) : `총 ${dur(r.totalSec)}`}</span>
+      </button>
+    </li>
+  );
+}
+
+/** 배송 없는 라이더(대기) — 접은 한 묶음(바로고 리뷰 "전체 라이더 숫자"). 오래 기다린 순 */
+function IdleRiders({ busyIds }: { busyIds: Set<string> }) {
+  const app = useApp();
+  const idx = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
+  const nowMs = app.sim.clock.epochMs();
+  const idle = app.sim.riders
+    .filter((r) => !busyIds.has(r.id) && !r.deliveryId)
+    .map((r) => ({ r, row: idx.get(r.id) }))
+    .sort((a, b) => (a.row?.waitingSince ? Date.parse(a.row.waitingSince) : Infinity) - (b.row?.waitingSince ? Date.parse(b.row.waitingSince) : Infinity));
+  if (!idle.length) return null;
+  return (
+    <details className="c-group c-tree idle">
+      <summary>
+        <span className="c-ava idle" aria-hidden>
+          {idle.length}
+        </span>
+        <span className="c-tree-txt">
+          <b>대기 중 라이더</b>
+          <span className="c-tree-sub">배송 없음 · {idle.length}명 · 오래 기다린 순</span>
+        </span>
+      </summary>
+      <ul className="c-tasks">
+        {idle.map(({ r, row }) => (
+          <li key={r.id}>
+            <button className="c-task" onClick={() => app.select(r.id)} title={`${r.id} — 누르면 지도에서 찾기`}>
+              <span className="c-task-n idle">·</span>
+              <span className="c-task-main">
+                <span className="c-task-1">
+                  <b>{row?.name ?? r.label ?? shortRiderId(r.id)}</b>
+                  {r.external && <span className="c-tag">앱</span>}
+                </span>
+                <span className="c-task-2">
+                  <RiderLoc r={row} />
+                  {row?.waitingSince ? ` · 대기 ${dur((nowMs - Date.parse(row.waitingSince)) / 1000)}째` : ''}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function DeliveriesView() {
   const app = useApp();
   const b = app.board();
   const f = app.filter;
   const sel = app.selected;
   const [q, setQ] = useState('');
-  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  // 기본은 Onfleet 처럼 라이더별 계층(배차 대기 → 라이더마다 그 배송 1·2·3)
+  const [groupBy, setGroupBy] = useState<GroupBy>('rider');
   const [sortBy, setSortBy] = useState<SortBy>('urgent');
   const needle = q.trim().toLowerCase();
   const riders = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
@@ -233,33 +381,35 @@ function DeliveriesView() {
             ))}
           </ul>
         ) : (
-          <details key={g.key} className={`c-group ${g.alerts ? 'hot' : ''}`} open={openAll || g.alerts > 0}>
+          <details key={g.key} className={`c-group ${groupBy === 'rider' ? 'c-tree' : ''} ${g.alerts ? 'hot' : ''}`} open={openAll || g.alerts > 0}>
             <summary>
-              <span className="c-group-l">{g.riderId ? `🛵 ${g.label}` : g.label}</span>
-              {g.riderId && <RiderLoc r={riders.get(g.riderId)} />}
-              <span className="c-n">{g.rows.length}</span>
-              {g.alerts > 0 && <span className="c-pill red">지연 {g.alerts}</span>}
-              {g.riderId && (
-                <button
-                  className="c-link"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    app.select(g.riderId as string);
-                  }}
-                  title="이 라이더를 지도에서 찾고 배송 목록을 이 라이더로"
-                >
-                  지도
-                </button>
+              {groupBy === 'rider' ? (
+                <TreeHead g={g} rider={g.riderId ? riders.get(g.riderId) : undefined} />
+              ) : (
+                <>
+                  <span className="c-group-l">{g.label}</span>
+                  <span className="c-n">{g.rows.length}</span>
+                  {g.alerts > 0 && <span className="c-pill red">지연 {g.alerts}</span>}
+                </>
               )}
             </summary>
-            <ul className="c-list">
-              {g.rows.map((r) => (
-                <DeliveryItem key={r.card.deliveryId} r={r} sel={sel} rider={r.card.riderId ? riders.get(r.card.riderId) : undefined} />
-              ))}
-            </ul>
+            {groupBy === 'rider' ? (
+              <ol className="c-tasks">
+                {g.rows.map((r, i) => (
+                  <TaskRow key={r.card.deliveryId} r={r} n={i + 1} />
+                ))}
+              </ol>
+            ) : (
+              <ul className="c-list">
+                {g.rows.map((r) => (
+                  <DeliveryItem key={r.card.deliveryId} r={r} sel={sel} rider={r.card.riderId ? riders.get(r.card.riderId) : undefined} />
+                ))}
+              </ul>
+            )}
           </details>
         ),
       )}
+      {groupBy === 'rider' && !sel && !needle && (f === 'active' || f === null) && <IdleRiders busyIds={new Set(rows.map((r) => r.card.riderId).filter((x): x is string => !!x))} />}
       {rows.length > MAX_DELIVERIES && <p className="c-empty">앞 {MAX_DELIVERIES}건만 — 찾기·상태 탭으로 좁혀 보세요.</p>}
     </>
   );

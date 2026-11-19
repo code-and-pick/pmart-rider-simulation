@@ -35,3 +35,15 @@ export function opsBase(mode: 'mock' | 'http'): string {
 export function opsUrl(mode: 'mock' | 'http', screen: OpsScreen): string | null {
   return screen.path === null ? null : `${opsBase(mode)}${screen.path}`;
 }
+
+/**
+ * 관리자 조치 바로 가기 — 쓰기(전달 실패 확정·배차 취소·상태 정정·계정 제한 …)는 라이더 백오피스 화면에 있다.
+ * 시뮬레이터는 조치를 다시 만들지 않고 그 배송·라이더 상세로 바로 연다(백오피스 경로 /deliveries/{id}·/riders/{id} — pmart-clients 읽음).
+ */
+export function opsDeliveryUrl(mode: 'mock' | 'http', deliveryId: string): string {
+  return `${opsBase(mode)}/deliveries/${encodeURIComponent(deliveryId)}`;
+}
+
+export function opsRiderUrl(mode: 'mock' | 'http', riderId: string): string {
+  return `${opsBase(mode)}/riders/${encodeURIComponent(riderId)}`;
+}
