@@ -647,3 +647,130 @@
   color: var(--c-ink);
   font-weight: 600;
 }
+
+/* ───────── 배송 관제 흐름 막대(FlowBar) — 숫자 카드·상태 칸·단계별 묶음을 한 줄로 ───────── */
+.fb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  padding: 0 16px 12px;
+}
+.fb-all,
+.fb-step,
+.fb-issue {
+  font: inherit;
+  color: var(--c-ink);
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.fb-all {
+  display: grid;
+  gap: 2px;
+  padding: 10px 16px;
+  min-width: 150px;
+  box-shadow: var(--c-shadow);
+}
+.fb-all.on,
+.fb-step.on,
+.fb-issue.on {
+  border: 2px solid var(--c-blue);
+}
+.fb-flow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-soft);
+}
+.fb-step {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  padding: 6px 10px;
+  border-color: transparent;
+}
+.fb-step:hover {
+  border-color: var(--c-line);
+}
+.fb-step.zero .fb-n {
+  color: var(--c-sub);
+  opacity: 0.6;
+}
+.fb-arrow {
+  align-self: center;
+  font-style: normal;
+  color: var(--c-sub);
+  opacity: 0.6;
+}
+.fb-l {
+  font-size: 12px;
+  color: var(--c-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fb-n {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.fb-sub {
+  font-size: 11px;
+  color: var(--c-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fb-late {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-red);
+}
+.fb-issues {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.fb-issue {
+  display: grid;
+  gap: 2px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--c-sub);
+}
+.fb-issue b {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--c-ink);
+}
+.fb-issue.red.hot {
+  border-color: color-mix(in srgb, var(--c-red) 50%, transparent);
+  background: color-mix(in srgb, var(--c-red) 10%, var(--c-panel));
+}
+.fb-issue.red.hot b {
+  color: var(--c-red);
+}
+@media (max-width: 1280px) {
+  .fb-flow {
+    flex-basis: 100%;
+    order: 3;
+  }
+}
+
+/* 고른 칸 테두리 — .fb-step 의 투명 테두리보다 뒤에 */
+.fb .fb-step.on,
+.fb .fb-all.on,
+.fb .fb-issue.on {
+  border: 2px solid var(--c-blue);
+  background: var(--c-panel);
+}

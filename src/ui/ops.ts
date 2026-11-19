@@ -5,6 +5,7 @@ import { OPS_THRESHOLDS } from '../config';
 import type { DeliveryTimeline } from '../sim/timeline';
 import type { DeliveryCard, RiderView } from '../sim/world';
 import { type Bucket, bucketOf, isFailedCall } from './buckets';
+import { displayStage } from '../domain/displayStage';
 
 export type AlertLevel = 'bad' | 'warn';
 
@@ -169,7 +170,24 @@ function min(sec: number): number {
 }
 
 /** 관제 거르기 — 숫자 칸·알림이 정하고 목록·지도가 따른다 */
-export type OpsFilter = Exclude<Bucket, 'closed'> | 'active' | 'failed' | 'delayed' | 'failedCalls';
+/** 배송 중 안의 단계(흐름 막대 — 사용자 2026-11-19 "위 큰 단계와 목록 단계가 겹친다" → 한 줄 흐름으로 합침) */
+export type StageFilter = 'toStore' | 'atStore' | 'toCustomer' | 'atCustomer';
+
+export type OpsFilter = Exclude<Bucket, 'closed'> | 'active' | 'failed' | 'delayed' | 'failedCalls' | StageFilter;
+
+/** 배송 중 단계 칸 — displayStage 단계 번호 1~4 */
+export const STAGE_FILTERS: readonly (readonly [StageFilter, number])[] = [
+  ['toStore', 1],
+  ['atStore', 2],
+  ['toCustomer', 3],
+  ['atCustomer', 4],
+];
+
+/** 배송 중인 배송의 단계 번호(1 가게로 · 2 가게 대기 · 3 고객에게 · 4 고객 앞), 그 밖은 null */
+export function deliveringStage(r: OpsRow): number | null {
+  if (r.bucket !== 'delivering') return null;
+  return Math.min(4, Math.max(1, displayStage(r.card.dispatchState, r.card.executionState, r.card.radiusKm, r.card.purpose).index));
+}
 
 /** 거르기 이름(화면) */
 export const FILTER_LABEL: Record<OpsFilter, string> = {
@@ -182,6 +200,10 @@ export const FILTER_LABEL: Record<OpsFilter, string> = {
   dispatchFailed: '배차 실패',
   deliveryFailed: '전달 실패',
   failedCalls: '요청 실패',
+  toStore: '가게로 가는 중',
+  atStore: '가게에서 픽업 기다림',
+  toCustomer: '고객에게 가는 중',
+  atCustomer: '고객 앞 · 전달 중',
 };
 
 export function rowMatches(r: OpsRow, f: OpsFilter | null): boolean {
@@ -189,5 +211,7 @@ export function rowMatches(r: OpsRow, f: OpsFilter | null): boolean {
   if (f === 'delayed') return r.alert !== null && (r.bucket === 'searching' || r.bucket === 'delivering');
   if (f === 'active') return r.bucket === 'searching' || r.bucket === 'delivering';
   if (f === 'failed') return r.bucket === 'dispatchFailed' || r.bucket === 'deliveryFailed';
+  const st = STAGE_FILTERS.find(([k]) => k === f);
+  if (st) return deliveringStage(r) === st[1];
   return r.bucket === f;
 }

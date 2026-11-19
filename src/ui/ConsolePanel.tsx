@@ -152,14 +152,6 @@ function AlertStrip() {
 // ─────────────── 배송 ───────────────
 
 /** 상태 탭(바로고 목록관제처럼 건수와 함께) */
-const STATUS_TABS: readonly (readonly [OpsFilter | null, string])[] = [
-  ['active', '진행 중'],
-  ['delayed', '지연'],
-  ['done', '완료'],
-  ['failed', '실패'],
-  [null, '전체'],
-];
-
 /** 라이더 위치 수신 한 단어(묶음 머리·카드) */
 function RiderLoc({ r }: { r: RiderRow | undefined }) {
   if (!r) return null;
@@ -320,7 +312,6 @@ function DeliveriesView() {
   const riders = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
   const nameOf = (id: string) => riders.get(id)?.name ?? shortRiderId(id);
   const byRider = b.rows.filter((r) => !sel || r.card.riderId === sel || r.card.riderIds.includes(sel));
-  const count = (k: OpsFilter | null) => byRider.filter((r) => rowMatches(r, k)).length;
   const matched = byRider
     .filter((r) => rowMatches(r, f === 'failedCalls' ? null : f))
     .filter((r) => {
@@ -335,17 +326,10 @@ function DeliveriesView() {
   const groups = groupRows(rows.slice(0, MAX_DELIVERIES), groupBy, nameOf);
   // 묶음이 많으면 지연 있는 묶음만 펼친다(라이더 100명이면 다 펼치면 못 본다) [시뮬]
   const openAll = groups.length <= 6;
-  const tabbed = STATUS_TABS.some(([k]) => k === f);
   return (
     <>
-      <div className="c-status" role="tablist" aria-label="배송 상태">
-        {STATUS_TABS.map(([k, l]) => (
-          <button key={l} role="tab" aria-selected={f === k} className={`${f === k ? 'on' : ''} ${k === 'delayed' && count(k) > 0 ? 'hot' : ''}`} onClick={() => app.setFilter(k, true)}>
-            {l} <b>{count(k)}</b>
-          </button>
-        ))}
-      </div>
-      {(sel || (f && !tabbed && f !== 'failedCalls')) && (
+      {/* 상태 칸은 위 흐름 막대(FlowBar)로 옮김 — 같은 것을 두 번 보이지 않게(사용자 2026-11-19) */}
+      {(sel || (f !== 'active' && f !== 'failedCalls')) && (
         <div className="c-chip-row">
           {sel && (
             <span className="c-chip">
@@ -355,9 +339,9 @@ function DeliveriesView() {
               </button>
             </span>
           )}
-          {f && !tabbed && f !== 'failedCalls' && (
+          {f !== 'active' && f !== 'failedCalls' && (
             <span className="c-chip">
-              {FILTER_LABEL[f]}만
+              {f === null ? '끝난 것까지 전체' : `${FILTER_LABEL[f]}만`}
               <button aria-label="거르기 풀기" onClick={() => app.setFilter('active', true)}>
                 ✕
               </button>
@@ -379,7 +363,6 @@ function DeliveriesView() {
           {(
             [
               ['none', '없음'],
-              ['stage', '단계별'],
               ['rider', '라이더별'],
             ] as const
           ).map(([k, l]) => (

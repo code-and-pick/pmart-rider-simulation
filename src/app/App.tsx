@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useRef, useState, useSyncExternal
 import { AnalyzePage } from '../ui/AnalyzePage';
 import { ConsoleHeader } from '../ui/ConsoleHeader';
 import { DeliveryListPanel, LogsPage } from '../ui/ConsolePanel';
-import { KpiCards } from '../ui/KpiCards';
+import { FlowBar } from '../ui/FlowBar';
+import { FILTER_LABEL, type OpsFilter } from '../ui/ops';
 import { MapDetail } from '../ui/MapDetail';
 import { RiderHead, RiderList, RiderPanel } from '../ui/RiderBoard';
 import { RecentDeliveries, RiderControlPage } from '../ui/RiderControlPage';
@@ -120,7 +121,7 @@ function Views({ panelOpen, onPanel }: { panelOpen: boolean; onPanel: () => void
   return (
     <>
       {control && <RiderHead />}
-      {view === 'field' && <KpiCards />}
+      {view === 'field' && <FlowBar />}
       {(control || view === 'field') && <ScenarioSlot />}
       <div className={`c-main ${control ? 'rb-main' : 'dd-main'}`} hidden={!control && view !== 'field'}>
         {control ? <RiderList /> : <DeliveryListPanel />}
@@ -216,6 +217,6 @@ function MapView(p: { panelOpen: boolean; onPanel: () => void; noPanel?: boolean
   );
 }
 
-function filterName(f: string): string {
-  return { active: '진행 중', searching: '찾는 중', delivering: '배송 중', delayed: '지연', done: '완료', failed: '실패', dispatchFailed: '배차 실패', deliveryFailed: '전달 실패' }[f] ?? f;
+function filterName(f: OpsFilter): string {
+  return FILTER_LABEL[f] ?? f;
 }
