@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
 import { deliveryLabel } from '../domain/riderId';
@@ -42,6 +42,64 @@ function etaText(iso: string | null, nowMs: number): string | null {
   if (!Number.isFinite(t)) return null;
   const left = Math.max(0, Math.round((t - nowMs) / 60_000));
   return `${seoulTime(t).slice(0, 5)} · ${left}분 남음`;
+}
+
+/**
+ * 머리(백오피스처럼): 왼쪽 제목·설명, 오른쪽 "주문번호·라이더 찾기"(라이더 번호·이름·ID 또는 주문번호·배송번호 → 그 라이더를 고르고 배송이면 주문 창)·센터.
+ */
+export function RiderHead() {
+  const app = useApp();
+  const { sim } = app;
+  const rows = useRiderRows();
+  const [q, setQ] = useState('');
+  const [miss, setMiss] = useState(false);
+  const find = () => {
+    const n = q.replace(/[\s-]/g, '').toLowerCase();
+    if (!n) return;
+    const rider = rows.find((r) => r.id.toLowerCase() === n || r.name.replace(/[\s·]/g, '').toLowerCase().includes(n));
+    const del = app.board().rows.find((r) => [r.card.orderNumber, r.card.deliveryNumber?.replace(/-/g, ''), r.card.deliveryId.toLowerCase()].some((x) => x && x.toLowerCase() === n));
+    if (rider) app.select(rider.id);
+    if (del) {
+      if (!rider && del.card.riderId) app.select(del.card.riderId);
+      app.selectDelivery(del.card.deliveryId, true);
+    }
+    setMiss(!rider && !del);
+  };
+  return (
+    <>
+      <div className="rb-head">
+        <div>
+          <h2>라이더 관제</h2>
+          <p>운행 중인 라이더의 지금 위치예요(이동 이력은 보이지 않아요). {sim.mode === 'http' ? '10초마다 새로 불러와요.' : '가상(MOCK) 라이더예요.'}</p>
+        </div>
+        <form
+          className="rb-find"
+          onSubmit={(e) => {
+            e.preventDefault();
+            find();
+          }}
+        >
+          <label>
+            <span>주문번호·라이더 찾기</span>
+            <span className="rb-find-row">
+              <input value={q} onChange={(e) => (setQ(e.target.value), setMiss(false))} placeholder="주문번호 8자리 · 라이더 번호 6자리 · 라이더 ID" />
+              <button type="submit" disabled={!q.trim()}>
+                찾기
+              </button>
+            </span>
+            {miss && <small className="rb-miss">지금 화면에서 못 찾았어요(운행 중 라이더·최근 배송 안).</small>}
+          </label>
+          <label>
+            <span>센터</span>
+            <select disabled value={sim.params.mfcId}>
+              <option value={sim.params.mfcId}>부산진구 MFC ({sim.params.mfcId})</option>
+            </select>
+          </label>
+        </form>
+      </div>
+      <RiderKpis />
+    </>
+  );
 }
 
 /** 위 숫자 카드 — 누르면 목록이 그것만(백오피스와 같은 기준: 끊김 = 끊김 또는 위치 없음, 대기 = 배송 없음 · 끊김 아님) */

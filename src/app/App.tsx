@@ -4,8 +4,8 @@ import { ConsoleHeader } from '../ui/ConsoleHeader';
 import { ConsolePanel, LogsPage } from '../ui/ConsolePanel';
 import { KpiCards } from '../ui/KpiCards';
 import { MapDetail } from '../ui/MapDetail';
-import { RiderKpis, RiderList, RiderPanel } from '../ui/RiderBoard';
-import { RiderControlPage } from '../ui/RiderControlPage';
+import { RiderHead, RiderList, RiderPanel } from '../ui/RiderBoard';
+import { RecentDeliveries, RiderControlPage } from '../ui/RiderControlPage';
 import { ScenarioBar } from '../ui/ScenarioBar';
 import { PHASE_COLOR } from '../render/colors';
 import type { AppController, AppView } from './controller';
@@ -119,7 +119,7 @@ function Views({ panelOpen, onPanel }: { panelOpen: boolean; onPanel: () => void
   const control = view === 'control';
   return (
     <>
-      {control && <RiderKpis />}
+      {control && <RiderHead />}
       {view === 'field' && <KpiCards />}
       {(control || view === 'field') && <ScenarioSlot />}
       <div className={`c-main ${control ? 'rb-main' : panelOpen ? '' : 'closed'}`} hidden={!control && view !== 'field'}>
@@ -128,6 +128,11 @@ function Views({ panelOpen, onPanel }: { panelOpen: boolean; onPanel: () => void
         {control && <RiderPanel />}
         {view === 'field' && panelOpen && <ConsolePanel />}
       </div>
+      {control && (
+        <section className="rb-recent" aria-label="최근 배송">
+          <RecentDeliveries onOpen={(id) => app.selectDelivery(id, true)} />
+        </section>
+      )}
       {view === 'riders' && <RiderControlPage onShowOnMap={() => app.setView('field')} />}
       {view === 'analyze' && <AnalyzePage />}
       {view === 'logs' && <LogsPage />}
@@ -149,6 +154,13 @@ const LEGEND: readonly (readonly [string, string])[] = [
   ['전달', PHASE_COLOR.AT_CUSTOMER],
 ];
 
+/** 라이더 관제 지도 범례 — 라이더 이름표 색(controller CONTROL_COLOR 와 같은 값) */
+const CONTROL_LEGEND: readonly (readonly [string, string])[] = [
+  ['대기', '#16a34a'],
+  ['배송 중', '#2563eb'],
+  ['위치 끊김', '#ea7a0c'],
+];
+
 function MapView(p: { panelOpen: boolean; onPanel: () => void; noPanel?: boolean }) {
   const app = useApp();
   const b = app.board();
@@ -162,10 +174,10 @@ function MapView(p: { panelOpen: boolean; onPanel: () => void; noPanel?: boolean
   const st = app.mapStatus;
   const f = app.filter;
   return (
-    <section className="c-map-wrap" aria-label="지도">
+    <section className={`c-map-wrap ${p.noPanel ? 'rb-map' : ''}`} aria-label="지도">
       <div ref={ref} className="map" />
       <div className="c-legend" aria-label="지도 범례">
-        {LEGEND.map(([l, c]) => (
+        {(p.noPanel ? CONTROL_LEGEND : LEGEND).map(([l, c]) => (
           <span key={l}>
             <i style={{ background: c }} />
             {l}
@@ -175,7 +187,7 @@ function MapView(p: { panelOpen: boolean; onPanel: () => void; noPanel?: boolean
           <i className="solid" />
           경로
         </span>
-        {f && f !== 'failedCalls' && <span className="c-legend-f">핀: {filterName(f)}만</span>}
+        {!p.noPanel && f && f !== 'failedCalls' && <span className="c-legend-f">핀: {filterName(f)}만</span>}
         {st.kind === 'plane' && <span className="c-legend-f">좌표 평면 대체 화면</span>}
       </div>
       <MapDetail />

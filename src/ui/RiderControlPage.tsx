@@ -41,7 +41,6 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
   const cardOf = new Map(ops.rows.map((r) => [r.card.deliveryId, r]));
   const busy = rows.filter((r) => r.deliveries.length > 0).length;
   const stale = rows.filter((r) => r.loc !== 'ok').length;
-  const recent = [...ops.rows].sort((a, b) => b.card.createdAt - a.card.createdAt).slice(0, RECENT);
   const openOnMap = (deliveryId: string) => {
     onShowOnMap();
     app.setPanelTab('deliveries');
@@ -172,70 +171,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
       <RiderDetail row={rows.find((r) => r.id === app.selected)} onShowOnMap={openOnMap} />
       </div>
 
-      <h3 className="c-page-h3">최근 배송 <span className="c-muted">끝난 것까지 · 최근 {RECENT}건 · 줄을 누르면 관제 지도에서</span></h3>
-      <div className="c-table-wrap">
-        <table className="c-table">
-          <thead>
-            <tr>
-              <th>배송</th>
-              <th>상태</th>
-              <th>흐름</th>
-              <th>라이더</th>
-              <th title="배차 제안 횟수 · 거절·만료(누가 거절했는지는 줄을 눌러 흐름 탭)">제안</th>
-              <th>배차 요청</th>
-              <th>배정</th>
-              <th>픽업</th>
-              <th>끝남</th>
-              <th>걸린 시간</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recent.map((r) => {
-              const c = r.card;
-              const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
-              // 배정·픽업·끝남 시각 — 흐름(배차·수행 기록)에서. 진행 중이면 끝남 = 진행 중
-              const tl = sim.deliveryTimeline(c.deliveryId);
-              const at = (pred: (k: string) => boolean) => tl?.steps.find((x) => pred(x.key))?.atMs ?? null;
-              const assignedAt = at((k) => k === 'assigned');
-              const pickedAt = at((k) => k.startsWith('x-PICKED_UP'));
-              const offers = tl?.offers ?? [];
-              const declined = offers.filter((o) => o.state === 'REJECTED' || o.state === 'EXPIRED').length;
-              const t = (ms: number | null) => (ms !== null ? seoulTime(ms) : <span className="c-muted">—</span>);
-              return (
-                <tr key={c.deliveryId} className={r.alert ? `al-${r.alert.level}` : ''} onClick={() => openOnMap(c.deliveryId)} title={c.deliveryId}>
-                  <td>
-                    <b>{deliveryLabel(c)}</b>
-                  </td>
-                  <td>
-                    <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? stage.text : BUCKET_LABEL[r.bucket]}</span>
-                    {r.alert && <span className={`c-mini ${r.alert.level}`}> {r.alert.title}</span>}
-                  </td>
-                  <td>
-                    <Progress stage={stage} compact />
-                  </td>
-                  <td>{c.riderId ? shortRiderLabel(c.riderId, sim.riders) : <span className="c-muted">—</span>}</td>
-                  <td className="num">
-                    {offers.length ? offers.length : <span className="c-muted">—</span>}
-                    {declined > 0 && <span className="c-mini warn"> 거절·만료 {declined}</span>}
-                  </td>
-                  <td className="num">{r.startMs ? seoulTime(r.startMs) : '—'}</td>
-                  <td className="num">{t(assignedAt)}</td>
-                  <td className="num">{t(pickedAt)}</td>
-                  <td className="num">{tl?.endMs != null ? seoulTime(tl.endMs) : r.bucket === 'searching' || r.bucket === 'delivering' ? <span className="c-ongoing">진행 중</span> : <span className="c-muted">—</span>}</td>
-                  <td className="num">{r.totalSec === null ? '—' : `${dur(r.totalSec)}${r.bucket === 'searching' || r.bucket === 'delivering' ? '째' : ''}`}</td>
-                </tr>
-              );
-            })}
-            {recent.length === 0 && (
-              <tr>
-                <td colSpan={10} className="c-empty">
-                  배송이 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <RecentDeliveries onOpen={openOnMap} />
 
       <details className="c-page-links">
         <summary>라이더 백오피스에서 열기(대시보드·라이더 찾기·배송 찾기·지원센터·수행료 …)</summary>
@@ -247,4 +183,82 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
 
 function shortRiderLabel(id: string, riders: readonly { id: string; label?: string }[]): string {
   return riders.find((r) => r.id === id)?.label ?? shortRiderId(id);
+}
+
+
+/** 최근 배송 표(백오피스 라이더 관제 "최근 배송"처럼) — 목록 관제·라이더 관제가 같이 쓴다. 줄을 누르면 onOpen(배송 상세) */
+export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => void }) {
+  const app = useApp();
+  const { sim } = app;
+  const ops = app.board();
+  const recent = [...ops.rows].sort((a, b) => b.card.createdAt - a.card.createdAt).slice(0, RECENT);
+  const openOnMap = onOpen;
+  return (
+    <>
+  <h3 className="c-page-h3">최근 배송 <span className="c-muted">끝난 것까지 · 최근 {RECENT}건 · 줄을 누르면 관제 지도에서</span></h3>
+  <div className="c-table-wrap">
+    <table className="c-table">
+      <thead>
+        <tr>
+          <th>배송</th>
+          <th>상태</th>
+          <th>흐름</th>
+          <th>라이더</th>
+          <th title="배차 제안 횟수 · 거절·만료(누가 거절했는지는 줄을 눌러 흐름 탭)">제안</th>
+          <th>배차 요청</th>
+          <th>배정</th>
+          <th>픽업</th>
+          <th>끝남</th>
+          <th>걸린 시간</th>
+        </tr>
+      </thead>
+      <tbody>
+        {recent.map((r) => {
+          const c = r.card;
+          const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
+          // 배정·픽업·끝남 시각 — 흐름(배차·수행 기록)에서. 진행 중이면 끝남 = 진행 중
+          const tl = sim.deliveryTimeline(c.deliveryId);
+          const at = (pred: (k: string) => boolean) => tl?.steps.find((x) => pred(x.key))?.atMs ?? null;
+          const assignedAt = at((k) => k === 'assigned');
+          const pickedAt = at((k) => k.startsWith('x-PICKED_UP'));
+          const offers = tl?.offers ?? [];
+          const declined = offers.filter((o) => o.state === 'REJECTED' || o.state === 'EXPIRED').length;
+          const t = (ms: number | null) => (ms !== null ? seoulTime(ms) : <span className="c-muted">—</span>);
+          return (
+            <tr key={c.deliveryId} className={r.alert ? `al-${r.alert.level}` : ''} onClick={() => openOnMap(c.deliveryId)} title={c.deliveryId}>
+              <td>
+                <b>{deliveryLabel(c)}</b>
+              </td>
+              <td>
+                <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? stage.text : BUCKET_LABEL[r.bucket]}</span>
+                {r.alert && <span className={`c-mini ${r.alert.level}`}> {r.alert.title}</span>}
+              </td>
+              <td>
+                <Progress stage={stage} compact />
+              </td>
+              <td>{c.riderId ? shortRiderLabel(c.riderId, sim.riders) : <span className="c-muted">—</span>}</td>
+              <td className="num">
+                {offers.length ? offers.length : <span className="c-muted">—</span>}
+                {declined > 0 && <span className="c-mini warn"> 거절·만료 {declined}</span>}
+              </td>
+              <td className="num">{r.startMs ? seoulTime(r.startMs) : '—'}</td>
+              <td className="num">{t(assignedAt)}</td>
+              <td className="num">{t(pickedAt)}</td>
+              <td className="num">{tl?.endMs != null ? seoulTime(tl.endMs) : r.bucket === 'searching' || r.bucket === 'delivering' ? <span className="c-ongoing">진행 중</span> : <span className="c-muted">—</span>}</td>
+              <td className="num">{r.totalSec === null ? '—' : `${dur(r.totalSec)}${r.bucket === 'searching' || r.bucket === 'delivering' ? '째' : ''}`}</td>
+            </tr>
+          );
+        })}
+        {recent.length === 0 && (
+          <tr>
+            <td colSpan={10} className="c-empty">
+              배송이 없습니다.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+    </>
+  );
 }

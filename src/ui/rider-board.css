@@ -443,3 +443,155 @@
     grid-template-rows: auto 50vh auto;
   }
 }
+
+/* 라이더 관제 지도 — 백오피스처럼 라이더·픽업 센터·전달지를 이름표(알약)로. 오토바이 그림·반경 원 없음 */
+.rb-map .mk-rider {
+  width: auto;
+  height: auto;
+}
+.rb-map .mk-rider-shadow,
+.rb-map .mk-rider-ring,
+.rb-map .mk-rider-body {
+  display: none;
+}
+.rb-map .mk-rider-label {
+  position: static;
+  transform: none;
+  display: inline-block;
+  background: var(--rider-color);
+  color: #fff;
+  font: 700 12px/1.2 system-ui, sans-serif;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.rb-map .mk-selected .mk-rider-label {
+  box-shadow:
+    0 0 0 3px #2563eb,
+    0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.rb-map .mk-mfc {
+  width: auto;
+  height: auto;
+  filter: none;
+}
+.rb-map .mk-mfc svg {
+  display: none;
+}
+.rb-map .mk-mfc-label {
+  position: static;
+  transform: none;
+  display: inline-block;
+  background: #111827;
+  color: #fff;
+  font: 700 12px/1.2 system-ui, sans-serif;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.rb-map .mk-cust {
+  width: auto;
+  height: auto;
+}
+.rb-map .mk-cust-pin {
+  display: none;
+}
+.rb-map .mk-cust-label {
+  position: static;
+  transform: none;
+  display: inline-block;
+  background: #2563eb;
+  color: #fff;
+  font: 700 12px/1.2 system-ui, sans-serif;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+/* 머리 — 제목·설명 | 주문번호·라이더 찾기 · 센터 (백오피스처럼) */
+.rb-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 4px 16px 14px;
+}
+.rb-head h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 800;
+}
+.rb-head p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--c-sub);
+}
+.rb-find {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+.rb-find label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.rb-find-row {
+  display: flex;
+  gap: 6px;
+}
+.rb-find input,
+.rb-find select {
+  font: inherit;
+  font-weight: 400;
+  font-size: 13px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-panel);
+  color: var(--c-ink);
+}
+.rb-find input {
+  width: 260px;
+}
+.rb-find button {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-soft);
+  color: var(--c-ink);
+  cursor: pointer;
+}
+.rb-find button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.rb-miss {
+  font-weight: 400;
+  color: var(--c-orange);
+}
+
+/* 라이더 관제는 지도 칸 높이를 정하고 아래 "최근 배송"까지 화면을 내려 본다(백오피스처럼) */
+.c-main.rb-main {
+  flex: none;
+  height: calc(100vh - 250px);
+  min-height: 540px;
+}
+.c-shell:has(.rb-main:not([hidden])) {
+  overflow-y: auto;
+}
+.rb-recent {
+  margin: 0 16px 16px;
+  padding: 14px 16px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  box-shadow: var(--c-shadow);
+}
+.rb-recent .c-page-h3 {
+  margin-top: 0;
+}

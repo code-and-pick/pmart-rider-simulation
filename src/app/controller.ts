@@ -102,6 +102,7 @@ export class AppController {
     }
     surface.setMfc(center, this.sim.params.mfcId, CONTRACT.radiusStepsKm);
     this.drawnMfc = { ...center };
+    this.drawnMfcLabel = this.sim.params.mfcId;
     this.surface = surface;
     this.mapEl = container;
     this.ticker.emit();
@@ -191,6 +192,7 @@ export class AppController {
 
   private stopTicker: (() => void) | null = null;
   private drawnMfc: { lat: number; lng: number } | null = null;
+  private drawnMfcLabel = '';
   private lastStep = 0;
 
   select(id: string | null) {
@@ -350,10 +352,22 @@ export class AppController {
     if (this.pendingView && this.mapEl && this.mapEl.clientWidth > 0 && this.mapEl.clientHeight > 0) this.moveMap(this.pendingView);
     // MFC 위치가 바뀌면(실서버: center-master 를 읽은 뒤) 지도도 옮긴다
     const mfc = this.sim.mfcLocation;
-    if (!this.drawnMfc || this.drawnMfc.lat !== mfc.lat || this.drawnMfc.lng !== mfc.lng) {
-      s.setMfc(mfc, this.sim.params.mfcId, CONTRACT.radiusStepsKm);
-      s.panTo(mfc);
+    // 라이더 관제(기본 화면)는 백오피스 라이더 관제처럼 그린다(사용자 2026-11-19 "똑같이"): MFC = "픽업 센터" 이름표(반경 원 없음),
+    // 라이더 = 상태 색 이름표(끊김 주황·배송 중 파랑·대기 초록), 전달지·경로는 고른 라이더 것만. 모양은 지도 칸 class(rb-map)의 CSS 가 바꾼다
+    const control = this.view === 'control';
+    const mfcLabel = control ? '픽업 센터' : this.sim.params.mfcId;
+    const moved = !this.drawnMfc || this.drawnMfc.lat !== mfc.lat || this.drawnMfc.lng !== mfc.lng;
+    if (moved || this.drawnMfcLabel !== mfcLabel) {
+      s.setMfc(mfc, mfcLabel, control ? [] : CONTRACT.radiusStepsKm);
+      if (moved) s.panTo(mfc);
       this.drawnMfc = { ...mfc };
+      this.drawnMfcLabel = mfcLabel;
+    }
+    const focusRider = this.mapRider;
+    const focusDeliveries = new Set<string>();
+    if (control) {
+      for (const r of this.sim.riders) if (r.id === focusRider && r.deliveryId) focusDeliveries.add(r.deliveryId);
+      if (this.selectedDelivery) focusDeliveries.add(this.selectedDelivery);
     }
     for (const r of this.sim.riders) {
       if (!r.pos) {
@@ -364,7 +378,7 @@ export class AppController {
       s.upsertRider(r.id, {
         pos: r.pos,
         heading: r.heading,
-        color: PHASE_COLOR[r.phase],
+        color: control ? (r.locationOffline ? CONTROL_COLOR.stale : r.deliveryId ? CONTROL_COLOR.delivering : CONTROL_COLOR.waiting) : PHASE_COLOR[r.phase],
         label: r.label ?? r.id.replace(/^RD-/, ''),
         selected: r.id === this.mapRider || r.id === this.selected,
         title: `${r.external ? '라이더 앱 ' : ''}${r.id} · ${PHASE_LABEL[r.phase]}${r.deliveryId ? ` · ${r.deliveryId}` : ''}${r.locationOffline ? ' · 위치 전송 끊김(백엔드가 위치를 못 받는 중)' : ''}`,
@@ -379,7 +393,7 @@ export class AppController {
       }
       const kind =
         r.phase === 'TO_STORE' || r.phase === 'RETURNING' || r.phase === 'TO_PICKUP' ? 'TO_STORE' : r.phase === 'TO_CUSTOMER' ? 'TO_CUSTOMER' : null;
-      if (kind && r.path) s.upsertRoute(r.id, r.path, kind, r.pathKind === 'ROAD');
+      if (kind && r.path && (!control || r.id === focusRider)) s.upsertRoute(r.id, r.path, kind, r.pathKind === 'ROAD');
       else s.removeRoute(r.id);
     }
     const now = this.sim.clock.now;
@@ -388,7 +402,7 @@ export class AppController {
     const shown = f ? new Set(this.board().rows.filter((r) => rowMatches(r, f)).map((r) => r.card.deliveryId)) : null;
     for (const c of this.sim.deliveryCards()) {
       const pos = pinOf(c);
-      if (!pos || (shown && !shown.has(c.deliveryId) && c.deliveryId !== this.selectedDelivery)) {
+      if (!pos || (control && !focusDeliveries.has(c.deliveryId)) || (!control && shown && !shown.has(c.deliveryId) && c.deliveryId !== this.selectedDelivery)) {
         s.removeCustomer(c.deliveryId);
         continue; // 실서버: 고객 위치를 읽지 않는다(개인정보). 회수품을 받은 회수는 MFC 로 가므로 핀 없음
       }
@@ -404,13 +418,16 @@ export class AppController {
       s.upsertCustomer(c.deliveryId, {
         pos,
         color: customerColor(c),
-        label: c.deliveryNumber ?? deliveryLabel(c).replace(/^DL-/, ''),
+        label: control ? '전달지' : (c.deliveryNumber ?? deliveryLabel(c).replace(/^DL-/, '')),
         highlight: c.deliveryId === this.selectedDelivery,
       });
     }
     s.frame();
   }
 }
+
+/** 라이더 관제 지도 색 — 백오피스 라이더 관제와 같은 뜻(끊김·배송 중·대기) */
+const CONTROL_COLOR = { stale: '#ea7a0c', delivering: '#2563eb', waiting: '#16a34a' } as const;
 
 /** 배송 핀 자리 — 회수·다시 배송은 받기 전엔 잘못 둔 곳, 다시 배송은 받은 뒤 실제 집, 회수는 받은 뒤 없음(MFC 로) */
 function pinOf(c: DeliveryCard): LatLng | null {
