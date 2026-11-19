@@ -226,7 +226,8 @@ function TreeHead({ g, rider }: { g: RowGroup; rider: RiderRow | undefined }) {
 }
 
 /** 라이더 묶음 안 배송 한 줄(Onfleet 작업 줄) — 순서 원·배송번호·단계·경과, 지연이면 붉게. 누르면 지도 위 상세 */
-function TaskRow({ r, n }: { r: OpsRow; n: number }) {
+/** 배송 한 줄(번호·배송번호·상태·지금 단계 n째·지연·경과). rider = 단계별 묶음에서 라이더 이름(라이더별 묶음은 머리에 있으니 없음) */
+function TaskRow({ r, n, rider }: { r: OpsRow; n: number; rider?: string }) {
   const app = useApp();
   const c = r.card;
   const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
@@ -244,6 +245,7 @@ function TaskRow({ r, n }: { r: OpsRow; n: number }) {
             <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? stage.text : BUCKET_CHIP[r.bucket]}</span>
           </span>
           <span className="c-task-2">
+            {rider !== undefined && <span className="c-task-rider">{rider} · </span>}
             {active ? (r.stepLabel ?? stage.text) : stage.text}
             {inStep !== null && ` · ${dur(inStep)}째`}
             {r.alert && (
@@ -422,11 +424,12 @@ function DeliveriesView() {
                 ))}
               </ol>
             ) : (
-              <ul className="c-list">
-                {g.rows.map((r) => (
-                  <DeliveryItem key={r.card.deliveryId} r={r} sel={sel} rider={r.card.riderId ? riders.get(r.card.riderId) : undefined} />
+              // 단계별 — 한 줄씩(큰 카드면 한 묶음이 칸을 다 차지해 다음 단계가 안 보였다 — 사용자 2026-11-19 "보기 불편")
+              <ol className="c-tasks">
+                {g.rows.map((r, i) => (
+                  <TaskRow key={r.card.deliveryId} r={r} n={i + 1} rider={r.card.riderId ? (riders.get(r.card.riderId)?.name ?? shortRiderId(r.card.riderId)) : '라이더 없음'} />
                 ))}
-              </ul>
+              </ol>
             )}
           </details>
         ),

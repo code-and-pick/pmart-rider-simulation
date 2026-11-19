@@ -41,10 +41,19 @@ export function sortRows(rows: readonly OpsRow[], by: SortBy): OpsRow[] {
 }
 
 /** 지금 단계 이름·순서 — 진행 중은 단계 막대의 지금 칸(배차 요청 → 배정 → 가게 도착 → 픽업 → 고객 도착), 끝난 것은 결과 */
+/**
+ * 단계별 묶음 이름 = 지금 하는 일(라이더 관제 단계 칩과 같은 말). 예전엔 "배정·픽업"처럼 지난 단계 이름이라
+ * "픽업" 묶음이 픽업을 기다리는 건지 끝낸 건지 헷갈렸다(사용자 2026-11-19 "무슨 단계를 어떻게 묶어서 … 보기 불편").
+ * 회수·다시 배송은 가게 대신 잘못 둔 곳.
+ */
+const NOW_LABEL = ['라이더 찾는 중', '가게로 가는 중', '가게에서 픽업 기다림', '고객에게 가는 중', '고객 앞 · 전달 중'] as const;
+const NOW_LABEL_WRONG_PLACE = ['라이더 찾는 중', '잘못 둔 곳으로 가는 중', '잘못 둔 곳에서 찾는 중', '받아서 가는 중', '도착 · 전달 중'] as const;
+
 function stageOf(r: OpsRow): { key: string; label: string; order: number } {
   if (ACTIVE.has(r.bucket)) {
     const s = displayStage(r.card.dispatchState, r.card.executionState, r.card.radiusKm, r.card.purpose);
-    const label = s.index === 0 ? '라이더 찾는 중' : (s.labels[s.index] ?? s.text);
+    const wrong = r.card.purpose === 'MISDELIVERY_RECOVERY' || r.card.purpose === 'MISDELIVERY_REDELIVERY';
+    const label = (wrong ? NOW_LABEL_WRONG_PLACE : NOW_LABEL)[s.index] ?? s.text;
     return { key: `s${s.index}:${label}`, label, order: s.index };
   }
   const label = r.bucket === 'closed' ? '끝남(취소 등)' : BUCKET_LABEL[r.bucket];

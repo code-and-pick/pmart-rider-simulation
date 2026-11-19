@@ -46,8 +46,8 @@ describe('배송 목록 묶기·정렬', () => {
 
   it('단계별 = 찾는 중 → 배정 → 가게 도착 → 픽업 → … → 끝난 것', () => {
     const g = groupRows(sortRows(rows, 'urgent'), 'stage', (id) => id);
-    expect(g.map((x) => x.label)).toEqual(['라이더 찾는 중', '배정', '가게 도착', '픽업', '전달 완료']);
-    expect(g.find((x) => x.label === '가게 도착')?.alerts).toBe(1);
+    expect(g.map((x) => x.label)).toEqual(['라이더 찾는 중', '가게로 가는 중', '가게에서 픽업 기다림', '고객에게 가는 중', '전달 완료']);
+    expect(g.find((x) => x.label === '가게에서 픽업 기다림')?.alerts).toBe(1);
   });
 
   it('라이더별 = 라이더 없음 먼저 → 지연 있는 라이더 → 건수 많은 순, 묶음 안은 정렬 그대로', () => {

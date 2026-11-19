@@ -641,3 +641,9 @@
     grid-template-rows: auto 50vh auto;
   }
 }
+
+/* 단계별 묶음 한 줄 — 라이더 이름 */
+.c-task-rider {
+  color: var(--c-ink);
+  font-weight: 600;
+}
