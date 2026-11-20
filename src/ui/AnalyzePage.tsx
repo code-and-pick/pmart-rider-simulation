@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
 import { deliveryName, orderLabel, riderName } from '../domain/riderId';
@@ -8,7 +8,6 @@ import { riderIndex } from './riderTable';
 import { binCount, binLabel, binRange, dayStart, defaultView, frame, frameTitle, niceStep, seoulDay, shift, type Bin, type ChartView } from './timeChart';
 import { OrderTab } from './OrderTab';
 import { groupOrders } from './orders';
-import { Icon, type IconName } from './Icon';
 import './analyze.css';
 
 /*
@@ -59,87 +58,51 @@ export function AnalyzePage() {
     return rows.filter((r) => (r.startMs as number) > to - 3600_000 && (r.startMs as number) <= to).length;
   });
   const rate = finished ? counts.done / finished : null;
-  // 시간대 막대의 기간 — 머리 오른쪽에서 고른다(사용자 2026-11-20 시안)
-  const [chosen, setChosen] = useState<ChartView | null>(null);
-  const view = chosen ?? defaultView(rows.map((r) => r.startMs as number), nowMs);
-  const f = frame(view, nowMs);
   return (
     <section className="c-page an" aria-label="분석">
       <header className="an-head">
-        <span className="an-head-i">
-          <Icon name="chart" size={30} />
-        </span>
         <div>
-          <h2>배송 분석</h2>
+          <h2>분석</h2>
           <p>{real ? '실서버 직원 배송 목록 최근 30건' : '가상(MOCK) — 화면을 연 뒤 생긴 배송'}</p>
         </div>
-        <div className="an-head-r">
-          <span className="an-asof">
-            {seoulTime(nowMs).slice(0, 5)} 기준 · {real ? '실제 시각' : '시뮬 시각'}
-          </span>
-          {view.mode !== 'recent' && (
-            <span className="an-nav">
-              <button aria-label={view.mode === 'day' ? '전날' : '앞 7일'} onClick={() => setChosen(shift(view, -1))}>
-                ‹
-              </button>
-              <b>{frameTitle(f, nowMs)}</b>
-              <button aria-label={view.mode === 'day' ? '다음 날' : '뒤 7일'} onClick={() => setChosen(shift(view, 1))} disabled={f.to > nowMs}>
-                ›
-              </button>
-            </span>
-          )}
-          <Seg
-            label="시간대별 배송 기간"
-            value={view.mode}
-            options={[
-              ['recent', '최근 2시간'],
-              ['day', '하루'],
-              ['week', '7일'],
-            ]}
-            onChange={(m) => setChosen({ mode: m, anchor: m === 'recent' ? nowMs : view.anchor })}
-          />
-        </div>
+        <span className="an-asof">
+          {seoulTime(sim.clock.epochMs()).slice(0, 5)} 기준 · {real ? '실제 시각' : '시뮬 시각'}
+        </span>
       </header>
 
       <div className="an-tiles">
-        <Tile icon="truck" label="배송" value={String(b.rows.length)} unit="건" sub={`진행 중 ${counts.active}건`} viz={<Spark values={hourly} title="최근 12시간 1시간마다 배차 요청 수" />} />
+        <Tile label="배송" value={String(b.rows.length)} unit="건" sub={`진행 중 ${counts.active}건`} viz={<Spark values={hourly} title="최근 12시간 1시간마다 배차 요청 수" />} />
         <Tile
-          icon="check"
           label="완료율"
           value={rate !== null ? String(Math.round(rate * 100)) : '—'}
           unit={rate !== null ? '%' : ''}
           sub={`완료 ${counts.done} · 실패 ${counts.failed}`}
           viz={rate !== null ? <Ring ratio={rate} /> : undefined}
         />
-        <Tile icon="clock" label="한 건 평균" value={m.phases ? dur(m.phases.totalSec) : '—'} sub="배차 요청 → 전달 완료" />
-        <Tile icon="bolt" label="라이더 찾기 평균" value={m.phases ? dur(m.phases.segments[0]?.sec ?? 0) : '—'} sub="배차 요청 → 수락" />
-        <Tile icon="alert" label="지연·이상" value={String(b.counts.delayed)} unit="건" sub="진행 중 기준 넘김" bad={b.counts.delayed > 0} />
+        <Tile label="한 건 평균" value={m.phases ? dur(m.phases.totalSec) : '—'} sub="배차 요청 → 전달 완료" />
+        <Tile label="라이더 찾기 평균" value={m.phases ? dur(m.phases.segments[0]?.sec ?? 0) : '—'} sub="배차 요청 → 수락" />
+        <Tile label="지연·이상" value={String(b.counts.delayed)} unit="건" sub="진행 중 기준 넘김" bad={b.counts.delayed > 0} />
       </div>
 
       <div className="an-row">
         <section className="an-card an-fill" aria-label="시간대별 배송 건수">
-          <TimeChart rows={rows} view={view} onView={setChosen} />
+          <TimeChart rows={rows} />
         </section>
-        <div className="an-col2">
-          <section className="an-card" aria-label="배송 상태">
-            <div className="an-card-h">
-              <h3>
-                <Icon name="layers" className="an-hi" />
-                배송 상태
-              </h3>
-            </div>
-            <StatusDonut counts={counts} total={b.rows.length} />
-          </section>
-          <section className="an-card" aria-label="구간별 평균">
-            <div className="an-card-h">
-              <h3>
-                <Icon name="steps" className="an-hi" />
-                구간별 평균 <span className="an-note">(완료 {m.phases?.n ?? 0}건 기준)</span>
-              </h3>
-            </div>
-            {m.phases ? <Steps segments={m.phases.segments} total={m.phases.totalSec} /> : <p className="an-empty">완료된 배송이 생기면 나옵니다.</p>}
-          </section>
-        </div>
+        <section className="an-card" aria-label="상태와 구간">
+          <div className="an-card-h">
+            <h3>상태</h3>
+          </div>
+          <StatusDonut counts={counts} total={b.rows.length} />
+          <div className="an-card-h an-gap">
+            <h3>구간별 평균</h3>
+            <span className="an-note">완료 {m.phases?.n ?? 0}건 기준</span>
+          </div>
+          {m.phases ? (
+            <Journey segments={m.phases.segments} total={m.phases.totalSec} />
+          ) : (
+            <p className="an-empty">완료된 배송이 생기면 나옵니다.</p>
+          )}
+        </section>
       </div>
 
       <section className="an-card" aria-label="라이더별 배송">
@@ -149,10 +112,9 @@ export function AnalyzePage() {
   );
 }
 
-function Tile({ icon, label, value, unit, sub, bad, viz }: { icon: IconName; label: string; value: string; unit?: string; sub: string; bad?: boolean; viz?: ReactNode }) {
+function Tile({ label, value, unit, sub, bad, viz }: { label: string; value: string; unit?: string; sub: string; bad?: boolean; viz?: ReactNode }) {
   return (
     <div className={`an-tile ${bad ? 'bad' : ''} ${viz ? 'has-viz' : ''}`}>
-      <Icon name={icon} size={24} className="an-tile-i" />
       <span className="l">{label}</span>
       <span className="v">
         {value}
@@ -255,44 +217,44 @@ function StatusDonut({ counts, total }: { counts: Record<Kind, number>; total: n
   );
 }
 
-/** 구간 색 — 지도·기록 탭 흐름 막대와 같은 구간 색 */
+/** 구간별 평균 — 배차 요청 → 전달 완료 한 줄 여정(조각 길이 = 걸린 시간 비율) + 구간마다 번호·이름·시간·비율 */
 const JOURNEY_COLOR: Record<string, string> = { findRider: '#8f7cff', toStore: '#4c8dff', atStore: '#d35cff', storeAll: '#4c8dff', toCustomer: '#ff8a3d' };
-
-/** 구간별 평균 — 단계 카드 [번호 이름 / 시간(비율)] › … + 합계 카드(사용자 2026-11-20 시안) */
-function Steps({ segments, total }: { segments: readonly { key: string; label: string; sec: number; hint: string }[]; total: number }) {
+function Journey({ segments, total }: { segments: readonly { key: string; label: string; sec: number; hint: string }[]; total: number }) {
   const sum = Math.max(1, segments.reduce((a, x) => a + x.sec, 0));
   return (
-    <div className="an-steps2">
-      {segments.map((x, i) => (
-        <Fragment key={x.key}>
-          {i > 0 && (
-            <span className="arr" aria-hidden>
-              ›
-            </span>
-          )}
-          <div className="st" title={`${x.label} — ${x.hint}`}>
-            <span className="h">
-              <span className="n" style={{ background: JOURNEY_COLOR[x.key] ?? 'var(--ch-active)' }}>
-                {i + 1}
-              </span>
-              {PHASE_SHORT[x.key] ?? x.label}
-            </span>
-            <span className="v">
-              <b>{dur(x.sec)}</b> <em>({Math.round((x.sec / sum) * 100)}%)</em>
-            </span>
-          </div>
-        </Fragment>
-      ))}
-      <div className="st tot">
-        <span className="h">합계(한 건 평균)</span>
-        <span className="v">
-          <b>{dur(total)}</b>
-        </span>
+    <div className="an-journey">
+      <div className="an-journey-bar" role="img" aria-label={segments.map((x) => `${PHASE_SHORT[x.key] ?? x.label} ${dur(x.sec)}`).join(', ')}>
+        {segments.map((x, i) => (
+          <i key={x.key} style={{ flexGrow: Math.max(x.sec, sum * 0.05), background: JOURNEY_COLOR[x.key] ?? 'var(--ch-active)' }} title={`${x.label} — ${x.hint}`}>
+            {i + 1}
+          </i>
+        ))}
       </div>
+      <div className="an-journey-ends">
+        <span>배차 요청</span>
+        <span>전달 완료</span>
+      </div>
+      <ol className="an-journey-legs">
+        {segments.map((x, i) => (
+          <li key={x.key} title={x.hint}>
+            <span className="n" style={{ background: JOURNEY_COLOR[x.key] ?? 'var(--ch-active)' }}>
+              {i + 1}
+            </span>
+            <span className="l">{PHASE_SHORT[x.key] ?? x.label}</span>
+            <b>{dur(x.sec)}</b>
+            <em>{Math.round((x.sec / sum) * 100)}%</em>
+          </li>
+        ))}
+        <li className="tot">
+          <span className="n" />
+          <span className="l">합계(한 건 평균)</span>
+          <b>{dur(total)}</b>
+          <em />
+        </li>
+      </ol>
     </div>
   );
 }
-
 
 function Legend({ kinds }: { kinds: readonly Kind[] }) {
   return (
@@ -323,13 +285,15 @@ function Seg<T extends string>({ value, options, onChange, label }: { value: T; 
  * 시간대별 배송 건수 — 고정 틀 셋(최근 2시간 10분 칸·하루 1시간 칸·7일 하루 칸, ui/timeChart.ts) + 앞뒤 이동.
  * 막대 = 배차 요청이 그 칸에 들어온 배송 수(쌓기: 완료 → 진행 중 → 실패). 마우스 = 막대 위 카드, 누르면 그 칸 배송 표.
  */
-function TimeChart({ rows, view: v, onView }: { rows: readonly OpsRow[]; view: ChartView; onView: (v: ChartView) => void }) {
+function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
   const app = useApp();
   const nowMs = app.sim.clock.epochMs();
+  const [chosen, setChosen] = useState<ChartView | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const [pick, setPick] = useState<number | null>(null);
   const idx = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
   const items = rows.map((r) => ({ at: r.startMs as number, kind: kindOf(r), r }));
+  const v = chosen ?? defaultView(items.map((i) => i.at), nowMs);
   const f = frame(v, nowMs);
   const bins = binCount(items, f, ORDER);
   const total = bins.reduce((a, b) => a + b.total, 0);
@@ -339,7 +303,7 @@ function TimeChart({ rows, view: v, onView }: { rows: readonly OpsRow[]; view: C
   const go = (n: ChartView) => {
     setHover(null);
     setPick(null);
-    onView(n);
+    setChosen(n);
   };
   const yStep = niceStep(peak?.total ?? 0);
   const max = Math.max(yStep, Math.ceil((peak?.total ?? 0) / yStep) * yStep);
@@ -352,14 +316,37 @@ function TimeChart({ rows, view: v, onView }: { rows: readonly OpsRow[]; view: C
   return (
     <>
       <div className="an-card-h">
-        <h3>
-          <Icon name="chart" className="an-hi" />
-          시간대별 배송 건수
-        </h3>
+        <h3>시간대별 배송 건수</h3>
+        <div className="an-ctl">
+          {v.mode !== 'recent' && (
+            <span className="an-nav">
+              <button aria-label={v.mode === 'day' ? '전날' : '앞 7일'} onClick={() => go(shift(v, -1))}>
+                ‹
+              </button>
+              <b>{frameTitle(f, nowMs)}</b>
+              <button aria-label={v.mode === 'day' ? '다음 날' : '뒤 7일'} onClick={() => go(shift(v, 1))} disabled={f.to > nowMs}>
+                ›
+              </button>
+            </span>
+          )}
+          <Seg
+            label="보는 기간"
+            value={v.mode}
+            options={[
+              ['recent', '최근 2시간'],
+              ['day', '하루'],
+              ['week', '7일'],
+            ]}
+            onChange={(m) => go({ mode: m, anchor: m === 'recent' ? nowMs : v.anchor })}
+          />
+        </div>
       </div>
 
       <div className="an-sum">
-        <span className="sr-only">합계 {total}건</span>
+        <span className="big">
+          {total}
+          <small>건</small>
+        </span>
         <span className="parts">
           {ORDER.filter((k) => k !== 'other' || sum('other')).map((k) => (
             <span key={k}>
@@ -553,10 +540,7 @@ function RiderTable({ rows }: { rows: readonly OpsRow[] }) {
   return (
     <>
       <div className="an-card-h">
-        <h3>
-          <Icon name="user" className="an-hi" />
-          라이더별 배송
-        </h3>
+        <h3>라이더별 배송</h3>
         <div className="an-ctl">
           <Legend kinds={['done', 'active', 'failed', 'other']} />
           <Seg
@@ -604,7 +588,6 @@ function RiderTable({ rows }: { rows: readonly OpsRow[] }) {
               return (
                 <tr key={id || 'none'} className={id ? '' : 'none'}>
                   <td className="name" title={id}>
-                    <i className={`an-rdot ${id ? (active ? 'k-active' : 'k-done') : 'none'}`} />
                     {id ? (idx.get(id)?.name ?? riderName(id)) : '라이더 없음 (배차 대기)'}
                   </td>
                   <td className="num">{list.length}건</td>
