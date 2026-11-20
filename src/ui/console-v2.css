@@ -1228,3 +1228,54 @@ a.c-btn-s {
 .c-task-t {
   font-size: 12px;
 }
+
+/* ───────── 화면을 확대하거나 창이 좁을 때 겹침·찌그러짐 막기(사용자 2026-11-20 "화면 확대하면 UI 겹치는 거 생기네") ───────── */
+/* 배송 목록 한 줄 — 번호·종류·상태 칩이 낱말 단위로 줄바꿈(글자 중간에서 끊기지 않게) */
+.c-task-1 {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.c-task-no {
+  white-space: nowrap;
+}
+.c-task-kind {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-sub);
+  white-space: nowrap;
+}
+.c-item-1 {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+/* 960~1400px — 지도가 너무 좁아지지 않게 양옆 칸을 조금 줄임 */
+@media (max-width: 1400px) {
+  .c-shell .c-main.dd-main {
+    grid-template-columns: 300px minmax(280px, 1fr) 340px;
+  }
+  .c-shell .c-main.rb-main {
+    grid-template-columns: 280px minmax(280px, 1fr) 320px;
+  }
+}
+/* 960px 아래(크게 확대) — 한 줄로 쌓고 화면 전체를 스크롤. 목록·지도·상세가 각자 높이를 가진다 */
+@media (max-width: 960px) {
+  .c-shell {
+    overflow-y: auto;
+  }
+  .c-shell .c-main.dd-main,
+  .c-shell .c-main.rb-main {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(320px, 55vh) minmax(320px, 55vh) auto;
+  }
+  .c-main.dd-main > .dd-panel,
+  .c-main.rb-main > .rb-panel {
+    min-height: 240px;
+  }
+  .c-head {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+}

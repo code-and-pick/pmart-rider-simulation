@@ -233,7 +233,8 @@ function TaskRow({ r, n, rider }: { r: OpsRow; n: number; rider?: string }) {
         <span className="c-task-n">{n}</span>
         <span className="c-task-main">
           <span className="c-task-1">
-            <b>{deliveryName(c)}</b>
+            <b className="c-task-no">{deliveryLabel(c)}</b>
+            <span className="c-task-kind">{deliveryKindName(c.purpose)}</span>
             <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? stage.text : BUCKET_CHIP[r.bucket]}</span>
           </span>
           <span className="c-task-2">
