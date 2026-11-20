@@ -11,6 +11,7 @@ import { ActiveOrders } from './ActiveOrders';
 import { OpsPanel } from './OpsPanel';
 import { RiderDetail } from './RiderDetail';
 import { Progress } from './Progress';
+import { SearchFilterBar } from './SearchFilterBar';
 import { locStatus, rowMatchesRider, rowsFromControl, rowsFromRiders, vehicleName, type RiderRow, type RiderTableFilter } from './riderTable';
 
 const FILTERS: readonly (readonly [RiderTableFilter, string])[] = [
@@ -97,16 +98,17 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
         </button>
       </div>
 
-      <div className="c-page-tools">
-        <div className="c-status" role="tablist" aria-label="라이더 거르기">
-          {FILTERS.map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={f === k} className={f === k ? 'on' : ''} onClick={() => setF(k)}>
-              {l} <b>{rows.filter((r) => rowMatchesRider(r, k)).length}</b>
-            </button>
-          ))}
-        </div>
-        <input className="c-search" type="search" placeholder="이름 · 라이더 번호 · 배송번호" value={q} onChange={(e) => setQ(e.target.value)} aria-label="라이더 찾기" />
-      </div>
+      <SearchFilterBar
+        query={q}
+        onQuery={setQ}
+        placeholder="이름 · 라이더 번호 · 배송번호로 찾기"
+        searchLabel="라이더 찾기"
+        value={f}
+        onValue={setF}
+        options={FILTERS.map(([k, l]) => [k, l, rows.filter((r) => rowMatchesRider(r, k)).length] as const)}
+        allKey="all"
+        warnKeys={['stale']}
+      />
 
       <div className="c-rider-split">
       <div className="c-table-wrap">
@@ -222,7 +224,6 @@ export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => v
   const [q, setQ] = useState('');
   const [f, setF] = useState<RecentFilter>('all');
   const [open, setOpen] = useState<string | null>(null);
-  const [filterOpen, setFilterOpen] = useState(false);
   const needle = q.trim().toLowerCase();
   const label = (id: string) => shortRiderLabel(id, sim.riders);
   const sorted = [...ops.rows].sort((a, b) => b.card.createdAt - a.card.createdAt);
@@ -234,60 +235,17 @@ export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => v
       <h3 className="c-page-h3">
         최근 배송 <span className="c-n">{recent.length}건</span>
       </h3>
-      {/* 왼쪽에 [찾기 칸][깔때기] — 깔때기를 누르면 상태 고르기 팝업(사용자 2026-11-20 "검색창도 왼쪽 … 필터는 그 옆에 깔때기 … 팝업창에서 선택") */}
-      <div className="c-recent-bar">
-        <input className="c-recent-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="배송·주문번호, ID, 라이더 이름·번호로 찾기" aria-label="최근 배송 찾기" />
-        <div className="c-recent-fwrap">
-          <button
-            className={`c-recent-funnel ${f !== 'all' ? 'on' : ''}`}
-            aria-haspopup="listbox"
-            aria-expanded={filterOpen}
-            aria-label="상태로 거르기"
-            title="상태로 거르기"
-            onClick={() => setFilterOpen(!filterOpen)}
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-              <path d="M1.5 2.5h13l-5 6v5l-3-1.5v-3.5z" fill="currentColor" />
-            </svg>
-          </button>
-          {filterOpen && (
-            <>
-              <div className="c-pop-back" onClick={() => setFilterOpen(false)} />
-              <ul className="c-pop" role="listbox" aria-label="상태">
-                {RECENT_FILTERS.map(([k, l]) => {
-                  const n = countOf(k);
-                  return (
-                    <li key={k}>
-                      <button
-                        role="option"
-                        aria-selected={f === k}
-                        className={`${f === k ? 'on' : ''} ${k === 'alert' && n ? 'warn' : ''}`}
-                        disabled={k !== 'all' && n === 0}
-                        onClick={() => {
-                          setF(k);
-                          setFilterOpen(false);
-                        }}
-                      >
-                        <span className="ck">{f === k ? '✓' : ''}</span>
-                        <span className="l">{l}</span>
-                        <b>{n}</b>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
-          )}
-        </div>
-        {f !== 'all' && (
-          <span className="c-recent-chip">
-            {RECENT_FILTERS.find(([k]) => k === f)?.[1]}
-            <button aria-label="거르기 풀기" onClick={() => setF('all')}>
-              ✕
-            </button>
-          </span>
-        )}
-      </div>
+      <SearchFilterBar
+        query={q}
+        onQuery={setQ}
+        placeholder="배송·주문번호, ID, 라이더 이름·번호로 찾기"
+        searchLabel="최근 배송 찾기"
+        value={f}
+        onValue={setF}
+        options={RECENT_FILTERS.map(([k, l]) => [k, l, countOf(k)] as const)}
+        allKey="all"
+        warnKeys={['alert']}
+      />
       <div className="c-table-wrap">
         <table className="c-table c-recent">
           <thead>
