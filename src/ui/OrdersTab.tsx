@@ -75,21 +75,43 @@ export function OrdersTab({ cards }: { cards: DeliveryCard[] }) {
                   <span key={i} className="ph-seg" style={{ flexGrow: Math.max(s.sec, 1), background: SEG_COLOR[s.kind] }} title={`${s.label}까지 ${dur(s.sec)}`} />
                 ))}
               </div>
+              <ol className="ord-dlv" aria-label="이 주문의 배송">
+                {r.deliveries.map((d) => (
+                  <li key={d.deliveryId} className={`tone-${d.tone}`} title={d.deliveryId}>
+                    <span className="n">{d.n}차</span>
+                    <span className="kind">{d.kind}</span>
+                    <span className="dots" aria-label={`${d.labels.length}단계 중 ${d.index + 1}단계`}>
+                      {d.labels.map((l, i) => (
+                        <i key={i} className={i < d.index ? 'past' : i === d.index ? 'now' : ''} title={l} />
+                      ))}
+                    </span>
+                    <span className="state">{d.stateText}</span>
+                    <span className="no muted">{d.deliveryNumber ?? shortId(d.deliveryId)}</span>
+                  </li>
+                ))}
+              </ol>
               <div className="stage-text">
-                <span className={r.bad ? 'warn-text' : ''}>{r.endMs === null ? `진행 중 — 마지막: ${r.lastLabel}` : r.lastLabel}</span>
                 <span className="muted">
-                  {' '}
-                  · 시작 {r.startMs !== null ? seoulTime(r.startMs) : '—'}
-                  {r.deliveryIds.length > 1 ? ` · 배송 ${r.deliveryIds.length}건` : ''}
+                  시작 {r.startMs !== null ? seoulTime(r.startMs) : '—'}
+                  {r.deliveries.length > 1 && ` · 배송 ${r.deliveries.length}건 중 ${r.deliveries.filter((d) => d.tone === 'done').length}건 끝남`}
+                  {' · 누르면 단계별 시각'}
                 </span>
               </div>
             </button>
             {isOpen &&
-              r.deliveryIds.map((id) => {
+              r.deliveries.map((d) => {
+                const id = d.deliveryId;
                 const t = sim.deliveryTimeline(id);
                 return t ? (
                   <div key={id}>
-                    {r.deliveryIds.length > 1 && <div className="ord-sub muted" title={id}>{t.deliveryNumber ?? shortId(id)}</div>}
+                    {r.deliveries.length > 1 && (
+                      <div className={`ord-sub tone-${d.tone}`} title={id}>
+                        <b>
+                          {d.n}차 · {d.kind}
+                        </b>{' '}
+                        <span className="muted">{d.deliveryNumber ?? shortId(id)}</span> — {d.stateText}
+                      </div>
+                    )}
                     <Timeline t={t} nowMs={nowMs} />
                   </div>
                 ) : null;

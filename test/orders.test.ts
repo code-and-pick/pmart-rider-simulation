@@ -115,3 +115,19 @@ describe('화면용 번호', () => {
     expect(c!.deliveryNumber).toBe(`${c!.orderNumber}-1`);
   });
 });
+
+describe('주문 탭 — 한 주문의 배송들(1차·재배송)', () => {
+  it('생긴 순으로 n차, 일반 배송은 첫 배송 → 재배송, 목적이 있으면 그 이름, 상태는 배차·수행 상태로', () => {
+    const a = { ...card('D1', 'O1', 1), executionState: 'FAILED' as const, dispatchState: 'CLOSED' as const };
+    const b = { ...card('D2', 'O1', 3), purpose: 'FAILED_DELIVERY_RETURN' as const };
+    const c = { ...card('D3', 'O1', 2), executionState: 'COMPLETED' as const, dispatchState: 'CLOSED' as const };
+    const tlOf = (id: string) => tl(id, [['created', id === 'D1' ? 0 : id === 'D3' ? 100 : 200]], false);
+    const [row] = groupOrders([a, b, c], tlOf, S);
+    expect(row!.deliveries.map((d) => [d.n, d.deliveryId, d.kind, d.tone])).toEqual([
+      [1, 'D1', '첫 배송', 'fail'],
+      [2, 'D3', '재배송', 'done'],
+      [3, 'D2', '실패 반납', 'active'],
+    ]);
+    expect(row!.deliveries[0]!.stateText).toBe('전달 실패 확정');
+  });
+});

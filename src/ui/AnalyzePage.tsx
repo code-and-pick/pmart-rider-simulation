@@ -204,6 +204,7 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
         )}
       </p>
 
+      <div className="c-an-plot">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`시간대별 배송 막대 — ${frameTitle(f, nowMs)}`}>
         <text className="tick unit" x={pad.l - 6} y={pad.t - 8} textAnchor="end">
           (건)
@@ -262,6 +263,27 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
           배차 요청 시각 기준 · {f.mode === 'recent' ? '10분' : f.mode === 'day' ? '1시간' : '하루'}마다
         </text>
       </svg>
+      {hv && hover !== null && (
+        // 마우스를 올린 막대 바로 위에 뜨는 작은 카드 — 칸 범위·상태별 건수
+        <div className="c-an-float" role="status" style={{ left: `${(x(hover) / W) * 100}%`, top: `${(Math.max(pad.t, y(hv.total)) / H) * 100}%` }}>
+          <b>{binRange(f.mode, hv)}</b>
+          {hv.total ? (
+            <>
+              <span className="big">{hv.total}건</span>
+              {ORDER.filter((k) => hv.counts[k]).map((k) => (
+                <span key={k}>
+                  <i className={`k-${k}`} />
+                  {KIND_LABEL[k]} {hv.counts[k]}
+                </span>
+              ))}
+              <em>{f.mode === 'week' ? '누르면 그날 시간대로' : '누르면 어떤 배송인지'}</em>
+            </>
+          ) : (
+            <span>배송 없음</span>
+          )}
+        </div>
+      )}
+      </div>
 
       <div className="c-an-foot">
         <div className="c-an-legend" aria-label="범례">
@@ -272,18 +294,6 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
             </span>
           ))}
         </div>
-        <span className="c-an-hint" role="status">
-          {hv ? (
-            <>
-              <b>{binRange(f.mode, hv)}</b> · {hv.total ? `완료 ${hv.counts.done} · 진행 중 ${hv.counts.active} · 실패 ${hv.counts.failed}${hv.counts.other ? ` · 취소·기타 ${hv.counts.other}` : ''} · 합계 ${hv.total}` : '배송 없음'}
-              {f.mode === 'week' && ' — 누르면 그날 시간대'}
-            </>
-          ) : f.mode === 'week' ? (
-            '막대를 누르면 그날 시간대로'
-          ) : (
-            '막대를 누르면 어떤 배송인지 아래에'
-          )}
-        </span>
       </div>
 
       {pb && (
@@ -389,7 +399,7 @@ export function pack(list: readonly Span[]): { lines: number; placed: (Span & { 
 }
 
 function laneHeight(lines: number): number {
-  return lines <= 1 ? 26 : 8 + lines * 12;
+  return lines <= 1 ? 32 : 8 + lines * 14;
 }
 
 /**

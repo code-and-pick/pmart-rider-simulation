@@ -1366,3 +1366,136 @@ i.k-other {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
+
+/* 기록 > 주문 흐름 — 주문 안 배송들: n차 · 종류 · 단계 점 · 지금 상태 */
+.ord-dlv {
+  list-style: none;
+  margin: 8px 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.ord-dlv li {
+  display: grid;
+  grid-template-columns: 34px 84px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.ord-dlv .n {
+  font-weight: 800;
+}
+.ord-dlv .kind {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ord-dlv .dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.ord-dlv .dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c-line);
+}
+.ord-dlv .state {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ord-dlv .no {
+  font-size: 11px;
+}
+.ord-dlv .tone-done .dots i.past,
+.ord-dlv .tone-done .dots i.now {
+  background: var(--ch-done);
+}
+.ord-dlv .tone-done .state,
+.ord-sub.tone-done b {
+  color: var(--ch-done);
+}
+.ord-dlv .tone-active .dots i.past,
+.ord-dlv .tone-active .dots i.now {
+  background: var(--ch-active);
+}
+.ord-dlv .tone-active .dots i.now {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ch-active) 35%, transparent);
+}
+.ord-dlv .tone-active .state,
+.ord-sub.tone-active b {
+  color: var(--ch-active);
+}
+.ord-dlv .tone-fail .dots i.past,
+.ord-dlv .tone-fail .dots i.now {
+  background: var(--ch-failed);
+}
+.ord-dlv .tone-fail .state,
+.ord-sub.tone-fail b {
+  color: var(--ch-failed);
+}
+.ord-dlv .tone-warn .dots i.past,
+.ord-dlv .tone-warn .dots i.now {
+  background: var(--c-orange);
+}
+.ord-dlv .tone-warn .state,
+.ord-sub.tone-warn b {
+  color: var(--c-orange);
+}
+.ord-sub {
+  font-size: 13px !important;
+  margin: 12px 0 2px !important;
+}
+
+/* 분석 — 막대 위에 뜨는 카드 */
+.c-an-plot {
+  position: relative;
+}
+.c-an-float {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 2;
+}
+.c-an-float .big {
+  font-size: 18px;
+  font-weight: 800;
+}
+.c-an-float span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.c-an-float i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.c-an-float em {
+  font-style: normal;
+  color: var(--c-sub);
+  font-size: 11px;
+  margin-top: 2px;
+}
+/* 타임라인 막대 — 글자가 막대 가운데에 */
+.c-tl-bar {
+  display: flex;
+  align-items: center;
+}
+.c-tl-bar > span {
+  line-height: 1;
+  font-size: 12px;
+}

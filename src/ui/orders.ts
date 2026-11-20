@@ -1,6 +1,7 @@
 // 주문 탭 — 배송 카드를 주문번호로 묶고, 주문마다 흐름 막대(구간별 걸린 시간)를 만든다. React 에 의존하지 않는다(시험).
 // 한 주문에 배송이 여럿일 수 있다(오배송 회수·재발송·다시 배송). 주문번호를 모르면 배송 하나를 한 줄로 본다.
 
+import { displayStage, purposeLabel, type StageTone } from '../domain/displayStage';
 import type { DeliveryCard } from '../sim/world';
 import type { DeliveryTimeline, TimelineStep } from '../sim/timeline';
 
@@ -31,8 +32,33 @@ export interface OrderRow {
   /** 실패·취소로 끝났거나 지금 그 상태 */
   bad: boolean;
   segments: OrderSeg[];
+  /** 이 주문의 배송들 — 생긴 순(1차·2차…). 한 주문에 배송이 여럿이면 무엇이 재배송이고 어디까지 됐는지 보인다 */
+  deliveries: OrderDelivery[];
   /** 가장 늦게 생긴 배송 시각(정렬용) */
   createdAt: number;
+}
+
+/** 주문 안 배송 한 건 — n차, 무슨 배송인지, 지금 어디까지 */
+export interface OrderDelivery {
+  deliveryId: string;
+  deliveryNumber: string | null;
+  /** 생긴 순서 1, 2, 3… */
+  n: number;
+  /** "첫 배송"·"재배송"·"오배송 회수"·"재발송"·"다시 배송"·"반품 회수"·"실패 반납" */
+  kind: string;
+  /** 지금 상태 글(배차·수행 상태로 — 전달 완료·전달 실패 확정·라이더 찾는 중 …) */
+  stateText: string;
+  tone: StageTone;
+  /** 단계 이름들과 지금 단계 번호 — 점 막대(●●●○○) */
+  labels: readonly string[];
+  index: number;
+  startMs: number | null;
+  endMs: number | null;
+}
+
+/** 배송 종류 이름 — 목적이 있으면 그것, 일반 배송이면 첫 번째는 "첫 배송", 그 뒤는 "재배송" */
+export function deliveryKind(n: number, purpose: DeliveryCard['purpose']): string {
+  return purposeLabel(purpose) ?? (n === 1 ? '첫 배송' : '재배송');
 }
 
 /** 단계로 끝나는 구간이 어느 구간인가 */
@@ -81,8 +107,28 @@ export function groupOrders(
     const done = tls.length > 0 && tls.every((t) => t.endMs !== null);
     const last = steps.at(-1);
     const endMs = done && last ? last.atMs : null;
+    const byStart = g
+      .map((c) => ({ c, t: tls.find((t) => t.deliveryId === c.deliveryId) ?? null }))
+      .sort((a, b) => (a.t?.steps[0]?.atMs ?? a.c.createdAt) - (b.t?.steps[0]?.atMs ?? b.c.createdAt));
+    const deliveries: OrderDelivery[] = byStart.map(({ c, t }, i) => {
+      const purpose = c.purpose ?? t?.purpose ?? null;
+      const st = displayStage(c.dispatchState, c.executionState, c.radiusKm, purpose);
+      return {
+        deliveryId: c.deliveryId,
+        deliveryNumber: c.deliveryNumber ?? t?.deliveryNumber ?? null,
+        n: i + 1,
+        kind: deliveryKind(i + 1, purpose),
+        stateText: st.text,
+        tone: st.tone,
+        labels: st.labels,
+        index: st.index,
+        startMs: t?.steps[0]?.atMs ?? null,
+        endMs: t?.endMs ?? null,
+      };
+    });
     rows.push({
       orderId: g[0]?.orderId ?? null,
+      deliveries,
       orderNumber: g.find((c) => c.orderNumber)?.orderNumber ?? null,
       deliveryIds: g.map((c) => c.deliveryId),
       startMs: steps[0]?.atMs ?? null,
