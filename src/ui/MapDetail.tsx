@@ -79,6 +79,15 @@ export function MapDetail({
         </button>
       </div>
 
+      {/* inline — 맨 위 결과 띠(무엇으로 끝났나·걸린 시간·조치 필요)가 가장 먼저 읽히게(사용자 2026-11-20 "배송 결과 → 핵심 정보 → 이벤트 타임라인 → 배차 제안 순서로 강조") */}
+      {inline && (
+        <div className={`md-result b-${row.bucket} ${row.alert ? `al-${row.alert.level}` : ''}`}>
+          <span className="md-result-l">결과</span>
+          <b>{row.bucket === 'closed' ? stage.text : BUCKET_LABEL[row.bucket]}</b>
+          <span className="md-result-t">{row.totalSec === null ? '' : `${active ? '지금까지' : '총'} ${dur(row.totalSec)}`}</span>
+          {row.alert && <span className={`md-result-a ${row.alert.level}`}>조치 필요 · {row.alert.title}</span>}
+        </div>
+      )}
       {/* inline = 왼쪽 탭(상세·주문·원래 상태) | 오른쪽 흐름 늘 보임 — 넓은 줄 아래 펼침에서 빈 칸 없게. 그 밖은 한 줄(md-one·md-main 은 display: contents) */}
       <div className={inline ? 'md-cols' : 'md-one'}>
       <div className="md-main">
@@ -97,7 +106,7 @@ export function MapDetail({
         ))}
       </div>
 
-      {row.alert && (
+      {row.alert && !inline && (
         <div className={`md-alert ${row.alert.level}`}>
           ⚠ {row.alert.title} — {row.alert.detail.split(' — ').at(-1)}
         </div>
@@ -216,11 +225,18 @@ export function MapDetail({
       </div>
       {inline && (
         <section className="md-side" aria-label="흐름">
-          <h4>흐름</h4>
+          <h4>단계별 시각</h4>
           {tl ? (
             <>
               <Timeline t={tl} nowMs={app.sim.clock.epochMs()} />
-              <OfferList offers={tl.offers} />
+              {/* 배차 제안 기록은 보조 — 접어 두고 필요할 때 펼침 */}
+              <details className="md-offers">
+                <summary>
+                  배차 제안 기록 {tl.offers?.length ?? 0}번
+                  {(tl.offers ?? []).some((o) => o.state === 'EXPIRED' || o.state === 'REJECTED') && <em> · 만료·거절 {(tl.offers ?? []).filter((o) => o.state === 'EXPIRED' || o.state === 'REJECTED').length}</em>}
+                </summary>
+                <OfferList offers={tl.offers} />
+              </details>
             </>
           ) : (
             <p className="c-muted">흐름을 아직 못 읽었습니다.</p>

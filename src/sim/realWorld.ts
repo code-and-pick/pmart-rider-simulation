@@ -667,7 +667,7 @@ export class RealWorld implements World {
         radiusKm: d?.state === 'DISPATCHING' ? (at?.currentRadiusKm ?? null) : null,
         // 직원용 전달지를 읽은 배송만 지도에 전달지 핀(고른 배송 — 사용자 결정 2026-11-18)
         customer: dropPos(this.drops.get(s.deliveryId as string)),
-        purpose: d?.purpose ?? null,
+        purpose: d?.purpose ?? s.purpose ?? null, // 배차 관점을 못 읽어도(500 등) 직원 목록의 목적으로
         pickup: null,
         createdAt: s.createdAt ? (Date.parse(s.createdAt) - this.startWall) / 1000 : 0,
       };
@@ -695,7 +695,7 @@ export class RealWorld implements World {
     const gaps = ['가게 도착·고객 도착 시각은 직원 배송 목록에 없다 — 이 화면이 움직인 가상 라이더 배송만 엔진이 잰 가게 도착을 보인다'];
     if (!d) gaps.unshift('배차 관점을 아직 못 읽음 — 제안 시각 없음');
     if (s.state === 'FAILED' || s.state === 'CANCELLED') gaps.push(`수행 ${s.state} — 그 시각은 목록에 없다`);
-    return { ...assemble({ deliveryId, orderId: s.orderId ?? d?.orderId ?? null, orderNumber: s.orderNumber ?? null, deliveryNumber: s.deliveryNumber ?? null, purpose: d?.purpose ?? null, basis: 'real', gaps }, steps, terminal), offers: offerRows(d) };
+    return { ...assemble({ deliveryId, orderId: s.orderId ?? d?.orderId ?? null, orderNumber: s.orderNumber ?? null, deliveryNumber: s.deliveryNumber ?? null, purpose: d?.purpose ?? s.purpose ?? null, basis: "real", gaps }, steps, terminal), offers: offerRows(d) };
   }
 
   /**

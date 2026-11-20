@@ -1,8 +1,8 @@
 import { Fragment, useState } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
-import { displayStage } from '../domain/displayStage';
-import { deliveryName, shortRiderId, riderName } from '../domain/riderId';
+import { deliveryKindName, displayStage } from '../domain/displayStage';
+import { deliveryLabel, deliveryName, shortRiderId, riderName } from '../domain/riderId';
 import { BUCKET_LABEL, type Bucket } from './buckets';
 import { MapDetail } from './MapDetail';
 import type { OpsRow } from './ops';
@@ -252,14 +252,14 @@ export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => v
             <tr>
               <th>배송</th>
               <th>상태</th>
-              <th>흐름</th>
+              <th className="num">걸린 시간</th>
               <th>라이더</th>
-              <th title="배차 제안 횟수 · 거절·만료">제안</th>
-              <th>배차 요청</th>
-              <th>배정</th>
-              <th>픽업</th>
-              <th>끝남</th>
-              <th>걸린 시간</th>
+              <th>흐름</th>
+              <th className="num" title="배차 제안 횟수 · 거절·만료">제안</th>
+              <th className="num sub">배차 요청</th>
+              <th className="num sub">배정</th>
+              <th className="num sub">픽업</th>
+              <th className="num sub">끝남</th>
             </tr>
           </thead>
           <tbody>
@@ -273,7 +273,6 @@ export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => v
               const pickedAt = at((k) => k.startsWith('x-PICKED_UP'));
               const offers = tl?.offers ?? [];
               const declined = offers.filter((o) => o.state === 'REJECTED' || o.state === 'EXPIRED').length;
-              const t = (ms: number | null) => (ms !== null ? seoulTime(ms) : <span className="c-muted">—</span>);
               const isOpen = open === c.deliveryId;
               return (
                 <Fragment key={c.deliveryId}>
@@ -283,27 +282,33 @@ export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => v
                     title={c.deliveryId}
                     aria-expanded={isOpen}
                   >
-                    <td>
+                    <td className="rd-id">
                       <span className="c-caret">{isOpen ? '▾' : '▸'}</span>
-                      <b>{deliveryName(c)}</b>
+                      <span className="rd-id-t">
+                        <b>{deliveryLabel(c)}</b>
+                        <span>{deliveryKindName(c.purpose)}</span>
+                      </span>
                     </td>
                     <td>
-                      <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? stage.text : BUCKET_LABEL[r.bucket]}</span>
-                      {r.alert && <span className={`c-mini ${r.alert.level}`}> {r.alert.title}</span>}
+                      <span className={`rd-st b-${r.bucket}`}>
+                        <i />
+                        {r.bucket === 'closed' ? stage.text : BUCKET_LABEL[r.bucket]}
+                      </span>
+                      {r.alert && <span className={`rd-act ${r.alert.level}`}>조치 필요 · {r.alert.title}</span>}
                     </td>
-                    <td>
+                    <td className="num rd-dur">{r.totalSec === null ? '—' : `${dur(r.totalSec)}${r.bucket === 'searching' || r.bucket === 'delivering' ? '째' : ''}`}</td>
+                    <td>{c.riderId ? label(c.riderId) : <span className="c-muted">—</span>}</td>
+                    <td className="rd-flow">
                       <Progress stage={stage} compact />
                     </td>
-                    <td>{c.riderId ? label(c.riderId) : <span className="c-muted">—</span>}</td>
-                    <td className="num">
-                      {offers.length ? offers.length : <span className="c-muted">—</span>}
-                      {declined > 0 && <span className="c-mini warn"> 거절·만료 {declined}</span>}
+                    <td className="num sub">
+                      {offers.length ? offers.length : '—'}
+                      {declined > 0 && <span className="rd-dec"> · 만료·거절 {declined}</span>}
                     </td>
-                    <td className="num">{r.startMs ? seoulTime(r.startMs) : '—'}</td>
-                    <td className="num">{t(assignedAt)}</td>
-                    <td className="num">{t(pickedAt)}</td>
-                    <td className="num">{tl?.endMs != null ? seoulTime(tl.endMs) : r.bucket === 'searching' || r.bucket === 'delivering' ? <span className="c-ongoing">진행 중</span> : <span className="c-muted">—</span>}</td>
-                    <td className="num">{r.totalSec === null ? '—' : `${dur(r.totalSec)}${r.bucket === 'searching' || r.bucket === 'delivering' ? '째' : ''}`}</td>
+                    <td className="num sub">{r.startMs ? seoulTime(r.startMs).slice(0, 5) : '—'}</td>
+                    <td className="num sub">{assignedAt !== null ? seoulTime(assignedAt).slice(0, 5) : '—'}</td>
+                    <td className="num sub">{pickedAt !== null ? seoulTime(pickedAt).slice(0, 5) : '—'}</td>
+                    <td className="num sub">{tl?.endMs != null ? seoulTime(tl.endMs).slice(0, 5) : r.bucket === 'searching' || r.bucket === 'delivering' ? <span className="c-ongoing">진행 중</span> : '—'}</td>
                   </tr>
                   {isOpen && (
                     <tr className="c-recent-x">
