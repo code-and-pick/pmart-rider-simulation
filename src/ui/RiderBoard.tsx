@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
-import { deliveryLabel } from '../domain/riderId';
+import { deliveryName } from '../domain/riderId';
 import type { OpsRow } from './ops';
 import { dur, seoulTime } from './format';
 import { DropAddress } from './MapDetail';
@@ -218,7 +218,7 @@ export function RiderList() {
                   return (
                     <span key={d.deliveryId} className="rb-item-del">
                       <span className="rb-item-del-1">
-                        <b>{op ? deliveryLabel(op.card) : d.deliveryId.slice(-8)}</b>
+                        <b>{op ? deliveryName(op.card) : d.deliveryId.slice(-8)}</b>
                         <span className="rb-stage">{d.stageKey ? (STAGE_LABEL[d.stageKey] ?? d.stage) : d.stage}</span>
                       </span>
                       <span className="rb-item-del-2">{[op?.card.orderNumber ? `#${op.card.orderNumber}` : null, '픽업 부산진구 MFC'].filter(Boolean).join(' · ')}</span>
@@ -346,7 +346,7 @@ function DeliveryCard({ d, op, nowMs }: { d: RiderRow['deliveries'][number]; op:
   const drop = etaText(d.etaDrop, nowMs);
   return (
     <div className={`rb-del ${app.selectedDelivery === d.deliveryId ? 'focus' : ''}`}>
-      <div className="rb-del-no">{op ? deliveryLabel(op.card) : d.deliveryId}</div>
+      <div className="rb-del-no">{op ? deliveryName(op.card) : d.deliveryId}</div>
       <ol className="rb-steps" aria-label="진행 단계">
         {STEPS.map((s, i) => (
           <li key={s} className={i === at ? 'now' : i < at ? 'past' : ''} aria-current={i === at ? 'step' : undefined}>

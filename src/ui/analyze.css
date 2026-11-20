@@ -746,3 +746,256 @@
 .an-phases li {
   grid-template-columns: 120px minmax(0, 1fr) auto;
 }
+
+/* ───────── 2026-11-20 그래프 다듬기(사용자 "그래프가 멋있게 … ppt 로 만들어서 붙여 놓은 느낌") ───────── */
+/* 카드 — 은은한 위쪽 빛, 둥근 모서리 */
+.an-card,
+.an-tile {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--c-ink) 3%, transparent), transparent 120px),
+    var(--c-panel);
+}
+/* 타일 오른쪽 작은 그림(추세선·고리) */
+.an-tile {
+  position: relative;
+  overflow: hidden;
+}
+.an-tile.has-viz .viz {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  pointer-events: none;
+}
+.an-spark {
+  display: block;
+  width: 96px;
+  height: 36px;
+}
+.an-ring {
+  display: block;
+  width: 52px;
+  height: 52px;
+}
+.an-ring .arc {
+  transition: stroke-dasharray 0.6s ease;
+}
+
+/* 시간대 막대 — 위로 갈수록 밝게, 처음 그릴 때 아래서 자라남, 올리면 빛 */
+.an-col .stack {
+  animation: an-grow 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: bottom;
+  transition: height 0.4s ease;
+}
+@keyframes an-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+.an-col .stack i {
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 22%), rgb(255 255 255 / 0%));
+}
+.an-col:hover .stack i,
+.an-col.picked .stack i {
+  filter: brightness(1.15) saturate(1.1);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--ch-active) 45%, transparent);
+}
+.an-col:hover,
+.an-col.picked {
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--c-ink) 7%, transparent));
+}
+.an-col.now {
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--ch-active) 14%, transparent));
+}
+.an-col .val {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--c-ink) 8%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .an-col .stack,
+  .an-ring .arc {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* 상태 도넛 */
+.an-donut-wrap {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: center;
+  gap: 22px;
+}
+.an-donut {
+  position: relative;
+  width: 150px;
+  height: 150px;
+}
+.an-donut svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.an-donut .seg {
+  transition: stroke-width 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+}
+.an-donut .seg.dim {
+  opacity: 0.35;
+}
+.an-donut .s-done {
+  stroke: var(--ch-done);
+}
+.an-donut .s-active {
+  stroke: var(--ch-active);
+}
+.an-donut .s-failed {
+  stroke: var(--ch-failed);
+}
+.an-donut .s-other {
+  stroke: var(--ch-other);
+}
+.an-donut-c {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.an-donut-c b {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+}
+.an-donut-c b small {
+  font-size: var(--an-t2);
+  font-weight: 700;
+  margin-left: 2px;
+}
+.an-donut-c span {
+  margin-top: 4px;
+  font-size: var(--an-t3);
+  color: var(--c-sub);
+}
+.an-donut-keys {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.an-donut-keys li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: default;
+}
+.an-donut-keys li.on {
+  background: var(--c-soft);
+}
+.an-donut-keys i {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+}
+.an-donut-keys b {
+  font-weight: 700;
+}
+.an-donut-keys em {
+  font-style: normal;
+  text-align: right;
+  color: var(--c-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 구간별 평균 — 여정 막대 */
+.an-journey-bar {
+  display: flex;
+  gap: 3px;
+  height: 30px;
+}
+.an-journey-bar i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  border-radius: 6px;
+  font-style: normal;
+  font-size: var(--an-t3);
+  font-weight: 800;
+  color: #fff;
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 18%), rgb(255 255 255 / 0%)) !important;
+  background-blend-mode: normal;
+}
+.an-journey-bar i:first-child {
+  border-radius: 15px 6px 6px 15px;
+}
+.an-journey-bar i:last-child {
+  border-radius: 6px 15px 15px 6px;
+}
+.an-journey-ends {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 4px 12px;
+  font-size: var(--an-t3);
+  color: var(--c-sub);
+}
+.an-journey-legs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.an-journey-legs li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto 44px;
+  align-items: center;
+  gap: 10px;
+}
+.an-journey-legs .n {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+}
+.an-journey-legs b {
+  font-weight: 700;
+  text-align: right;
+}
+.an-journey-legs em {
+  font-style: normal;
+  text-align: right;
+  color: var(--c-sub);
+  font-variant-numeric: tabular-nums;
+}
+.an-journey-legs li.tot {
+  padding-top: 8px;
+  border-top: 1px solid var(--c-line);
+}
+.an-journey-legs li.tot .l {
+  color: var(--c-sub);
+}
+/* 시간대 막대 칸 — 옆 칸(상태·구간) 높이만큼 그림이 늘어나 아래 빈 곳이 없게 */
+.an-card.an-fill {
+  display: flex;
+  flex-direction: column;
+}
+.an-card.an-fill .an-plot,
+.an-card.an-fill .an-chart-empty {
+  flex: 1;
+  min-height: 230px;
+  height: auto;
+}

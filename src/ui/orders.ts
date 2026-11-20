@@ -1,7 +1,7 @@
 // 주문 탭 — 배송 카드를 주문번호로 묶고, 주문마다 흐름 막대(구간별 걸린 시간)를 만든다. React 에 의존하지 않는다(시험).
 // 한 주문에 배송이 여럿일 수 있다(오배송 회수·재발송·다시 배송). 주문번호를 모르면 배송 하나를 한 줄로 본다.
 
-import { displayStage, purposeLabel, type StageTone } from '../domain/displayStage';
+import { deliveryKindName, displayStage, type StageTone } from '../domain/displayStage';
 import type { DeliveryCard } from '../sim/world';
 import type { DeliveryTimeline, TimelineStep } from '../sim/timeline';
 
@@ -56,9 +56,9 @@ export interface OrderDelivery {
   endMs: number | null;
 }
 
-/** 배송 종류 이름 — 목적이 있으면 그것, 일반 배송이면 첫 번째는 "첫 배송", 그 뒤는 "재배송" */
-export function deliveryKind(n: number, purpose: DeliveryCard['purpose']): string {
-  return purposeLabel(purpose) ?? (n === 1 ? '첫 배송' : '재배송');
+/** 배송 종류 이름 — 서버 배송 목적 그대로(일반 = "고객 배송"). 순서(1차·2차)는 따로 n 으로 — 화면 어디서나 같은 이름(deliveryKindName) */
+export function deliveryKind(_n: number, purpose: DeliveryCard['purpose']): string {
+  return deliveryKindName(purpose);
 }
 
 /** 단계로 끝나는 구간이 어느 구간인가 */

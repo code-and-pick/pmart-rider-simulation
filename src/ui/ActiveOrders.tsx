@@ -1,7 +1,7 @@
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
 import { displayStage } from '../domain/displayStage';
-import { deliveryLabel, orderLabel, riderName } from '../domain/riderId';
+import { deliveryName, orderLabel, riderName } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
 import { dur, seoulTime } from './format';
 import type { OpsRow } from './ops';
@@ -52,7 +52,7 @@ export function ActiveOrders({ onOpen }: { onOpen: (deliveryId: string) => void 
               <tr>
                 <td colSpan={7} className="c-empty">
                   진행 중인 주문이 없습니다
-                  {lastDone?.stepAtMs ? ` — 마지막 완료 ${deliveryLabel(lastDone.card)} · ${dur((nowMs - lastDone.stepAtMs) / 1000)} 전` : ''}.
+                  {lastDone?.stepAtMs ? ` — 마지막 완료 ${deliveryName(lastDone.card)} · ${dur((nowMs - lastDone.stepAtMs) / 1000)} 전` : ''}.
                 </td>
               </tr>
             )}
@@ -77,7 +77,7 @@ function OrderRow({ r, rider, nowMs, onOpen }: { r: OpsRow; rider: RiderRow | un
     <tr className={r.alert ? `al-${r.alert.level}` : ''} onClick={() => onOpen(c.deliveryId)} title={`${c.deliveryId} — 누르면 지도에서`}>
       <td>
         <b className="c-no">{orderLabel(c) ?? '—'}</b>
-        <div className="c-muted">{deliveryLabel(c)}</div>
+        <div className="c-muted">{deliveryName(c)}</div>
       </td>
       <td>
         <span className={`c-st b-${r.bucket}`}>{BUCKET_LABEL[r.bucket as 'searching' | 'delivering']}</span>

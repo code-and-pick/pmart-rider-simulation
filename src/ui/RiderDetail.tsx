@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../app/App';
 import { displayStage } from '../domain/displayStage';
-import { deliveryLabel, orderLabel } from '../domain/riderId';
+import { deliveryName, orderLabel } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
 import { dur, seoulTime } from './format';
 import { DropAddress } from './MapDetail';
@@ -80,7 +80,7 @@ export function RiderDetail({ row, onShowOnMap }: { row: RiderRow | undefined; o
         {recent.map((r) => (
           <li key={r.card.deliveryId}>
             <button onClick={() => onShowOnMap(r.card.deliveryId)} title={r.card.deliveryId}>
-              <b>{deliveryLabel(r.card)}</b>
+              <b>{deliveryName(r.card)}</b>
               <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? '끝남' : BUCKET_LABEL[r.bucket]}</span>
               <span className="c-time">{r.totalSec === null ? '' : `총 ${dur(r.totalSec)}`}</span>
             </button>
@@ -123,7 +123,7 @@ function ActiveCard({ d, op, onShowOnMap }: { d: RiderRow['deliveries'][number];
   return (
     <div className={`c-rd-card ${op?.alert ? `al-${op.alert.level}` : ''}`}>
       <div className="c-item-1">
-        <b className="c-no">{c ? deliveryLabel(c) : d.deliveryId}</b>
+        <b className="c-no">{c ? deliveryName(c) : d.deliveryId}</b>
         {op && <span className={`c-st b-${op.bucket}`}>{op.bucket === 'closed' ? '끝남' : BUCKET_LABEL[op.bucket]}</span>}
         <span className="c-time">{op?.totalSec != null ? `${dur(op.totalSec)} 경과` : ''}</span>
       </div>

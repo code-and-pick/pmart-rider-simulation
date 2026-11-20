@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../app/App';
-import { displayStage, purposeLabel } from '../domain/displayStage';
+import { deliveryKindName, displayStage } from '../domain/displayStage';
 import { deliveryLabel, orderLabel, shortId, riderName } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
 import { dur, seoulTime } from './format';
@@ -45,7 +45,7 @@ export function MapDetail({
   if (!row) return null;
   const c = row.card;
   const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
-  const tag = purposeLabel(c.purpose);
+  const tag = deliveryKindName(c.purpose);
   const tl = app.sim.deliveryTimeline(id);
   const rider = c.riderId ? app.sim.riders.find((r) => r.id === c.riderId) : undefined;
   const mode = app.sim.mode;

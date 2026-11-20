@@ -2,7 +2,7 @@ import { Fragment, useState } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
 import { displayStage } from '../domain/displayStage';
-import { deliveryLabel, shortRiderId, riderName } from '../domain/riderId';
+import { deliveryName, shortRiderId, riderName } from '../domain/riderId';
 import { BUCKET_LABEL, type Bucket } from './buckets';
 import { MapDetail } from './MapDetail';
 import type { OpsRow } from './ops';
@@ -152,7 +152,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
                             openOnMap(d.deliveryId);
                           }}
                         >
-                          <b>{row ? deliveryLabel(row.card) : shortRiderId(d.deliveryId)}</b> {d.stage}
+                          <b>{row ? deliveryName(row.card) : shortRiderId(d.deliveryId)}</b> {d.stage}
                           {d.etaDrop && <span className="c-muted"> · 도착 예정 {seoulTime(Date.parse(d.etaDrop))}</span>}
                           {!d.etaDrop && d.etaPickup && <span className="c-muted"> · 가게 예정 {seoulTime(Date.parse(d.etaPickup))}</span>}
                         </button>
@@ -285,7 +285,7 @@ export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => v
                   >
                     <td>
                       <span className="c-caret">{isOpen ? '▾' : '▸'}</span>
-                      <b>{deliveryLabel(c)}</b>
+                      <b>{deliveryName(c)}</b>
                     </td>
                     <td>
                       <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? stage.text : BUCKET_LABEL[r.bucket]}</span>

@@ -1,3 +1,5 @@
+import type { DeliveryPurpose } from './contract';
+import { deliveryKindName } from './displayStage';
 // 화면용 번호 — 시스템 번호(DLV-·ORD-·RD- + UUID)는 길고 뜻이 없어서, 사람이 읽는 번호를 먼저 보이고 전체 번호는 마우스 설명에 둔다.
 //   주문: 화면용 주문번호(8자리 — 고객·라이더·MFC·상담원이 같은 번호, order-service)
 //   배송: 화면 배송 번호 = 주문번호-순번(예 74939255-1, ADR-0070) — 없으면 짧은 시스템 번호
@@ -42,6 +44,11 @@ export function shortId(id: string): string {
 /** 주문 — 화면용 주문번호, 없으면 짧은 주문 ID */
 export function orderLabel(c: { orderNumber: string | null; orderId: string | null }): string | null {
   return c.orderNumber ?? (c.orderId ? shortId(c.orderId) : null);
+}
+
+/** 배송 이름 — "28767701-2 · 전달 실패 반납"(번호 + 무슨 배송인지). 번호(-1·-2)만으로는 관리자가 무슨 배송인지 모른다(사용자 2026-11-20) */
+export function deliveryName(c: { deliveryNumber: string | null; deliveryId: string; purpose?: DeliveryPurpose | null }): string {
+  return `${deliveryLabel(c)} · ${deliveryKindName(c.purpose)}`;
 }
 
 /** 배송 — 화면 배송 번호, 없으면 짧은 배송 ID */

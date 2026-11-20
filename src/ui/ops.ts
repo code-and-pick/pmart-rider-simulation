@@ -6,6 +6,7 @@ import type { DeliveryTimeline } from '../sim/timeline';
 import type { DeliveryCard, RiderView } from '../sim/world';
 import { type Bucket, bucketOf, isFailedCall } from './buckets';
 import { displayStage } from '../domain/displayStage';
+import { deliveryName } from '../domain/riderId';
 
 export type AlertLevel = 'bad' | 'warn';
 
@@ -81,7 +82,8 @@ export function buildBoard(input: {
       totalSec: startMs !== null && endMs !== null ? Math.max(0, (endMs - startMs) / 1000) : null,
       alert: null,
     };
-    const label = card.deliveryNumber ?? card.orderNumber ?? card.deliveryId;
+    // 경보 글의 대상 — "28767701-2 · 전달 실패 반납"(번호만으로는 무슨 배송인지 모름, 사용자 2026-11-20). 번호가 없으면 주문번호·ID
+    const label = card.deliveryNumber ? deliveryName(card) : (card.orderNumber ?? card.deliveryId);
     const push = (a: Omit<OpsAlert, 'key' | 'deliveryId' | 'riderId'>) => {
       const full: OpsAlert = { ...a, key: `${a.kind}:${card.deliveryId}`, deliveryId: card.deliveryId, riderId: card.riderId ?? undefined };
       alerts.push(full);

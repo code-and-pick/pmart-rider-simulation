@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../app/App';
-import { displayStage, purposeLabel } from '../domain/displayStage';
-import { deliveryLabel, orderLabel, shortRiderId, riderName } from '../domain/riderId';
+import { deliveryKindName, displayStage } from '../domain/displayStage';
+import { deliveryLabel, deliveryName, orderLabel, shortRiderId, riderName } from '../domain/riderId';
 import { PHASE_COLOR } from '../render/colors';
 import { PHASE_LABEL, type RiderJob } from '../sim/rider';
 import type { RiderView } from '../sim/world';
@@ -233,7 +233,7 @@ function TaskRow({ r, n, rider }: { r: OpsRow; n: number; rider?: string }) {
         <span className="c-task-n">{n}</span>
         <span className="c-task-main">
           <span className="c-task-1">
-            <b>{deliveryLabel(c)}</b>
+            <b>{deliveryName(c)}</b>
             <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? stage.text : BUCKET_CHIP[r.bucket]}</span>
           </span>
           <span className="c-task-2">
@@ -435,7 +435,7 @@ function DeliveryItem({ r, sel, rider }: { r: OpsRow; sel: string | null; rider:
   const app = useApp();
   const c = r.card;
   const stage = displayStage(c.dispatchState, c.executionState, c.radiusKm, c.purpose);
-  const tag = purposeLabel(c.purpose);
+  const tag = deliveryKindName(c.purpose);
   const picked = app.selectedDelivery === c.deliveryId;
   const active = ACTIVE.has(r.bucket);
   const over = r.alert?.overSec !== undefined && r.alert.overSec > 0 ? Math.max(1, Math.round(r.alert.overSec / 60)) : null;
@@ -601,7 +601,7 @@ function RiderItem({ r, row, done }: { r: RiderView; row: OpsRow | undefined; do
         <div className="c-item-2">
           {row ? (
             <>
-              <span className="c-rider">📦 {deliveryLabel(row.card)}</span>
+              <span className="c-rider">📦 {deliveryName(row.card)}</span>
               <Progress stage={displayStage(row.card.dispatchState, row.card.executionState, row.card.radiusKm, row.card.purpose)} compact />
               <span className="c-stage">{row.totalSec !== null ? `${dur(row.totalSec)} 경과` : ''}</span>
               {row.alert && <span className={`c-mini ${row.alert.level}`}>{row.alert.title}</span>}

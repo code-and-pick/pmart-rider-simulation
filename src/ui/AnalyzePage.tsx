@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
-import { deliveryLabel, orderLabel, riderName } from '../domain/riderId';
+import { deliveryName, orderLabel, riderName } from '../domain/riderId';
 import { dur, seoulTime } from './format';
 import type { OpsRow } from './ops';
 import { riderIndex } from './riderTable';
@@ -51,6 +51,13 @@ export function AnalyzePage() {
   for (const r of b.rows) counts[kindOf(r)]++;
   const finished = counts.done + counts.failed;
   const real = sim.mode === 'http';
+  const nowMs = sim.clock.epochMs();
+  // 최근 12시간 1시간마다 배차 요청 수 — "배송" 타일의 작은 추세선
+  const hourly = Array.from({ length: 12 }, (_, i) => {
+    const to = nowMs - (11 - i) * 3600_000;
+    return rows.filter((r) => (r.startMs as number) > to - 3600_000 && (r.startMs as number) <= to).length;
+  });
+  const rate = finished ? counts.done / finished : null;
   return (
     <section className="c-page an" aria-label="분석">
       <header className="an-head">
@@ -64,42 +71,34 @@ export function AnalyzePage() {
       </header>
 
       <div className="an-tiles">
-        <Tile label="배송" value={String(b.rows.length)} unit="건" sub={`진행 중 ${counts.active}건`} />
-        <Tile label="완료율" value={finished ? String(Math.round((counts.done / finished) * 100)) : '—'} unit={finished ? '%' : ''} sub={`완료 ${counts.done} · 실패 ${counts.failed}`} />
+        <Tile label="배송" value={String(b.rows.length)} unit="건" sub={`진행 중 ${counts.active}건`} viz={<Spark values={hourly} title="최근 12시간 1시간마다 배차 요청 수" />} />
+        <Tile
+          label="완료율"
+          value={rate !== null ? String(Math.round(rate * 100)) : '—'}
+          unit={rate !== null ? '%' : ''}
+          sub={`완료 ${counts.done} · 실패 ${counts.failed}`}
+          viz={rate !== null ? <Ring ratio={rate} /> : undefined}
+        />
         <Tile label="한 건 평균" value={m.phases ? dur(m.phases.totalSec) : '—'} sub="배차 요청 → 전달 완료" />
         <Tile label="라이더 찾기 평균" value={m.phases ? dur(m.phases.segments[0]?.sec ?? 0) : '—'} sub="배차 요청 → 수락" />
         <Tile label="지연·이상" value={String(b.counts.delayed)} unit="건" sub="진행 중 기준 넘김" bad={b.counts.delayed > 0} />
       </div>
 
       <div className="an-row">
-        <section className="an-card" aria-label="시간대별 배송 건수">
+        <section className="an-card an-fill" aria-label="시간대별 배송 건수">
           <TimeChart rows={rows} />
         </section>
         <section className="an-card" aria-label="상태와 구간">
           <div className="an-card-h">
             <h3>상태</h3>
-            <span className="an-note">총 {b.rows.length}건</span>
           </div>
-          <StatusBar counts={counts} total={b.rows.length} />
+          <StatusDonut counts={counts} total={b.rows.length} />
           <div className="an-card-h an-gap">
             <h3>구간별 평균</h3>
             <span className="an-note">완료 {m.phases?.n ?? 0}건 기준</span>
           </div>
           {m.phases ? (
-            <ul className="an-phases">
-              {m.phases.segments.map((s) => {
-                const max = Math.max(...(m.phases?.segments.map((x) => x.sec) ?? [1]), 1);
-                return (
-                  <li key={s.key} title={`${s.label} — ${s.hint}`}>
-                    <span className="l">{PHASE_SHORT[s.key] ?? s.label}</span>
-                    <span className="track">
-                      <i style={{ width: `${Math.max(2, (s.sec / max) * 100)}%` }} />
-                    </span>
-                    <b>{dur(s.sec)}</b>
-                  </li>
-                );
-              })}
-            </ul>
+            <Journey segments={m.phases.segments} total={m.phases.totalSec} />
           ) : (
             <p className="an-empty">완료된 배송이 생기면 나옵니다.</p>
           )}
@@ -113,15 +112,146 @@ export function AnalyzePage() {
   );
 }
 
-function Tile({ label, value, unit, sub, bad }: { label: string; value: string; unit?: string; sub: string; bad?: boolean }) {
+function Tile({ label, value, unit, sub, bad, viz }: { label: string; value: string; unit?: string; sub: string; bad?: boolean; viz?: ReactNode }) {
   return (
-    <div className={`an-tile ${bad ? 'bad' : ''}`}>
+    <div className={`an-tile ${bad ? 'bad' : ''} ${viz ? 'has-viz' : ''}`}>
       <span className="l">{label}</span>
       <span className="v">
         {value}
         {unit && <small>{unit}</small>}
       </span>
       <span className="s">{sub}</span>
+      {viz && <span className="viz">{viz}</span>}
+    </div>
+  );
+}
+
+/** 작은 추세선(글자 없음 — 늘어나도 글자 크기 문제 없음). 마지막 점 강조 */
+function Spark({ values, title }: { values: readonly number[]; title: string }) {
+  const max = Math.max(1, ...values);
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * 100, 34 - (v / max) * 28] as const);
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  return (
+    <svg className="an-spark" viewBox="0 0 100 36" preserveAspectRatio="none" role="img" aria-label={`${title}: ${values.join(', ')}`}>
+      <title>{title}</title>
+      <defs>
+        <linearGradient id="an-spark-g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--ch-active)" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="var(--ch-active)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={`${line} L100,36 L0,36 Z`} fill="url(#an-spark-g)" />
+      <path d={line} fill="none" stroke="var(--ch-active)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 완료율 고리 */
+function Ring({ ratio }: { ratio: number }) {
+  const r = 20;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg className="an-ring" viewBox="0 0 50 50" role="img" aria-label={`완료율 ${Math.round(ratio * 100)}%`}>
+      <circle cx="25" cy="25" r={r} fill="none" stroke="var(--c-soft)" strokeWidth="6" />
+      <circle cx="25" cy="25" r={r} fill="none" stroke="var(--ch-done)" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${c * ratio} ${c}`} transform="rotate(-90 25 25)" className="arc" />
+    </svg>
+  );
+}
+
+/** 상태 도넛 — 가운데 총 건수(올린 조각이면 그 조각), 오른쪽 이름·건수·비율. 조각 사이 틈(dataviz) */
+function StatusDonut({ counts, total }: { counts: Record<Kind, number>; total: number }) {
+  const [hov, setHov] = useState<Kind | null>(null);
+  if (!total) return <p className="an-empty">배송이 없습니다.</p>;
+  const ks = ORDER.filter((k) => counts[k]);
+  const r = 46;
+  const c = 2 * Math.PI * r;
+  const gap = ks.length > 1 ? 2.5 : 0;
+  let acc = 0;
+  const cur = hov ? { label: KIND_LABEL[hov], n: counts[hov] } : { label: '전체 배송', n: total };
+  return (
+    <div className="an-donut-wrap">
+      <div className="an-donut">
+        <svg viewBox="0 0 120 120" role="img" aria-label={ks.map((k) => `${KIND_LABEL[k]} ${counts[k]}건`).join(', ')}>
+          <circle cx="60" cy="60" r={r} fill="none" stroke="var(--c-soft)" strokeWidth="16" />
+          {ks.map((k) => {
+            const len = (counts[k] / total) * c;
+            const el = (
+              <circle
+                key={k}
+                cx="60"
+                cy="60"
+                r={r}
+                fill="none"
+                className={`seg s-${k} ${hov && hov !== k ? 'dim' : ''}`}
+                strokeWidth={hov === k ? 20 : 16}
+                strokeDasharray={`${Math.max(0.5, len - gap)} ${c}`}
+                strokeDashoffset={-acc}
+                transform="rotate(-90 60 60)"
+                onMouseEnter={() => setHov(k)}
+                onMouseLeave={() => setHov(null)}
+              />
+            );
+            acc += len;
+            return el;
+          })}
+        </svg>
+        <div className="an-donut-c">
+          <b>
+            {cur.n}
+            <small>건</small>
+          </b>
+          <span>{cur.label}</span>
+        </div>
+      </div>
+      <ul className="an-donut-keys">
+        {ks.map((k) => (
+          <li key={k} className={hov === k ? 'on' : ''} onMouseEnter={() => setHov(k)} onMouseLeave={() => setHov(null)}>
+            <i className={`k-${k}`} />
+            <span>{KIND_LABEL[k]}</span>
+            <b>{counts[k]}건</b>
+            <em>{Math.round((counts[k] / total) * 100)}%</em>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** 구간별 평균 — 배차 요청 → 전달 완료 한 줄 여정(조각 길이 = 걸린 시간 비율) + 구간마다 번호·이름·시간·비율 */
+const JOURNEY_COLOR: Record<string, string> = { findRider: '#8f7cff', toStore: '#4c8dff', atStore: '#d35cff', storeAll: '#4c8dff', toCustomer: '#ff8a3d' };
+function Journey({ segments, total }: { segments: readonly { key: string; label: string; sec: number; hint: string }[]; total: number }) {
+  const sum = Math.max(1, segments.reduce((a, x) => a + x.sec, 0));
+  return (
+    <div className="an-journey">
+      <div className="an-journey-bar" role="img" aria-label={segments.map((x) => `${PHASE_SHORT[x.key] ?? x.label} ${dur(x.sec)}`).join(', ')}>
+        {segments.map((x, i) => (
+          <i key={x.key} style={{ flexGrow: Math.max(x.sec, sum * 0.05), background: JOURNEY_COLOR[x.key] ?? 'var(--ch-active)' }} title={`${x.label} — ${x.hint}`}>
+            {i + 1}
+          </i>
+        ))}
+      </div>
+      <div className="an-journey-ends">
+        <span>배차 요청</span>
+        <span>전달 완료</span>
+      </div>
+      <ol className="an-journey-legs">
+        {segments.map((x, i) => (
+          <li key={x.key} title={x.hint}>
+            <span className="n" style={{ background: JOURNEY_COLOR[x.key] ?? 'var(--ch-active)' }}>
+              {i + 1}
+            </span>
+            <span className="l">{PHASE_SHORT[x.key] ?? x.label}</span>
+            <b>{dur(x.sec)}</b>
+            <em>{Math.round((x.sec / sum) * 100)}%</em>
+          </li>
+        ))}
+        <li className="tot">
+          <span className="n" />
+          <span className="l">합계(한 건 평균)</span>
+          <b>{dur(total)}</b>
+          <em />
+        </li>
+      </ol>
     </div>
   );
 }
@@ -326,7 +456,7 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
                   <td className="num">{seoulTime(at).slice(0, 5)}</td>
                   <td>
                     <button className="an-link" title="배송 관제 지도에서 열기" onClick={() => openOnMap(app, r.card.deliveryId)}>
-                      {deliveryLabel(r.card)}
+                      {deliveryName(r.card)}
                     </button>
                   </td>
                   <td>{r.card.riderId ? (idx.get(r.card.riderId)?.name ?? riderName(r.card.riderId)) : '—'}</td>
@@ -347,34 +477,6 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
   );
 }
 
-/** 상태 — 한 줄 100% 막대(높이 28, 넓은 조각엔 비율을 안에) + 이름·건수·비율 */
-function StatusBar({ counts, total }: { counts: Record<Kind, number>; total: number }) {
-  if (!total) return <p className="an-empty">배송이 없습니다.</p>;
-  const ks = ORDER.filter((k) => counts[k]);
-  return (
-    <>
-      <div className="an-stack" role="img" aria-label={ks.map((k) => `${KIND_LABEL[k]} ${counts[k]}건`).join(', ')}>
-        {ks.map((k) => {
-          const pct = Math.round((counts[k] / total) * 100);
-          return (
-            <i key={k} className={`k-${k}`} style={{ flexGrow: counts[k] }} title={`${KIND_LABEL[k]} ${counts[k]}건 (${pct}%)`}>
-              {pct >= 15 ? `${pct}%` : ''}
-            </i>
-          );
-        })}
-      </div>
-      <ul className="an-keys">
-        {ks.map((k) => (
-          <li key={k}>
-            <i className={`k-${k}`} />
-            <span>{KIND_LABEL[k]}</span>
-            <b>{counts[k]}건</b>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
-}
 
 /** 막대 한 개 — 시작·끝(ms). 라이더 줄은 맡은 때(배정)부터 */
 export interface Span {
@@ -503,8 +605,8 @@ function RiderTable({ rows }: { rows: readonly OpsRow[] }) {
                           key={r.card.deliveryId}
                           className={`mk k-${kindOf(r)} ${r.alert ? 'al' : ''} ${picked === r.card.deliveryId ? 'on' : ''}`}
                           style={{ left: `${pct(s)}%`, width: `max(6px, ${pct(e) - pct(s)}%)`, top: `${4 + line * 10}px` }}
-                          title={`배송 ${deliveryLabel(r.card)} · ${KIND_LABEL[kindOf(r)]} · ${dur((e - s) / 1000)}`}
-                          aria-label={`배송 ${deliveryLabel(r.card)} 자세히`}
+                          title={`배송 ${deliveryName(r.card)} · ${KIND_LABEL[kindOf(r)]} · ${dur((e - s) / 1000)}`}
+                          aria-label={`배송 ${deliveryName(r.card)} 자세히`}
                           onClick={() => setPicked(picked === r.card.deliveryId ? null : r.card.deliveryId)}
                         />
                       ))}
@@ -539,7 +641,7 @@ function DeliveryDetail({ span, name, onClose }: { span: Span; name: string | nu
     <div className="an-detail">
       <div className="an-detail-h">
         <b>
-          배송 {deliveryLabel(r.card)}
+          배송 {deliveryName(r.card)}
           <span className={`an-pill k-${kind}`}>{r.stepLabel ?? KIND_LABEL[kind]}</span>
         </b>
         <span className="an-detail-a">

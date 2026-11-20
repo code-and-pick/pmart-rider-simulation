@@ -25,7 +25,7 @@ export function stagesFor(purpose?: DeliveryPurpose | null): readonly string[] {
   return STAGES;
 }
 
-/** 배송 목적 짧은 이름(카드 꼬리표) — 일반 배송은 없음 */
+/** 배송 목적 이름(꼬리표) — 일반 배송은 null(그때는 deliveryKindName 이 "고객 배송"). 사용자 2026-11-20 "-2 로만 표시하지 말고 무슨 배달 건인지" */
 export function purposeLabel(purpose?: DeliveryPurpose | null): string | null {
   switch (purpose) {
     case 'MISDELIVERY_RECOVERY':
@@ -33,11 +33,11 @@ export function purposeLabel(purpose?: DeliveryPurpose | null): string | null {
     case 'MISDELIVERY_RESHIPMENT':
       return '재발송';
     case 'MISDELIVERY_REDELIVERY':
-      return '다시 배송';
+      return '오배송 다시 배송';
     case 'CLAIM_RETURN':
-      return '반품 회수';
+      return '고객 반품 회수';
     case 'FAILED_DELIVERY_RETURN':
-      return '실패 반납';
+      return '전달 실패 반납';
     default:
       return null;
   }
@@ -104,4 +104,9 @@ function stageOf(d: DispatchState | null, x: ExecutionState | null, radiusKm: nu
   if (d === 'DISPATCHING') return { index: 0, tone: 'active', text: radiusKm ? `라이더 찾는 중(반경 ${radiusKm}km)` : '라이더 찾는 중' };
   if (d === 'CREATED') return { index: 0, tone: 'active', text: '배차 요청 기다림' };
   return { index: 0, tone: 'active', text: '확인 중' };
+}
+
+/** 무슨 배송인지 — 목적 이름, 일반 배송(DELIVERY·모름)은 "고객 배송". 화면은 배송 번호 옆에 늘 이것을 붙인다 */
+export function deliveryKindName(purpose?: DeliveryPurpose | null): string {
+  return purposeLabel(purpose) ?? '고객 배송';
 }
