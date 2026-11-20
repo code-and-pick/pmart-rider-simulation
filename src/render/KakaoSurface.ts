@@ -3,7 +3,7 @@
 
 import { ROUTE_COLOR } from './colors';
 import type { KakaoMaps, KCircle, KCustomOverlay, KMap, KPolyline } from './kakao';
-import { clusterClick, createClusterEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl , type ClusterMember } from './markers';
+import { clusterClick, createClusterEl, createPickerEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl , type ClusterMember } from './markers';
 import type { CustomerPinState, MapSurface, RiderMarkerState, RouteKind } from './surface';
 import type { LatLng } from '../util/geo';
 
@@ -125,6 +125,19 @@ export class KakaoSurface implements MapSurface {
       m.pos = pos;
     }
     updateClusterEl(m.el, count, title, members, aside);
+  }
+
+  private picker: KCustomOverlay | null = null;
+
+  showPicker(pos: LatLng, members: readonly ClusterMember[], onPick: (id: string) => void, onClose: () => void): void {
+    this.hidePicker();
+    const el = createPickerEl(members, onPick, onClose);
+    this.picker = new this.k.CustomOverlay({ position: this.ll(pos), content: el, xAnchor: 0.5, yAnchor: 1, zIndex: 50, map: this.map, clickable: true });
+  }
+
+  hidePicker(): void {
+    this.picker?.setMap(null);
+    this.picker = null;
   }
 
   removeCluster(id: string): void {

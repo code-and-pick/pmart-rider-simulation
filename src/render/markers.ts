@@ -182,3 +182,34 @@ export function updateCustomerEl(el: HTMLElement, color: string, label: string, 
   const lab = el.querySelector('.mk-cust-label') as HTMLElement;
   if (lab.textContent !== label) lab.textContent = label;
 }
+
+/**
+ * 겹친 라이더 고르기 창 — 같은 자리(화면에서 겹침)에 있는 라이더를 누르면 뜬다. 라이더는 실제 자리에 겹친 채 그대로 그린다
+ * (사용자 2026-11-20 "같은 위치에 있으면 다 겹치게 해 놓고 겹쳐 있는 부분을 클릭하면 … 누구 고를 건지 팝업창").
+ */
+export function createPickerEl(members: readonly ClusterMember[], onPick: (id: string) => void, onClose: () => void): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'mk-picker';
+  const head = document.createElement('div');
+  head.className = 'mk-picker-h';
+  head.innerHTML = '<span></span><button type="button" aria-label="닫기">✕</button>';
+  (head.querySelector('span') as HTMLElement).textContent = `이 자리 라이더 ${members.length}명`;
+  el.appendChild(head);
+  for (const mem of members) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.dataset.rid = mem.id;
+    row.innerHTML = '<i></i><span></span>';
+    (row.querySelector('i') as HTMLElement).style.background = mem.color;
+    (row.querySelector('span') as HTMLElement).textContent = mem.label;
+    el.appendChild(row);
+  }
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const t = e.target as HTMLElement;
+    const row = t.closest('[data-rid]') as HTMLElement | null;
+    if (row?.dataset.rid) onPick(row.dataset.rid);
+    else if (t.closest('.mk-picker-h button')) onClose();
+  });
+  return el;
+}

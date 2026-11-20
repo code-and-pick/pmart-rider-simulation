@@ -47,6 +47,9 @@ export interface MapSurface {
   /** 라이더 묶음 "n명"(같은 자리 라이더) — 누르면 onClusterClick(펼쳐 고르기), false 면 그 자리로 확대 */
   upsertCluster(id: string, pos: LatLng, count: number, title: string, members?: readonly import('./markers').ClusterMember[], aside?: boolean): void;
   removeCluster(id: string): void;
+  /** 겹친 라이더 고르기 창 — 그 자리 위에 띄움(하나만, 다시 부르면 바꿈). 고르거나 닫으면 onPick/onClose */
+  showPicker(pos: LatLng, members: readonly import('./markers').ClusterMember[], onPick: (id: string) => void, onClose: () => void): void;
+  hidePicker(): void;
   /** 그 자리를 가운데로 두고 확대 */
   zoomInAt(pos: LatLng): void;
   panTo(pos: LatLng): void;

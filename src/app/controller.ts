@@ -86,8 +86,32 @@ export class AppController {
     // React StrictMode 는 개발 중 붙이기 → 떼기 → 붙이기를 한다. SDK 를 기다리는 사이 떼어졌으면 그 붙이기는 버린다.
     const gen = ++this.mapGen;
     const center = this.sim.mfcLocation;
-    // 지도에서 라이더를 누르면 선택(오른쪽 탭이 그 라이더로 걸러짐), 다시 누르면 풀림
-    const onClick = (id: string) => this.select(this.selected === id ? null : id);
+    // 지도에서 라이더를 누르면 선택(오른쪽 탭이 그 라이더로 걸러짐), 다시 누르면 풀림.
+    // 같은 자리(화면에서 겹침)에 다른 라이더가 있으면 바로 고르지 않고 "누구?" 고르기 창(사용자 2026-11-20)
+    const onClick = (id: string) => {
+      const s = this.surface;
+      const near = s ? this.overlapping(id, s) : [];
+      if (!s || near.length < 2) {
+        s?.hidePicker();
+        this.select(this.selected === id ? null : id);
+        return;
+      }
+      const control = this.view === 'control';
+      const me = this.sim.riders.find((r) => r.id === id);
+      s.showPicker(
+        me?.pos ?? this.sim.mfcLocation,
+        near.map((r) => ({ id: r.id, label: r.label ?? r.id.replace(/^RD-/, ''), color: this.riderColor(r, control) })),
+        (pick) => {
+          s.hidePicker();
+          this.select(pick);
+        },
+        () => s.hidePicker(),
+      );
+    };
+    // 지도 빈 곳을 누르면 고르기 창을 닫는다
+    container.addEventListener('click', (e) => {
+      if (!(e.target as HTMLElement | null)?.closest?.('.mk-rider, .mk-picker')) this.surface?.hidePicker();
+    });
     let surface: MapSurface;
     try {
       const k = await loadKakaoMaps(import.meta.env.VITE_KAKAO_JS_KEY);
@@ -352,6 +376,18 @@ export class AppController {
     this.ticker.emit();
   }
 
+  /** 그 라이더 그림과 화면에서 겹친 라이더(자기 포함, 그려진 라이더만) — 고르기 창에 씀 [시뮬] 겹침 거리 */
+  private overlapping(id: string, s: MapSurface): RiderView[] {
+    const me = this.sim.riders.find((r) => r.id === id);
+    const mp = me?.pos ? s.screenPoint(me.pos) : null;
+    if (!mp) return [];
+    return this.sim.riders.filter((r) => {
+      if (!r.pos || isResting(r)) return false;
+      const p = s.screenPoint(r.pos);
+      return !!p && Math.hypot(p.x - mp.x, p.y - mp.y) < OVERLAP_PX;
+    });
+  }
+
   /** 라이더 그림 색 — 라이더 관제는 끊김·쉬는 중·배송 중·대기, 배송 관제는 엔진 단계 */
   private riderColor(r: RiderView, control: boolean): string {
     return control ? (isAlarmOffline(r) ? CONTROL_COLOR.stale : r.locationOffline ? CONTROL_COLOR.rest : r.deliveryId ? CONTROL_COLOR.delivering : CONTROL_COLOR.waiting) : PHASE_COLOR[r.phase];
@@ -385,30 +421,12 @@ export class AppController {
     // 같은 자리(화면에서 가까이)에 겹친 라이더는 둥글게 벌려 그린다 — 눌러 고르기 쉽게(사용자 2026-11-19 "같은 장소에 겹쳐 있으니까 클릭이 애매")
     // 같은 자리 라이더는 벌리지 않는다 — 실제 자리에 "n명" 묶음, 누르면 이름 목록에서 고름(사용자 2026-11-20 "펼쳐도 위치가 다 다른 곳에 표시").
     // 고른 라이더는 묶음에서 빠져 실제 자리에 낱개로 보인다(아래)
-    const layout = riderLayout(this.sim.riders.flatMap((r) => (r.pos && !isResting(r) ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])), () => false);
-    const offsets = layout.offsets;
-    const hidden = new Set(layout.clusters.flat());
-    // 묶음 "n명" — 고른 라이더가 있으면 그 라이더는 묶음에서 빼고 낱개로 보인다
-    const seenClusters = new Set<string>();
-    for (const ids of layout.clusters) {
-      const members = ids.filter((id) => id !== this.mapRider && id !== this.selected);
-      for (const id of ids) if (!members.includes(id)) hidden.delete(id);
-      const ps = members.map((id) => this.sim.riders.find((x) => x.id === id)?.pos).filter((p): p is LatLng => !!p);
-      if (ps.length < 2) {
-        for (const id of members) hidden.delete(id);
-        continue;
-      }
-      const key = `cl:${members[0]}`;
-      seenClusters.add(key);
-      const center = { lat: ps.reduce((acc, p) => acc + p.lat, 0) / ps.length, lng: ps.reduce((acc, p) => acc + p.lng, 0) / ps.length };
-      const list = members.flatMap((id) => {
-        const r = this.sim.riders.find((x) => x.id === id);
-        return r ? [{ id, label: r.label ?? id.replace(/^RD-/, ''), color: this.riderColor(r, control) }] : [];
-      });
-      s.upsertCluster(key, center, ps.length, `같은 자리 라이더 ${ps.length}명 — 누르면 이름 목록에서 고르기`, list, members.length < ids.length);
-    }
-    for (const key of this.drawnClusters) if (!seenClusters.has(key)) s.removeCluster(key);
-    this.drawnClusters = seenClusters;
+    // 같은 자리 라이더는 겹친 채 실제 자리에 그린다(묶음·벌리기 없음) — 누르면 고르기 창(onClick)
+    const offsets = new Map<string, { x: number; y: number }>();
+    const hidden = new Set<string>();
+    // 예전 묶음("n명")이 남아 있으면 지운다
+    for (const key of this.drawnClusters) s.removeCluster(key);
+    this.drawnClusters = new Set();
     for (const r of this.sim.riders) {
       // 쉬는 라이더(맡은 배송 없음 · 신규배차 꺼짐)는 위치를 공유하지 않는다 — 지도에 그리지 않음(백엔드 tracking 0.12.0 규칙, 2026-11-19)
       if (!r.pos || isResting(r)) {
@@ -476,6 +494,9 @@ export class AppController {
  * 돌려주는 값 = 그 라이더를 화면에서 옮길 만큼(px). 혼자면 없음. [시뮬] 거리·반지름
  */
 const SPREAD_NEAR_PX = 40;
+
+/** 라이더 그림(72% — 약 32px)이 겹쳐 보이는 거리 — 이 안이면 누를 때 고르기 창 [시뮬] */
+const OVERLAP_PX = 26;
 
 /** 이보다 많이 모이면 벌리지 않고 "n명" 묶음 하나로(50명을 벌리면 원이 바다·전국까지 커졌다 — 사용자 2026-11-19) [시뮬] */
 export const SPREAD_MAX = 8;

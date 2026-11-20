@@ -2,7 +2,7 @@
 // MFC 를 원점으로 한 미터 격자(캔버스) 위에 카카오 화면과 같은 HTML 마커를 올린다. 휠 = 확대, 끌기 = 이동.
 
 import { ROUTE_COLOR } from './colors';
-import { clusterClick, createClusterEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl, type ClusterMember } from './markers';
+import { clusterClick, createClusterEl, createPickerEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl, type ClusterMember } from './markers';
 import type { CustomerPinState, MapSurface, RiderMarkerState, RouteKind } from './surface';
 import type { LatLng } from '../util/geo';
 
@@ -154,6 +154,21 @@ export class PlaneSurface implements MapSurface {
     updateClusterEl(c.el, count, title, members, aside);
   }
 
+  private picker: { el: HTMLElement; pos: LatLng } | null = null;
+
+  showPicker(pos: LatLng, members: readonly ClusterMember[], onPick: (id: string) => void, onClose: () => void): void {
+    this.hidePicker();
+    const el = createPickerEl(members, onPick, onClose);
+    el.classList.add('plane-anchor', 'plane-picker');
+    this.layer.appendChild(el);
+    this.picker = { el, pos };
+  }
+
+  hidePicker(): void {
+    this.picker?.el.remove();
+    this.picker = null;
+  }
+
   removeCluster(id: string): void {
     this.clusters.get(id)?.el.remove();
     this.clusters.delete(id);
@@ -268,6 +283,7 @@ export class PlaneSurface implements MapSurface {
     for (const r of this.riders.values()) place(r.el, this.toPx(r.pos));
     for (const c of this.customers.values()) place(c.el, this.toPx(c.pos));
     for (const c of this.clusters.values()) place(c.el, this.toPx(c.pos));
+    if (this.picker) place(this.picker.el, this.toPx(this.picker.pos));
   }
 
   destroy(): void {
