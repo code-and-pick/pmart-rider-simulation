@@ -142,6 +142,8 @@ export interface RiderTrip {
   failedAt?: number;
   /** 라이더가 픽업 전 배정을 취소한 시각(다른 라이더에게 재배차) */
   cancelledAt?: number;
+  /** 실패 반납(FAILED_DELIVERY_RETURN)을 MFC 에 반납한 시각 — 고객 전달이 아니라 완료 수에 넣지 않는다 */
+  returnedAt?: number;
 }
 
 export interface RiderHooks {
@@ -189,6 +191,8 @@ export class VirtualRider {
   private readonly api: RiderApi;
   /** 이 시각까지 위치를 못 올림(위치 끊김 장면) — 점은 모아 두었다가 풀리면 한꺼번에 */
   private offlineUntil = -Infinity;
+  /** 반납이 막힌(반납 인증번호 등) 실패 반납 — 대기 중에 다시 집지 않는다 */
+  private readonly stuckReturns = new Set<string>();
   /** 위치 끊김 중인가(화면 표시) */
   /** 신규배차 받는 중(운행 중) — 준비 전·멈춘 라이더는 아님 */
   get dispatchOn(): boolean {
@@ -446,8 +450,15 @@ export class VirtualRider {
     this.job = null;
     this.trip = null;
     const handled = new Set<string>();
+    let returnCheckAt = -Infinity;
     for (;;) {
       if (this.done) return null;
+      // 제안 없이 바로 배정되는 실패 반납(dispatch 0.6.0) — 내 배송에서 찾는다(대기 들어올 때·30초마다 [시뮬])
+      if (this.clock.now - returnCheckAt >= 30) {
+        returnCheckAt = this.clock.now;
+        const back = await this.findFailedReturn();
+        if (back) return back;
+      }
       // 대기 중에는 MFC 근처(300m)로 천천히 다가간다 [시뮬]
       if (!this.moveResolve && distanceM(this.pos, this.home) > 400) {
         const near = moveToward(this.home, this.pos, 300).pos;
@@ -517,6 +528,10 @@ export class VirtualRider {
       await this.fromWrongPlace(deliveryId, trip, offer.purpose);
       return;
     }
+    if (offer.purpose === 'FAILED_DELIVERY_RETURN') {
+      await this.returnFailedGoods(deliveryId, trip);
+      return;
+    }
 
     // 4. MFC 로
     this.phase = 'TO_STORE';
@@ -580,7 +595,8 @@ export class VirtualRider {
 
   /**
    * 7~8. 고객으로 → 도착 → 사진 → 완료(또는 고객 부재면 실패). drop-info 는 좌표만 쓴다(주소·전화는 저장·기록하지 않음).
-   * 다시 배송은 핀이 없어 주소로 찾는다(locateAddress — MOCK). 못 찾으면 도움요청 ADDRESS_ISSUE → 전달 실패(ADDRESS_ERROR)로 상품을 들고 돌아간다.
+   * 다시 배송은 핀이 없어 주소로 찾는다(locateAddress — MOCK). 못 찾으면 전달 실패(ADDRESS_ERROR)로 상품을 들고 돌아간다.
+   * 실패 등록이 운영자와의 대화(DELIVERY_FAILURE)를 같이 열어 도움요청은 따로 보내지 않는다(execution 0.14.0 — 앱과 같게).
    */
   private async toCustomerAndHandOff(deliveryId: string, trip: RiderTrip) {
     const drop = await this.api.getDropInfo(deliveryId);
@@ -588,10 +604,7 @@ export class VirtualRider {
     // 핀이 없으면 도로명 주소만으로 찾는다(상세 주소·수령인·전화는 쓰지 않음). 주소는 메모·기록에 남기지 않는다
     const point = pin ?? (this.options.locator ? await this.options.locator.locate(drop.roadAddress) : null);
     if (!point) {
-      this.say('전달지 위치를 못 찾음 — 도움요청(주소)');
-      await this.write(this.opts('help'), (o) =>
-        this.api.createHelpRequest(deliveryId, { category: 'ADDRESS_ISSUE', detail: '전달지 지도 핀 없음·주소로 못 찾음(시뮬레이터)' }, o),
-      );
+      this.say('전달지 위치를 못 찾음 — 전달 실패 등록(주소)');
       const photo = await this.write(this.opts('photo'), (o) => this.api.uploadEvidencePhoto(deliveryId, testPhoto(), o));
       await this.failDelivery(deliveryId, trip, photo.photoRef, 'ADDRESS_ERROR');
       return;
@@ -606,33 +619,62 @@ export class VirtualRider {
       this.say(`위치 전송 끊김 ${Math.round(this.params.locationOutageSec / 60)}분(앱 위치 전송 멈춤) — 배송은 계속`);
     }
     await this.moveTo(this.dropPoint, this.params.riderSpeedMps, true);
+    await this.handOffAtDoor(deliveryId, trip, true);
+  }
 
-    // 8. 도착 → 사진 → 완료
+  /**
+   * 8. 도착 → 사진 → 완료. mayFail = 고객 부재(조절 바)를 굴릴지 — 실패가 반려돼 다시 온 때는 굴리지 않는다.
+   * 고객 "받았어요"·픽업 5시간 자동 완료(execution 0.20.0)와 겹치면 도착·완료가 409 — 다시 조회해 COMPLETED 면 끝난 것으로 본다.
+   */
+  private async handOffAtDoor(deliveryId: string, trip: RiderTrip, mayFail: boolean) {
     this.phase = 'AT_CUSTOMER';
+    const finish = (how: string) => {
+      trip.completedAt = this.clock.now;
+      this.say(`${how} ${deliveryId}`);
+      this.hooks.onTripDone(trip);
+      this.dropPoint = null;
+      this.target = null;
+    };
     const cur = await this.api.getExecution(deliveryId);
-    const arriveBody = { occurredAt: this.clock.iso(), location: { ...this.pos } }; // 한 번만 — 재전송 때 같은 본문
-    await this.write(this.opts('arrive-customer', cur.version), (o) => this.api.reportCustomerArrival(deliveryId, arriveBody, o));
+    if (cur.state === 'COMPLETED') return finish('이미 완료됨(고객 확인·자동 완료)');
+    if (cur.state !== 'ARRIVED_AT_CUSTOMER') {
+      const arriveBody = { occurredAt: this.clock.iso(), location: { ...this.pos } }; // 한 번만 — 재전송 때 같은 본문
+      if (!(await this.unlessCompleted(deliveryId, () => this.write(this.opts('arrive-customer', cur.version), (o) => this.api.reportCustomerArrival(deliveryId, arriveBody, o))))) {
+        return finish('이미 완료됨(고객 확인·자동 완료)');
+      }
+    }
     await this.wait(20); // 문 앞까지 [시뮬]
     const photo = await this.write(this.opts('photo'), (o) => this.api.uploadEvidencePhoto(deliveryId, testPhoto(), o));
     // 고객 부재(조절 바 customerAbsentRate) — 0 이면 난수를 쓰지 않는다(기존 흐름·시험 그대로)
-    if (this.params.customerAbsentRate > 0 && this.rng.next() < this.params.customerAbsentRate) {
+    if (mayFail && this.params.customerAbsentRate > 0 && this.rng.next() < this.params.customerAbsentRate) {
       await this.failDelivery(deliveryId, trip, photo.photoRef);
       return;
     }
     const takenAt = this.clock.iso();
     const after = await this.api.getExecution(deliveryId);
-    await this.write(this.opts('complete', after.version), (o) =>
-      this.api.reportCompletion(
-        deliveryId,
-        { method: 'CONTACTLESS', evidence: { photoRefs: [photo.photoRef], takenAt, placement: 'FRONT_DOOR' }, occurredAt: takenAt },
-        o,
+    const done = await this.unlessCompleted(deliveryId, () =>
+      this.write(this.opts('complete', after.version), (o) =>
+        this.api.reportCompletion(
+          deliveryId,
+          { method: 'CONTACTLESS', evidence: { photoRefs: [photo.photoRef], takenAt, placement: 'FRONT_DOOR' }, occurredAt: takenAt },
+          o,
+        ),
       ),
     );
-    trip.completedAt = this.clock.now;
-    this.say(`전달 완료 ${deliveryId}`);
-    this.hooks.onTripDone(trip);
-    this.dropPoint = null;
-    this.target = null;
+    finish(done ? '전달 완료' : '이미 완료됨(고객 확인·자동 완료)');
+  }
+
+  /** 쓰기를 해 보고, 409 인데 배송이 이미 COMPLETED 면 false(고객 확인·자동 완료가 먼저). 그 밖 오류는 그대로 던진다. */
+  private async unlessCompleted(deliveryId: string, run: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await run();
+      return true;
+    } catch (e) {
+      if (!(e instanceof ApiProblem && e.status === 409)) throw e;
+      const x = await this.api.getExecution(deliveryId);
+      if (x.state === 'COMPLETED') return false;
+      throw e;
+    }
   }
 
   /**
@@ -731,6 +773,9 @@ export class VirtualRider {
   /**
    * 전달 실패(고객 부재): 연락 2번(계약 — 고객 사유는 2회 이상 필수) → 문 앞 사진을 근거로 실패 등록(FAILURE_REPORTED, 아직 진행 중)
    * → 운영자 확정(FAILED) 기다림 → 상품을 들고 MFC 로 복귀. 실패 확정은 라이더가 하지 않는다(execution 계약 — 운영자).
+   * 확정되면 dispatch 가 반납 배송(FAILED_DELIVERY_RETURN)을 이 라이더에게 바로 배정한다 — 대기로 돌아가면 idleUntilAssigned 가 찾아 반납(returns/store-deliveries).
+   * 다른 라이더가 반납하기로 정해지면(returnBy OTHER_RIDER) 그 배송은 이 라이더에게 안 보인다(404) — 그 자리에서 끝낸다.
+   * 운영자가 반려(REJECT)하거나 확정을 되돌리면(0.32.0) 배송이 PICKED_UP·ARRIVED_AT_CUSTOMER 로 돌아온다 — 전달을 이어간다.
    */
   private async failDelivery(deliveryId: string, trip: RiderTrip, photoRef: string, reason: 'CUSTOMER_ABSENT' | 'ADDRESS_ERROR' = 'CUSTOMER_ABSENT') {
     this.phase = 'FAILING';
@@ -747,9 +792,10 @@ export class VirtualRider {
           detail: reason === 'CUSTOMER_ABSENT' ? '고객 부재(시뮬레이터)' : '주소로 위치를 못 찾음(시뮬레이터)',
           evidenceRefs: [photoRef],
           goodsLocation: 'WITH_RIDER',
+          // 안심번호를 없앤 뒤(execution 0.11.0) 라이더 앱이 보내는 값
           contactAttempts: [
-            { attemptedAt: first, method: 'SAFE_NUMBER_CALL', result: 'NO_ANSWER' },
-            { attemptedAt: second, method: 'APP_MESSAGE', result: 'NO_ANSWER' },
+            { attemptedAt: first, method: 'PHONE_CALL', result: 'NO_ANSWER' },
+            { attemptedAt: second, method: 'SMS', result: 'NO_ANSWER' },
           ],
           occurredAt: second,
         },
@@ -757,14 +803,80 @@ export class VirtualRider {
       ),
     );
     trip.failedAt = this.clock.now;
-    this.say('전달 실패 등록 — 운영자 확정 기다림');
+    this.say('전달 실패 등록(운영자 대화 열림) — 운영자 확정 기다림');
     // 확정은 사람(운영자)이 한다 — 실서버면 오래 걸릴 수 있어 최대 30분만 기다리고, 그 뒤에도 상품은 들고 돌아간다
-    const v = await this.waitExecution(deliveryId, (s) => s === 'FAILED', 30 * 60);
-    this.say(v === null ? '실패 확정 안 됨(30분) — 상품 들고 MFC 로' : '실패 확정 — 상품 들고 MFC 로 복귀');
+    // (늦게 확정되면 반납 배송은 대기 중에 찾아 처리한다)
+    const settled = (s: string | undefined) => s === 'FAILED' || s === 'PICKED_UP' || s === 'ARRIVED_AT_CUSTOMER';
+    const v = await this.waitExecution(deliveryId, settled, 30 * 60);
+    const now = v === null ? null : await this.api.getExecution(deliveryId);
+    if (now && (now.state === 'PICKED_UP' || now.state === 'ARRIVED_AT_CUSTOMER')) {
+      trip.failedAt = undefined;
+      this.say('실패 반려·되돌림 — 전달 이어감');
+      await this.handOffAtDoor(deliveryId, trip, false);
+      return;
+    }
+    if (now?.failure?.returnBy === 'OTHER_RIDER') {
+      this.say('실패 확정 — 다른 라이더가 반납하러 옴(상품 넘길 준비)');
+      this.dropPoint = null;
+      this.hooks.onTripDone(trip);
+      this.target = null;
+      return;
+    }
+    this.say(v === null ? '실패 확정 안 됨(30분) — 상품 들고 MFC 로' : '실패 확정 — 상품 들고 MFC 로(반납 배송)');
     this.phase = 'RETURNING';
     this.dropPoint = null;
     await this.moveTo(this.home, this.params.riderSpeedMps, true);
-    this.say(`MFC 복귀 — ${deliveryId} 상품 반납(회수는 별도 배송)`);
+    this.say(`MFC 도착 — ${deliveryId} 상품 반납은 반납 배송으로`);
+    this.hooks.onTripDone(trip);
+    this.target = null;
+  }
+
+  /** 나에게 제안 없이 배정된 실패 반납(ASSIGNED) — 있으면 deliver 로 넘길 제안 모양 */
+  private async findFailedReturn(): Promise<Offer | null> {
+    let mine;
+    try {
+      mine = await this.api.listMyDeliveries({ state: 'ASSIGNED' });
+    } catch (e) {
+      if (e instanceof ApiProblem) return null; // 조회가 안 되면 다음 박자에 다시
+      throw e;
+    }
+    const back = (mine.items ?? []).find((x) => x.purpose === 'FAILED_DELIVERY_RETURN' && x.state === 'ASSIGNED' && x.deliveryId && !this.stuckReturns.has(x.deliveryId));
+    if (!back?.deliveryId) return null;
+    this.trip = { deliveryId: back.deliveryId, purpose: 'FAILED_DELIVERY_RETURN', offeredAt: this.clock.now, acceptedAt: this.clock.now };
+    this.say(`실패 반납 배정됨 ${back.deliveryId}(원래 ${back.originDeliveryId ?? '?'}) — MFC 로`);
+    return { deliveryId: back.deliveryId, purpose: 'FAILED_DELIVERY_RETURN', deliveryType: 'RETURN' };
+  }
+
+  /**
+   * 실패 반납(FAILED_DELIVERY_RETURN): 상품을 들고 MFC 로 → ASSIGNED 에서 바로 반납(returns/store-deliveries → RETURNED_TO_STORE).
+   * 받음(returns/pickups) 단계는 없다(execution 0.15.0 — 409). 반납 인증번호는 서버 설정이 켜졌을 때만 필수 — 켜져서 422 면 멈추지 않고 도움 대화 없이 기록만 남긴다.
+   */
+  private async returnFailedGoods(deliveryId: string, trip: RiderTrip) {
+    this.phase = 'RETURNING';
+    if (distanceM(this.pos, this.home) > 30) {
+      this.say('실패 상품 들고 MFC 로');
+      await this.moveTo(this.home, this.params.riderSpeedMps, true);
+    }
+    const version = await this.waitExecution(deliveryId, (s) => s === 'ASSIGNED', this.params.assignmentReflectWaitSec);
+    if (version === null) {
+      this.say(`실패 반납 ${deliveryId} 이 execution 에 ASSIGNED 로 안 보임 — 대기로`);
+      this.stuckReturns.add(deliveryId);
+      this.hooks.onTripDone(trip);
+      return;
+    }
+    const body = { occurredAt: this.clock.iso(), location: { ...this.pos } }; // 한 번만 — 재전송 때 같은 본문
+    try {
+      await this.write(this.opts('ret-store', version), (o) => this.api.reportReturnStoreDelivery(deliveryId, body, o));
+    } catch (e) {
+      if (!(e instanceof ApiProblem && e.status === 422 && e.code?.startsWith('RETURN_HANDOVER'))) throw e;
+      // 반납 인증번호가 켜짐 — 번호는 MFC 직원 화면에만 있어 시뮬레이터가 얻는 길이 없다(docs/backend-requests.md)
+      this.say(`실패 반납 막힘(422 ${e.code}) — 반납 인증번호 필요, MFC 직원 확인 기다림`);
+      this.stuckReturns.add(deliveryId);
+      this.hooks.onTripDone(trip);
+      return;
+    }
+    trip.returnedAt = this.clock.now;
+    this.say(`실패 상품 MFC 반납 ${deliveryId}`);
     this.hooks.onTripDone(trip);
     this.target = null;
   }

@@ -1,14 +1,17 @@
 // 백엔드 계약의 부분 사본 — 이 시뮬레이터(가상 라이더)가 부르거나 읽는 부분만.
 // 이름·상태값·필드는 계약을 그대로 따른다. 계약이 바뀌면 여기를 먼저 맞추고 docs/design.md §3 표를 고친다.
 //
-// 기준: pmart-backend origin/main c475ff94 (2026-11-17 다시 읽음 — 6df1e842 뒤 바뀐 것은 모두 추가뿐, 시뮬레이터가 부르는 길·값 그대로)
-//   contracts/openapi/delivery-dispatch-service.yaml   0.4.7 (0.4.5~0.4.7: 제안 요약에 dropEtaSeconds·pickupPoint·dropAreaPoint·order(주문 요약) 추가 — 아직 안 씀)
-//   contracts/openapi/delivery-execution-service.yaml  0.7.2 (0.6.0~0.7.2: 도움요청 대화 messages·배송별 도움요청 목록 GET·수행 조회 orderSummary 추가 — 아직 안 씀)
+// 기준: pmart-backend origin/main 3817f9bc (2026-11-20 전체 다시 읽음 — c475ff94 뒤 부르는 길이 없어지거나 필수 필드가 생긴 것은 없음. 새 값·새 흐름은 아래)
+//   contracts/openapi/delivery-dispatch-service.yaml   0.13.1 (0.6.0 purpose FAILED_DELIVERY_RETURN — 실패 확정 뒤 같은 라이더에게 제안 없이 반납 배송, 0.12.1 recovery.pickup.source RIDER_LOCATION,
+//                                                              0.12.2 GET /offers pollAfterSec 은 더 이상 null 아님 — 못 받으면 30초, 0.5.2 order.mfcPhone, 0.13.1 Delivery.dropAreaLabel, 0.11.1 Assignment.vehicleType nullable)
+//   contracts/openapi/delivery-execution-service.yaml  0.33.0 (0.14.0 실패 등록 = DELIVERY_FAILURE 도움요청 대화도 같이 열림(따로 보내지 않음), 0.15.0 실패 확정(custody RIDER) → 반납 배송 ASSIGNED 에서 바로 returns/store-deliveries,
+//                                                              0.20.0 고객 "받았어요"·픽업 5시간 자동 완료(CUSTOMER_CONFIRMED·AUTO_COMPLETED — 라이더 완료가 409 일 수 있음), 0.28.0 반납 인증번호 handoverCode(설정 꺼짐이면 선택),
+//                                                              0.32.0 실패 확정 30분 안 되돌리기, 0.31.0 직원용 운행시간)
 //   contracts/openapi/delivery-tracking-service.yaml   0.12.0 (0.12.0: ControlRider.locationShared — 쉬는 라이더(신규배차 끔·배송 0건)는 location null·stale false, 백엔드 4c8748fd.0.10.0: ControlRider.riderNumber 화면 번호 — 백엔드 c902fb2f. 0.8.0: 라이더 관제 GET /rider-locations — RIDER_OPS·OPERATOR_ADMIN, 실서버 화면이 관제 계정으로 읽음 RR-08. 백엔드 aaa2ff8c)
-//   contracts/openapi/rider-service.yaml               0.5.0 → 0.16.0 직원용 라이더 찾기 GET /riders?riderIds= 만 추가로 읽음(2026-11-19 백엔드 a767ad5f, 관제 계정 — 기본 화면 라이더 상세). (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
-//   contracts/openapi/mfc-fulfillment-service.yaml     0.7.0 (출고 조회·포장 인계 부분만 — 0.6~0.7 변경은 작업 줄 바코드 등이라 인계 API 그대로)
+//   contracts/openapi/rider-service.yaml               0.18.0 (0.17.0 가입 휴대폰 확인 phoneVerificationId — 설정 꺼짐이면 선택, 0.7.0 가입 주소·은행 코드 검사. 부르는 길 그대로) — 0.16.0 직원용 라이더 찾기 GET /riders?riderIds= 만 추가로 읽음(2026-11-19 백엔드 a767ad5f, 관제 계정 — 기본 화면 라이더 상세). (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
+//   contracts/openapi/mfc-fulfillment-service.yaml     0.26.0 (출고 조회·포장 인계 부분만 — 0.13.0/0.23.0 번호로 인계, 0.24.0 Shipment.deliveryId 채움. 인계 API 그대로)
+//   contracts/openapi/rider-auth-service.yaml          0.2.0 (카카오·네이버 로그인 — 시뮬레이터는 안 부름)
 //   contracts/openapi/center-master-service.yaml       0.2.0 (MFC 위치: 라이더용 GET /mfc-pickup-points 먼저, 실패하면 관찰 계정 GET /centers/{centerId})
-//   contracts/openapi/delivery-execution-service.yaml  → 0.31.0 직원용 라이더 운행시간 GET /rider-operating-time 만 추가로 읽음(2026-11-19 a767ad5f)
 //   contracts/openapi/order-service.yaml               0.13.1 (직원용 주문 상세 GET /orders/lookups/{id}·원문 열람 POST …/pii-reveals 만 — 주문 창 "주문" 탭, 관제 계정, 2026-11-19 백엔드 637abcb5 에서 읽음)
 //   contracts/openapi/_common.yaml                     0.1.0
 // 모든 경로는 게이트웨이 /api/v1 아래. POST·PUT 은 Idempotency-Key·X-Source-System 필수, 상태 전이는 X-Expected-Version(선택).
@@ -79,7 +82,7 @@ export class ResultUnknown extends Error {
   }
 }
 
-// ───────────────────────── delivery-dispatch 0.4.4 ─────────────────────────
+// ───────────────────────── delivery-dispatch 0.13.1 ─────────────────────────
 
 export type DeliveryType = 'FORWARD' | 'RETURN' | 'RESHIPMENT';
 
@@ -94,8 +97,18 @@ export type DispatchState =
   | 'CLOSED'
   | 'BLOCKED';
 
-/** DELIVERY 일반, CLAIM_RETURN 고객 반품 회수(아직 없음), MISDELIVERY_RECOVERY 오배송 회수(DD-2), MISDELIVERY_RESHIPMENT 오배송 재발송(0.4.1 — type RESHIPMENT), MISDELIVERY_REDELIVERY 고객 잘못 다시 배송(0.4.2 — type RESHIPMENT, 잘못 둔 곳 → 실제 집). */
-export type DeliveryPurpose = 'DELIVERY' | 'CLAIM_RETURN' | 'MISDELIVERY_RECOVERY' | 'MISDELIVERY_RESHIPMENT' | 'MISDELIVERY_REDELIVERY';
+/**
+ * DELIVERY 일반, CLAIM_RETURN 고객 반품 회수(dispatch 0.5.0 — 고객 집 → MFC, 시뮬레이터는 아직 거절), MISDELIVERY_RECOVERY 오배송 회수(DD-2),
+ * MISDELIVERY_RESHIPMENT 오배송 재발송(0.4.1 — type RESHIPMENT), MISDELIVERY_REDELIVERY 고객 잘못 다시 배송(0.4.2 — type RESHIPMENT, 잘못 둔 곳 → 실제 집),
+ * FAILED_DELIVERY_RETURN 전달 실패 반납(0.6.0 — type RETURN, 실패 확정 custody RIDER 면 원래 라이더에게 제안 없이 바로 배정, 받음 단계 없이 ASSIGNED 에서 MFC 반납).
+ */
+export type DeliveryPurpose =
+  | 'DELIVERY'
+  | 'CLAIM_RETURN'
+  | 'MISDELIVERY_RECOVERY'
+  | 'MISDELIVERY_RESHIPMENT'
+  | 'MISDELIVERY_REDELIVERY'
+  | 'FAILED_DELIVERY_RETURN';
 
 export type OfferState = 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'LATE' | 'SEND_FAILED' | 'SUPERSEDED';
 export type OfferSource = 'AI_RECOMMENDED' | 'DELIVERY_LIST';
@@ -142,6 +155,8 @@ export interface OfferOrderInfo {
   orderNumber?: string | null;
   mfcName?: string | null;
   mfcAddress?: string | null;
+  /** 가게 전화 — 0.5.2 */
+  mfcPhone?: string | null;
   items?: OrderSummaryItem[];
   itemAmount?: number;
   deliveryNote?: string | null;
@@ -194,7 +209,7 @@ export interface Offer {
   summary?: OfferSummary;
 }
 
-/** GET /offers 응답. pollAfterSec null = 지금은 제안을 받을 수 없음 → 상태가 바뀔 때까지 조회를 멈춘다. */
+/** GET /offers 응답. pollAfterSec — 받을 수 있으면 5초, 못 받는 상태(운행 종료·신규배차 끔·하나씩 배달 중·제한)면 30초(0.12.2 부터 null 을 주지 않음 — 타입만 호환으로 nullable). */
 export interface OfferListResponse {
   items?: Offer[];
   page?: Page;
@@ -261,7 +276,8 @@ export interface Assignment {
   assignmentId?: string;
   deliveryId?: string;
   riderId?: string;
-  vehicleType?: string;
+  /** 수락한 제안의 수단 — 제안 없이 배정(실패 반납 등)이면 null (0.11.1) */
+  vehicleType?: string | null;
   state?: 'ASSIGNED' | 'PICKED_UP' | 'CANCELLED' | 'COMPLETED';
   assignedAt?: string;
   bundleId?: string | null;
@@ -272,16 +288,19 @@ export interface Assignment {
   version?: number;
 }
 
-/** 오배송 회수 배송(DD-2). pickup 은 배정된 라이더·운영자에게만 — 제안만 받은 라이더에게는 비어 있다. */
+/** 오배송 회수(DD-2)·고객 반품 회수(claimId). pickup 은 배정된 라이더·운영자에게만 — 제안만 받은 라이더에게는 비어 있다. */
 export interface RecoveryInfo {
   caseId?: string;
+  /** 고객 반품 회수(CLAIM_RETURN) — 0.5.0 */
+  claimId?: string;
   originDeliveryId?: string;
   /** 운영자에게만 */
   originRiderId?: string;
   pickup?: {
     lat?: number;
     lng?: number;
-    source?: 'RIDER_COMPLETION_LOCATION' | 'DROP_ADDRESS';
+    /** RIDER_LOCATION — 다른 라이더 반납 때 원래 라이더 마지막 위치(0.12.1) */
+    source?: 'RIDER_COMPLETION_LOCATION' | 'DROP_ADDRESS' | 'RIDER_LOCATION';
     recordedAt?: string;
   };
 }
@@ -307,6 +326,8 @@ export interface Delivery {
   recovery?: RecoveryInfo;
   /** 0.4.1 — 재발송(MISDELIVERY_RESHIPMENT)이면 오배송 확인 사건 */
   caseId?: string;
+  /** 배송지 동 이름 — 0.13.1 */
+  dropAreaLabel?: string | null;
 }
 
 /** POST /deliveries/{id}/assignment-cancellations 본문. 픽업 뒤면 422 PICKED_UP_CASE_REQUIRED. */
@@ -319,7 +340,7 @@ export interface AssignmentCancellationRequest {
   approvalRef?: string;
 }
 
-// ───────────────────────── delivery-execution 0.5.1 ─────────────────────────
+// ───────────────────────── delivery-execution 0.33.0 ─────────────────────────
 
 /** 수행 관점 상태 — dispatch 의 DispatchState 와 다른 값이다(docs/design.md §4). */
 export type ExecutionState =
@@ -388,7 +409,8 @@ export type GoodsLocation = 'WITH_RIDER' | 'RETURNED_TO_STORE' | 'LEFT_AT_DOOR' 
 
 export interface ContactAttempt {
   attemptedAt: string;
-  method?: 'SAFE_NUMBER_CALL' | 'APP_MESSAGE';
+  /** PHONE_CALL·SMS — 0.11.0 안심번호 없앤 뒤 앱이 보내는 값 */
+  method?: 'SAFE_NUMBER_CALL' | 'APP_MESSAGE' | 'PHONE_CALL' | 'SMS';
   result: 'ANSWERED' | 'NO_ANSWER' | 'FAILED';
 }
 
@@ -410,7 +432,9 @@ export type HelpCategory =
   | 'APP_ERROR'
   | 'STORE_WAITING'
   | 'STATUS_CORRECTION'
-  | 'OTHER';
+  | 'OTHER'
+  /** 0.14.0 — 실패 등록이 같이 여는 대화. 조회용 — 이 값으로 직접 만들면 400 */
+  | 'DELIVERY_FAILURE';
 
 /** POST /deliveries/{id}/help-requests 본문. */
 export interface HelpRequestCreate {
@@ -441,10 +465,15 @@ export interface ReturnPickupRequest extends TransitionRequest {
   evidenceRefs: string[];
 }
 
-/** POST …/returns/store-deliveries */
+/**
+ * POST …/returns/store-deliveries. 실패 반납(FAILED_DELIVERY_RETURN)은 ASSIGNED 에서 바로(0.15.0).
+ * handoverCode(0.28.0) = MFC 직원 화면의 반납 인증번호 4자리 — 서버 설정 pmart.execution.return-handover.required 가 켜졌을 때만 필수(기본 꺼짐).
+ * 틀리면 422 RETURN_HANDOVER_CODE_MISMATCH(남은 횟수), 5번 틀리면 422 RETURN_HANDOVER_LOCKED, 필수인데 없으면 422 RETURN_HANDOVER_CODE_REQUIRED.
+ */
 export interface ReturnStoreDeliveryRequest extends TransitionRequest {
   evidenceRefs?: string[];
   receivedByStaffRef?: string;
+  handoverCode?: string;
 }
 
 export interface EvidencePhoto {
@@ -456,7 +485,8 @@ export interface EvidencePhoto {
 
 export interface Evidence {
   evidenceRef?: string;
-  method?: string;
+  /** CUSTOMER_CONFIRMED 고객 "받았어요", AUTO_COMPLETED 픽업 5시간 뒤 서버 자동 완료(0.20.0) */
+  method?: 'FACE' | 'CONTACTLESS' | 'CUSTOMER_CONFIRMED' | 'AUTO_COMPLETED';
   photoRefs?: string[];
   takenAt?: string;
   placement?: string;
@@ -467,7 +497,7 @@ export interface StatusHistoryEntry {
   state?: ExecutionState;
   occurredAt?: string;
   recordedAt?: string;
-  actor?: 'RIDER' | 'SYSTEM_EVENT' | 'OPERATOR';
+  actor?: 'RIDER' | 'SYSTEM_EVENT' | 'OPERATOR' | 'CUSTOMER';
   sourceRef?: string;
 }
 
@@ -501,6 +531,11 @@ export interface DeliveryExecution {
     deliveryNote?: string | null;
   };
   deliveryId?: string;
+  /** 화면 배송 번호(주문번호-순번) */
+  deliveryNumber?: string | null;
+  orderNumber?: string | null;
+  mfcName?: string | null;
+  mfcPhone?: string | null;
   version?: number;
   type?: DeliveryType;
   orderId?: string;
@@ -508,8 +543,12 @@ export interface DeliveryExecution {
   mfcId?: string;
   state?: ExecutionState;
   handoverIds?: string[];
-  /** 인계된 포장만 들어 있다(rider_e2e.py 주석) — 포장 목록·QR 은 RR-03 */
+  /** 출고 포장 ∪ 인계 기록(c95f1b17 — 첫 인계 전에도 채워짐). 포장 QR 은 RR-03 */
   packageIds?: string[];
+  /** 고객 반품 회수 */
+  claimId?: string | null;
+  /** false 면 받음(returns/pickups) 단계 없이 ASSIGNED 에서 바로 MFC 반납(실패 반납) — 0.15.0 */
+  returnPickupRequired?: boolean | null;
   evidence?: Evidence;
   failure?: {
     reason?: string;
@@ -523,6 +562,13 @@ export interface DeliveryExecution {
     decidedBy?: string;
     decidedAt?: string;
     custody?: 'RIDER' | 'STORE';
+    /** 실패 등록이 연 DELIVERY_FAILURE 대화 — 0.14.0 */
+    helpRequestId?: string | null;
+    resumeRequestedAt?: string | null;
+    /** 실패 확정(custody RIDER) 뒤 만들어진 반납 배송 — 0.15.0 */
+    returnDeliveryId?: string | null;
+    /** 반납을 누가 하나 — OTHER_RIDER 면 원래 라이더는 그 배송을 못 연다(404) */
+    returnBy?: 'SAME_RIDER' | 'OTHER_RIDER' | null;
   };
   incidents?: { incidentId?: string; category?: string; raisedAt?: string }[];
   history?: StatusHistoryEntry[];
@@ -555,8 +601,10 @@ export interface DropInfo {
   entranceMethod?: 'FREE' | 'PASSWORD' | 'CALL' | 'OTHER' | null;
   entranceNote?: string | null;
   deliveryNote?: string | null;
+  /** 주문 핀이 없으면 주소 지오코딩 좌표로 채움 — coordinateSource 로 구분 */
   lat?: number | null;
   lng?: number | null;
+  coordinateSource?: 'ORDER_PIN' | 'ADDRESS_GEOCODE' | null;
 }
 
 export interface MyDeliveriesResponse {
@@ -593,6 +641,8 @@ export interface OperatingTime {
   connectedSeconds?: number | null;
   /** 대기 시간 = 운행 중 + 신규배차 켬 + 맡은 배송 0건 — 못 부르면 null */
   waitingSeconds?: number | null;
+  /** 날짜별(Asia/Seoul) — 계약 필수, 화면은 아직 안 씀 */
+  days?: { date: string; seconds: number; connectedSeconds?: number | null; waitingSeconds?: number | null }[];
 }
 
 /**
@@ -610,6 +660,12 @@ export interface StaffRiderSummary {
   newDispatchEnabled?: boolean;
   restriction?: string;
   joinedAt?: string;
+  /** (rider 0.17~0.18) */
+  version?: number;
+  operatingMfcId?: string | null;
+  restrictionUntil?: string | null;
+  stateChangedAt?: string;
+  signupStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
 }
 
 export interface StaffRiderSearchResult {
@@ -636,6 +692,8 @@ export interface StaffDeliverySummary {
   orderNumber?: string | null;
   /** (2026-11-18, ADR-0070) 화면 배송 번호 = 화면용 주문번호-순번(예 74939255-1). 모르면 null */
   deliveryNumber?: string | null;
+  purpose?: DeliveryPurpose | null;
+  resumeRequestedAt?: string | null;
 }
 
 export interface StaffDeliveryListResponse {
@@ -643,7 +701,7 @@ export interface StaffDeliveryListResponse {
   page?: Page;
 }
 
-// ───────────────────────── delivery-tracking 0.8.1 ─────────────────────────
+// ───────────────────────── delivery-tracking 0.12.0 ─────────────────────────
 
 export interface LocationPoint {
   lat: number;
@@ -705,6 +763,8 @@ export interface ControlRider {
   stale: boolean;
   activeDeliveries: {
     deliveryId: string;
+    /** 화면 배송 번호 — 0.11.0 */
+    deliveryNumber?: string | null;
     stage?: 'UNASSIGNED' | 'TO_STORE' | 'AT_STORE' | 'TO_CUSTOMER' | 'AT_CUSTOMER' | 'DONE' | null;
     pickedUp?: boolean;
     etaPickup?: string | null;
@@ -717,7 +777,7 @@ export interface ControlRiderList {
   asOf: string;
 }
 
-// ───────────────────────── rider-service 0.4.0 ─────────────────────────
+// ───────────────────────── rider-service 0.18.0 ─────────────────────────
 
 export type VehicleType = 'MOTORCYCLE' | 'BICYCLE' | 'E_BIKE' | 'KICKBOARD' | 'CAR' | 'WALK';
 export type OperatingStatus = 'OFF_DUTY' | 'ON_DUTY';
@@ -729,12 +789,20 @@ export interface DeliveryArea {
   zoneId?: string;
 }
 
-/** POST /riders/signups — riderId 는 토큰 주체(본문에 없음). 전화번호는 중복만 확인(같은 번호 409 DUPLICATE_RIDER). */
+/**
+ * POST /riders/signups — riderId 는 토큰 주체(본문에 없음). 같은 번호 409 DUPLICATE_RIDER·IDENTITY_ALREADY_REGISTERED, 탈퇴 30일 안 409 RIDER_REJOIN_BLOCKED.
+ * 0.7.0: residence.roadAddress 는 주소 검색과 정확히 일치(422 INVALID_ADDRESS), bankCode ^[0-9]{3}$·accountNumber ^[0-9]{10,14}$, 같은 계좌 409 DUPLICATE_ACCOUNT.
+ * 0.17.0: 서버 설정 phone-verification.required 가 켜지면 phoneVerificationId 필수(422 PHONE_NOT_VERIFIED — 실제 문자 확인이라 시뮬레이터는 가입 못 함). 기본 꺼짐.
+ * 지금 RD-sim-01·02 는 가입이 끝나 이 길을 다시 부르지 않는다.
+ */
 export interface RiderSignupRequest {
-  /** ^01[0-9]{8,9}$ — 시뮬레이터 대역은 RR-02 회신 대기 */
+  /** ^01[0-9]{8,9}$ — 시뮬레이터 대역 010-0000-00NN(RR-02) */
   phone: string;
   name?: string;
   vehicleType: VehicleType;
+  /** 0.5.0 — 오토바이·자동차·킥보드는 필수(422 LICENSE_REQUIRED) */
+  licenseNumber?: string;
+  phoneVerificationId?: string;
   bankAccount?: { bankCode: string; accountNumber: string; holderName: string };
   residence?: { roadAddress?: string; detail?: string };
   deliveryAreas: DeliveryArea[];
@@ -766,6 +834,8 @@ export interface DispatchSettings {
 
 export interface RiderProfile {
   riderId?: string;
+  /** 화면 라이더 번호 6자리 */
+  riderNumber?: string | null;
   version?: number;
   name?: string;
   phoneMasked?: string;
@@ -795,14 +865,14 @@ export interface WithdrawalRequest {
 /** rider 0.6.0 WithdrawalBlocker — 진행 중 배송·확정 전 수행료(완료 5시간 안)·산정 불가 조정 대기·열린 도움요청·제한 검토 중 */
 export type WithdrawalBlocker = 'ACTIVE_DELIVERY' | 'UNCONFIRMED_EARNING' | 'EARNING_ADJUSTMENT_PENDING' | 'OPEN_HELP_REQUEST' | 'RESTRICTION_REVIEW';
 
-/** GET /riders/me/withdrawals/{requestId} */
+/** GET /riders/me/withdrawals/{requestId} — 실제로는 COMPLETED·REJECTED 만 온다. 탈퇴 뒤 GET /riders/me 404, 그 토큰은 게이트웨이 401. */
 export interface Withdrawal {
   requestId?: string;
   state?: 'PENDING' | 'COMPLETED' | 'REJECTED';
   blockers?: WithdrawalBlocker[];
 }
 
-// ───────────────────────── mfc-fulfillment 0.5.0 (출고 조회·인계) ─────────────────────────
+// ───────────────────────── mfc-fulfillment 0.26.0 (출고 조회·인계) ─────────────────────────
 
 export type ShipmentState = 'PREPARING' | 'READY' | 'PARTIALLY_HANDED_OVER' | 'HANDED_OVER' | 'CANCELLED' | 'CLOSED_PARTIAL';
 export type PackageState = 'OPEN' | 'SEALED' | 'HANDED_OVER' | 'INVALIDATED' | 'VOIDED';
@@ -827,6 +897,10 @@ export interface Package {
   qrCode?: string;
   /** 라벨 숫자(fulfillment 0.13.0 F-8) — 새 포장 4자리(0.23.0), 그 전 6자리. QR 이 안 찍힐 때 라이더가 입력 */
   handoverCode?: string | null;
+  orderNumber?: string | null;
+  packingLocation?: string | null;
+  stagingLocation?: string | null;
+  icePackCount?: number | null;
   contents?: PackageContentLine[];
   bagCount?: number;
   containsAlcohol?: boolean;
@@ -859,8 +933,9 @@ export interface Shipment {
   shipmentId?: string;
   fulfillmentId?: string;
   orderId?: string;
-  /** 인계 뒤에도 null 이었던 사례가 있다(MFC 시뮬레이터 R-19 — docs/design.md §5) */
+  /** 0.24.0 부터 채움(인계 사실의 배송, 없으면 취소 안 된 최근 배송). 배송이 아직 없으면 null — 예전 R-19 null 사례는 고쳐짐 */
   deliveryId?: string | null;
+  orderNumber?: string | null;
   version?: number;
   state?: ShipmentState;
   holdReason?: string | null;
@@ -897,7 +972,8 @@ export interface HandoverAuthorization {
 
 /**
  * POST /packages/handover-code-authorizations 본문(fulfillment 0.13.0 F-8, 0.23.0 R-26) — 라벨 숫자로 QR 과 같은 허가.
- * 틀리면 409 HANDOVER_CODE_MISMATCH(details attemptsLeft), 같은 라이더·배송 5번 틀리면 409 HANDOVER_CODE_LOCKED.
+ * 201 HandoverAuthorization. 틀리면 409 HANDOVER_CODE_MISMATCH(details attemptsLeft), 같은 라이더·배송 5번 틀리면 409 HANDOVER_CODE_LOCKED(맞는 번호도 거절),
+ * 다른 배송 포장 409 DELIVERY_MISMATCH, 옛 6자리 번호가 겹치면 409 HANDOVER_CODE_AMBIGUOUS.
  */
 export interface HandoverCodeAuthorizationRequest {
   riderId: string;
@@ -924,6 +1000,7 @@ export interface HandoverCommitResult {
   shipmentState?: ShipmentState;
   handedOverAt?: string;
   nextAction?: string;
+  /** `코드: 상세` — INSUFFICIENT_STOCK·HANDOVER_QTY_EXCEEDED·INVALID_STATE·FENCE_VERSION_MISMATCH·VERSION_CONFLICT·VALIDATION_FAILED */
   rejectReason?: string | null;
 }
 
@@ -940,6 +1017,8 @@ export interface HandoverResolution {
     expiresAt?: string | null;
   };
   handoverId?: string | null;
+  handoverCode?: string | null;
+  orderNumber?: string | null;
   inventoryCommitId?: string | null;
   inventoryApplyStatus?: 'NOT_REQUESTED' | 'PROCESSING' | 'APPLIED' | 'REJECTED' | 'UNKNOWN_RESULT';
   stopRequestId?: string | null;
@@ -1006,8 +1085,11 @@ export type DomainEventType =
   | 'DeliveryIncidentRaised'
   | 'ReturnPickedUp'
   | 'ReturnDelivered'
+  | 'DeliveryFailureReverted'
+  | 'DeliveryHeadingToCustomer'
   // delivery.tracking.v1
   | 'RiderLocationStale'
+  | 'RiderApproachingCustomer'
   // platform.case.v1 — 오배송 확인(case-service, 상담원·지원센터가 기록). 회수·재발송·다시 배송의 시작
   | 'MisdeliveryConfirmed'
   // 다시 배송 결제 필요(dispatch 발행, 200m 이상 — 9,000원)

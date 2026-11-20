@@ -18,6 +18,8 @@ export const CONTRACT = {
   dispatchHours: { startHour: 8, endHour: 24 },
   /** 제안 조회 권장 간격 — 응답 pollAfterSec 이 우선, 없을 때만 [확정] 계약 "잠정 기본 5초" */
   offersPollDefaultSec: 5,
+  /** [확정] dispatch 0.12.2 — 제안을 못 받는 상태(운행 종료·신규배차 끔·하나씩 배달 중·제한)면 pollAfterSec 30(null 을 주지 않음) */
+  offersPollIneligibleSec: 30,
   /** 알뜰배달 묶음·배달리스트 수락 최대 3건 [확정] dispatch 0.4.0 */
   bundleMax: 3,
   deliveryListAcceptMax: 3,

@@ -58,6 +58,11 @@
 - 회신: 백엔드 `docs/handoff/simulator/rider/2026-11-18-backend-reply-rr03-rr05-rr07.md`(보낸 영역 delivery, 사용자 2026-11-18 "응 전부 진행해") — tracking `GET /deliveries/{id}/eta`·`/stream`(SSE) **구현·배포됨**(라이더 본인도 자기 배송 조회 가능). 다만 ETA 계산(카카오 길찾기)은 꺼져 있어 값은 `ETA_PENDING` — 단계·라이더 위치는 온다. 시뮬레이터는 쓰지 않는다(값이 ETA_PENDING 이라 볼 것이 없음 — 켜지면 다시 본다).
 tracking `GET /deliveries/{id}/eta`·`/stream` 은 501(TR-1, 사용자 "필요 없음/선택"). 고객 화면 ETA 는 그리지 않는다. 기록만 남긴다.
 
+### RR-09 실패 반납 인증번호를 시뮬레이터가 얻는 길 — 열림(기록만, 2026-11-20)
+- 배경: execution 0.28.0 `POST /deliveries/{id}/returns/store-deliveries` 본문 `handoverCode`(MFC 직원 화면의 반납 인증번호 4자리). 서버 설정 `pmart.execution.return-handover.required` 가 **꺼짐(기본)이면 선택**, 켜지면 없을 때 422 RETURN_HANDOVER_CODE_REQUIRED. 번호는 MFC 직원 화면(`GET /return-handovers?mfcId=`)에만 나온다(백엔드 3817f9bc 계약).
+- 시뮬레이터 지금: 번호를 보내지 않는다. 설정이 켜져 422 가 오면 그 반납을 멈춘 것으로 두고(라이더는 대기로, 같은 반납을 다시 집지 않음) 메모만 남긴다 — 계약에 없는 길로 번호를 얻지 않는다.
+- 필요할 때(사용자 결정): 설정을 켤 계획이면 ① 관찰 계정(`claude-mfc-wrk`, 읽기만)으로 `GET /return-handovers?mfcId=` 를 읽는 것을 허용할지(RR-03 "라벨을 본다"와 같은 가정 = "직원 화면을 본다"), ② MFC 시뮬레이터 가상 직원이 번호를 불러 주는 것으로 할지.
+
 ## 시뮬레이터가 정한 값 (MOCK 흉내 — 서버 값이 아님)
 
 P1(2026-11-16) MOCK 이 정한 값. 정본은 `src/config.ts`(`MockParams`·`SimParams`) — 계약 값(`CONTRACT`: 응답 대기 60초·반경 1→2→3km·재시도 2회/10분 등)은 여기 적지 않는다.
@@ -74,8 +79,8 @@ P1(2026-11-16) MOCK 이 정한 값. 정본은 `src/config.ts`(`MockParams`·`Sim
 | 전달지(drop-info) | 가짜 값(좌표만 의미) | 실제 개인정보 — 좌표만 쓰고 버림 |
 | 가상 라이더 수락률·응답 지연 | 90%·3~15초(나머지 반은 거절, 반은 무응답) | 같은 엔진 값 |
 | **시나리오 조절 바**(화면 "⚙ 시나리오", 2026-11-16) | 주문량 0~60/시간, 수락률 0~100%, 포장 시간 ×0.5~5, 고객 부재 0~100%, 응답 끊김 0~50%(절반은 처리 전·절반은 처리 뒤) — 기본값은 위 표 | 실서버는 조절 안 함(실제 결과만), 실서버 라이더 고객 부재는 늘 0 |
-| 전달 실패 → 운영자 확정 | 60초 뒤 MOCK 이 대신 확정(FAILED, DeliveryFailed, 배차 CLOSED) | 운영자가 `failure-decisions` 로 |
-| 전달 실패 때 라이더 | 연락 2번(30초)·문 앞 사진 → `failures`(CUSTOMER_ABSENT, WITH_RIDER) → 확정 대기(최대 30분) → 상품 들고 MFC 복귀 | 같은 엔진 값(조절 바로만 켜짐) |
+| 전달 실패 → 운영자 확정 | 60초 뒤 MOCK 이 대신 확정(FAILED, DeliveryFailed, 배차 CLOSED). 상품이 라이더에게 있으면(custody RIDER) 실패 반납(type RETURN, purpose FAILED_DELIVERY_RETURN)을 **늘 같은 라이더**에게 제안 없이 바로 배정(2026-11-20, dispatch 0.6.0·execution 0.15.0). 반려·되돌리기·다른 라이더 반납(OTHER_RIDER)은 흉내 내지 않음 | 운영자가 `failure-decisions` 로(반려·30분 안 되돌리기·반납 라이더 선택 포함) |
+| 전달 실패 때 라이더 | 연락 2번(30초, PHONE_CALL·SMS)·문 앞 사진 → `failures`(CUSTOMER_ABSENT, WITH_RIDER — 실패 대화 DELIVERY_FAILURE 가 같이 열려 도움요청은 따로 안 보냄) → 확정 대기(최대 30분) → 상품 들고 MFC → 대기 중 내 배송에서 실패 반납을 찾아(30초마다 [시뮬]) ASSIGNED 에서 바로 `returns/store-deliveries`. 반려·되돌림이면 전달을 이어감 | 같은 엔진 값(조절 바로만 켜짐) |
 | 라이더 배정 취소(조절 바) | 수락 뒤 가게로 가다가 30~90초 뒤 `assignment-cancellations`(RIDER, RIDER_UNABLE, reassign true) | 실서버는 안 함 |
 | 위치 끊김(조절 바) | 고객에게 가는 중 4분 위치 안 올림(점은 모았다가 풀리면 최근 200점). MOCK tracking 은 30초마다 보고 3분(서비스 문서 값) 넘으면 RiderLocationStale 한 번 | 실서버는 안 함 — tracking 이 실제로 낸다 |
 | 주문 창 "주문" 탭(2026-11-19) | 가상 주문 상세 — 배달팁 3,000원(상품 3만 원 이상 0원), 요청사항 있는 주문 50%, 배송지·수령인·전화·요청사항 모두 "(MOCK)" 가짜, 원문 열람은 바로 가짜 원문(열람 기록 없음). `src/config.ts` `MOCK_ORDER` | order-service 직원용 주문 상세·원문 열람(관제 계정, audit 기록) |

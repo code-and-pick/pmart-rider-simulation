@@ -146,6 +146,7 @@ export class Simulation implements World {
     const del = this.backend.deliveries.get(deliveryId);
     if (!del) return { state: 'none', reason: '없는 배송' };
     if (del.purpose === 'MISDELIVERY_RECOVERY') return { state: 'none', reason: '고객 전달지가 없는 배송(오배송 회수 — MFC 로)' };
+    if (del.purpose === 'FAILED_DELIVERY_RETURN') return { state: 'none', reason: '고객 전달지가 없는 배송(실패 반납 — MFC 로)' };
     const redeliver = del.purpose === 'MISDELIVERY_REDELIVERY';
     return {
       state: 'ok',

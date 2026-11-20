@@ -21,6 +21,7 @@ import {
   type AssignmentCancellationRequest,
   type Center,
   type CommandResponse,
+  type CompletionMethod,
   type CompletionRequest,
   type Delivery,
   type DeliveryExecution,
@@ -222,8 +223,23 @@ export interface MDelivery {
     packageIds: string[];
     history: StatusHistoryEntry[];
     photos: string[];
-    evidence?: { method: string; photoRefs: string[]; takenAt: string; placement?: string };
-    failure?: { reason: string; goodsLocation?: string; photoRefs: string[]; contactAttempts: number; reportedAt: string };
+    evidence?: { method: CompletionMethod; photoRefs: string[]; takenAt: string; placement?: string };
+    failure?: {
+      reason: string;
+      goodsLocation?: string;
+      photoRefs: string[];
+      contactAttempts: number;
+      reportedAt: string;
+      /** 실패 등록이 같이 연 DELIVERY_FAILURE 대화(execution 0.14.0) */
+      helpRequestId?: string;
+      decision?: 'CONFIRM' | 'REJECT';
+      decidedBy?: string;
+      decidedAt?: string;
+      custody?: 'RIDER' | 'STORE';
+      /** 실패 확정(custody RIDER) 뒤 같은 라이더에게 바로 배정한 반납 배송(execution 0.15.0) */
+      returnDeliveryId?: string;
+      returnBy?: 'SAME_RIDER' | 'OTHER_RIDER';
+    };
     helps: MHelp[];
     assignedAt?: number;
     completedAt?: number;
@@ -471,6 +487,50 @@ export class MockBackend implements RiderPort {
     this.emit('DeliveryCreated', `${del.deliveryId} 회수(${caseId}, 원래 ${origin.deliveryId})`, { deliveryId: del.deliveryId });
     this.setDispatchState(del, 'DISPATCHING');
     this.startAttempt(del, 'AUTO', 0, new Set(originRider ? [originRider] : []));
+  }
+
+  /**
+   * 운영자 실패 확정을 MOCK 이 대신 — FAILED + DeliveryFailed, dispatch CLOSED.
+   * 상품을 라이더가 들고 있으면(custody RIDER) 반납 배송(type RETURN, purpose FAILED_DELIVERY_RETURN)을 만들어
+   * 같은 라이더에게 제안 없이 바로 배정한다(dispatch 0.6.0·execution 0.15.0 — 받음 단계 없이 ASSIGNED 에서 MFC 반납).
+   * MOCK 은 늘 같은 라이더(SAME_RIDER) — 다른 라이더 반납(OTHER_RIDER)은 운영자가 고르는 일이라 흉내 내지 않는다.
+   */
+  private confirmFailure(del: MDelivery, riderId: string) {
+    const f = del.x.failure;
+    if (del.x.state !== 'FAILURE_REPORTED' || !f) return;
+    f.decision = 'CONFIRM';
+    f.decidedBy = 'mock-operator';
+    f.decidedAt = this.clock.iso();
+    f.custody = f.goodsLocation === 'RETURNED_TO_STORE' ? 'STORE' : 'RIDER';
+    this.xHistory(del, 'FAILED', 'OPERATOR', 'mock-operator');
+    this.emit('DeliveryFailed', `${del.deliveryId} 전달 실패 확정(MOCK 운영자)`, { deliveryId: del.deliveryId, riderId });
+    this.setDispatchState(del, 'CLOSED');
+    if (f.custody !== 'RIDER') return;
+    const back = this.newReturnDelivery(del);
+    f.returnDeliveryId = back.deliveryId;
+    f.returnBy = 'SAME_RIDER';
+    this.emit('DeliveryCreated', `${back.deliveryId} 실패 반납(원래 ${del.deliveryId}) — 같은 라이더에게 바로 배정`, { deliveryId: back.deliveryId });
+    this.assign(back, riderId);
+  }
+
+  private newReturnDelivery(origin: MDelivery): MDelivery {
+    const now = this.clock.now;
+    const deliveryId = this.ids.next('DL');
+    const del: MDelivery = {
+      deliveryId,
+      orderId: origin.orderId,
+      shipmentId: `FRT-${origin.deliveryId}`,
+      mfcId: this.mfcId,
+      customer: { ...this.mfcLocation },
+      createdAt: now,
+      type: 'RETURN',
+      purpose: 'FAILED_DELIVERY_RETURN',
+      originDeliveryId: origin.deliveryId,
+      d: { state: 'CREATED', version: 1, attempts: [], assignment: null, updatedAt: now },
+      x: { exists: false, state: 'UNASSIGNED', version: 0, riderId: null, handoverIds: [], packageIds: [], history: [], photos: [], helps: [] },
+    };
+    this.deliveries.set(deliveryId, del);
+    return del;
   }
 
   /** 다시 배송(ADR-0065): 잘못 둔 곳 → 실제 집. 200m 미만 원래 기사 먼저(0원), 이상 결제 대기 */
@@ -1037,7 +1097,7 @@ export class MockBackend implements RiderPort {
     return n;
   }
 
-  /** 제안을 받을 수 있는 상태인가 — GET /offers pollAfterSec null 조건과 같다 */
+  /** 제안을 받을 수 있는 상태인가 — 아니면 GET /offers pollAfterSec 30(dispatch 0.12.2) */
   private offerEligible(r: MRider): boolean {
     if (!r.signedUp) return false;
     if (r.operating.status !== 'ON_DUTY' || !r.operating.newDispatchEnabled) return false;
@@ -1530,6 +1590,7 @@ export class MockBackend implements RiderPort {
       purpose: del.purpose,
       caseId: del.caseId,
       originDeliveryId: del.originDeliveryId,
+      returnPickupRequired: del.type === 'RETURN' ? del.purpose !== 'FAILED_DELIVERY_RETURN' : null,
       // 원래 배송의 완료 증빙(놓은 곳·사진 참조) — 회수·다시 배송 라이더가 찾아갈 때
       recoveryOrigin:
         del.pickup && origin?.x.evidence
@@ -1779,7 +1840,7 @@ export class MockBackend implements RiderPort {
             items,
             page: { nextCursor: null, size: items.length },
             serverTime: b.clock.iso(),
-            pollAfterSec: b.offerEligible(r) ? CONTRACT.offersPollDefaultSec : null,
+            pollAfterSec: b.offerEligible(r) ? CONTRACT.offersPollDefaultSec : CONTRACT.offersPollIneligibleSec,
           };
         }),
       getOffer: (offerId: string) =>
@@ -2005,22 +2066,21 @@ export class MockBackend implements RiderPort {
               fail(422, 'EVIDENCE_REQUIRED');
             }
             if (CUSTOMER_REASONS.has(body.reason) && (body.contactAttempts?.length ?? 0) < 2) fail(422, 'CONTACT_ATTEMPTS_REQUIRED');
+            // 실패 등록 = 같은 ID 의 DELIVERY_FAILURE 도움요청(대화)도 열림 — 앱은 도움요청을 따로 보내지 않는다(execution 0.14.0)
+            const helpRequestId = o.idempotencyKey;
+            del.x.helps.push({ requestId: helpRequestId, category: 'DELIVERY_FAILURE', stage: del.x.state, detail: body.detail ?? null, evidenceRefs: [...refs], createdAt: now() });
             del.x.failure = {
               reason: body.reason,
               goodsLocation: body.goodsLocation,
               photoRefs: [...refs],
               contactAttempts: body.contactAttempts?.length ?? 0,
               reportedAt: b.clock.iso(),
+              helpRequestId,
             };
             b.xHistory(del, 'FAILURE_REPORTED', 'RIDER'); // 실패 등록 자체는 사건 없음(계약 0.3.0 — 확정 때 DeliveryFailed)
             // 운영자 확정을 MOCK 이 대신(failureConfirmSec 뒤) — FAILED + DeliveryFailed, dispatch CLOSED(라이더 진행 중 수에서 빠짐)
-            b.schedule(b.params.failureConfirmSec, () => {
-              if (del.x.state !== 'FAILURE_REPORTED') return;
-              b.xHistory(del, 'FAILED', 'OPERATOR', 'mock-operator');
-              b.emit('DeliveryFailed', `${deliveryId} 전달 실패 확정(MOCK 운영자)`, { deliveryId, riderId: me });
-              b.setDispatchState(del, 'CLOSED');
-            });
-            return b.cmd(o.idempotencyKey, { version: del.x.version });
+            b.schedule(b.params.failureConfirmSec, () => b.confirmFailure(del, me));
+            return b.cmd(o.idempotencyKey, { version: del.x.version, resultId: helpRequestId });
           },
           { key: o.idempotencyKey, body },
         ),
@@ -2031,6 +2091,8 @@ export class MockBackend implements RiderPort {
           `/deliveries/${deliveryId}/help-requests`,
           () => {
             const del = b.myExec(me, deliveryId);
+            // 실패 대화는 실패 등록으로만 열린다(execution 0.14.0)
+            if (body.category === 'DELIVERY_FAILURE') fail(400, 'VALIDATION_FAILED', 'DELIVERY_FAILURE 는 실패 등록(/failures)으로만');
             if (['COMPLETED', 'FAILED', 'CANCELLED', 'UNASSIGNED'].includes(del.x.state)) fail(409, 'INVALID_STATE');
             const requestId = o.idempotencyKey;
             del.x.helps.push({
@@ -2078,6 +2140,7 @@ export class MockBackend implements RiderPort {
             const del = b.myExec(me, deliveryId);
             const redelivery = del.purpose === 'MISDELIVERY_REDELIVERY';
             if (!redelivery && del.type !== 'RETURN') fail(409, 'INVALID_STATE', '회수 배송이 아님');
+            if (del.purpose === 'FAILED_DELIVERY_RETURN') fail(409, 'INVALID_STATE', '실패 반납 — 받음 단계 없음(바로 store-deliveries)');
             b.checkVersion(del.x.version, o.expectedVersion);
             if (del.x.state !== 'ASSIGNED') fail(409, 'INVALID_STATE', `배정된 회수·다시 배송만 받을 수 있음(지금 ${del.x.state})`);
             const refs = body.evidenceRefs ?? [];
@@ -2106,10 +2169,12 @@ export class MockBackend implements RiderPort {
             const del = b.myExec(me, deliveryId);
             if (del.type !== 'RETURN') fail(409, 'INVALID_STATE', '회수 배송이 아님');
             b.checkVersion(del.x.version, o.expectedVersion);
-            if (del.x.state !== 'RETURN_PICKED_UP') fail(409, 'INVALID_STATE');
+            // 실패 반납은 ASSIGNED 에서 바로(받음 단계 없음 — execution 0.15.0). 반납 인증번호(0.28.0)는 서버 설정 꺼짐이 기본이라 MOCK 은 검사하지 않는다
+            const from: ExecutionState = del.purpose === 'FAILED_DELIVERY_RETURN' ? 'ASSIGNED' : 'RETURN_PICKED_UP';
+            if (del.x.state !== from) fail(409, 'INVALID_STATE');
             del.x.completedAt = now();
             b.xHistory(del, 'RETURNED_TO_STORE', 'RIDER');
-            b.emit('ReturnDelivered', `${deliveryId} 회수품 MFC 반납`, { deliveryId, riderId: me });
+            b.emit('ReturnDelivered', `${deliveryId} ${del.purpose === 'FAILED_DELIVERY_RETURN' ? '실패 상품' : '회수품'} MFC 반납`, { deliveryId, riderId: me });
             b.schedule(b.lag(), () => {
               if (del.d.assignment) del.d.assignment.state = 'COMPLETED';
               b.setDispatchState(del, 'CLOSED');

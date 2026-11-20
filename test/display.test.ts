@@ -23,6 +23,12 @@ describe('배송 단계(화면용)', () => {
     expect(displayStage('CLOSED', 'FAILED')).toMatchObject({ tone: 'fail' });
   });
 
+  it('실패 반납(dispatch 0.6.0) — 바로 배정 → MFC 반납, 막대 이름도 따로', () => {
+    expect(displayStage('ASSIGNED', 'ASSIGNED', null, 'FAILED_DELIVERY_RETURN')).toMatchObject({ index: 3, tone: 'active', text: '실패 상품 들고 MFC 로' });
+    expect(displayStage('CLOSED', 'RETURNED_TO_STORE', null, 'FAILED_DELIVERY_RETURN')).toMatchObject({ index: 5, tone: 'done', text: '실패 상품 MFC 반납' });
+    expect(displayStage('ASSIGNED', 'ASSIGNED', null, 'FAILED_DELIVERY_RETURN').labels[5]).toBe('반납');
+  });
+
   it('실서버에서 아직 못 읽은 값', () => {
     expect(displayStage(null, 'ASSIGNED').index).toBe(1);
     expect(displayStage(null, null)).toMatchObject({ index: 0, text: '확인 중' });

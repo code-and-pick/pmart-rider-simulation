@@ -72,18 +72,31 @@ describe('시나리오 조절 바', () => {
     expect(sim.deliveryCards().length).toBeGreaterThan(5);
   }, 60_000);
 
-  it('고객 부재: 연락 2번·사진 → 전달 실패 등록 → (MOCK 운영자) 확정 → 상품 들고 MFC 복귀 → 다음 주문', async () => {
+  it('고객 부재: 연락 2번·사진 → 전달 실패 등록(대화 열림) → (MOCK 운영자) 확정 → 같은 라이더에게 실패 반납 바로 배정 → MFC 반납 → 다음 주문', async () => {
     const sim = new Simulation({ ...DEFAULT_PARAMS, acceptProbability: 1, customerAbsentRate: 1 }, { startEpochMs: START });
     sim.backend.autoOrders = false;
     const [rider] = sim.startRiders(1, () => offsetM(MFC, 300, 0));
+    const calls: string[] = [];
+    sim.backend.onApiCall((r) => calls.push(`${r.method} ${r.path}`));
     await sim.runFor(10);
     sim.backend.createOrder({ pickSec: 1, packMinutes: 3, packages: 1, customer: offsetM(MFC, 1200, 0) });
     await sim.runFor(40 * 60);
-    const card = sim.deliveryCards()[0]!;
-    expect(card).toMatchObject({ executionState: 'FAILED', dispatchState: 'CLOSED' });
     const del = [...sim.backend.deliveries.values()][0]!;
-    expect(del.x.failure).toMatchObject({ reason: 'CUSTOMER_ABSENT', contactAttempts: 2, goodsLocation: 'WITH_RIDER' });
+    const card = sim.deliveryCards().find((c) => c.deliveryId === del.deliveryId)!;
+    expect(card).toMatchObject({ executionState: 'FAILED', dispatchState: 'CLOSED' });
+    expect(del.x.failure).toMatchObject({ reason: 'CUSTOMER_ABSENT', contactAttempts: 2, goodsLocation: 'WITH_RIDER', custody: 'RIDER', returnBy: 'SAME_RIDER' });
     expect(del.x.failure?.photoRefs.length).toBe(1);
+    // 실패 등록이 DELIVERY_FAILURE 대화를 같이 연다 — 도움요청은 따로 보내지 않는다(execution 0.14.0)
+    expect(del.x.helps.map((h) => h.category)).toEqual(['DELIVERY_FAILURE']);
+    expect(calls.some((c) => c.endsWith('/help-requests'))).toBe(false);
+    // 반납 배송: 제안 없이 같은 라이더, 받음 없이 ASSIGNED → RETURNED_TO_STORE
+    const back = sim.backend.deliveries.get(del.x.failure!.returnDeliveryId!)!;
+    expect(back).toMatchObject({ type: 'RETURN', purpose: 'FAILED_DELIVERY_RETURN', originDeliveryId: del.deliveryId });
+    expect(back.x).toMatchObject({ riderId: del.x.riderId, state: 'RETURNED_TO_STORE' });
+    expect(back.d.state).toBe('CLOSED');
+    expect([...sim.backend.offers.values()].some((o) => o.deliveryId === back.deliveryId)).toBe(false);
+    expect(calls).toContain(`POST /deliveries/${back.deliveryId}/returns/store-deliveries`);
+    expect(calls).not.toContain(`POST /deliveries/${back.deliveryId}/returns/pickups`);
     expect(sim.eventLog.some((e) => e.type === 'DeliveryFailed')).toBe(true);
     expect(sim.eventLog.some((e) => e.type === 'DeliveryCompleted')).toBe(false);
     expect(customerColor(card)).toBe('#e5484d');

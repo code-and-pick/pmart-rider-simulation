@@ -140,14 +140,14 @@ describe('MockBackend — 배차(dispatch 0.4.0 흉내)', () => {
     expect(p.code).toBe('IDEMPOTENCY_CONFLICT');
   });
 
-  it('하나씩 배달하기 + 진행 중 배송이면 pollAfterSec null', async () => {
+  it('하나씩 배달하기 + 진행 중 배송이면 pollAfterSec 30(dispatch 0.12.2 — null 아님)', async () => {
     const w = world();
     const a = await w.rider(1, offsetM(MFC, 300, 0));
     await orderWithOffer(w);
     const offerId = (await a.listOffers()).items![0]!.offerId!;
     expect((await a.listOffers()).pollAfterSec).toBe(5);
     await a.respondToOffer(offerId, { response: 'ACCEPT' }, { idempotencyKey: w.key() });
-    expect((await a.listOffers()).pollAfterSec).toBeNull();
+    expect((await a.listOffers()).pollAfterSec).toBe(30);
   });
 });
 
