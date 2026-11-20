@@ -1,13 +1,14 @@
 /*
  * 분석 화면 — 2026-11-20 다시 짬. 글자 크기는 네 단계만 쓴다:
- *   제목 15px/700 · 본문 13px/500(이름·값·표) · 축·보조 12px/500 · 큰 숫자(타일 30px, 요약 26px)/800.
+ *   제목 18px/700 · 본문 14px/500(이름·값·표) · 축·보조 13px/500 · 큰 숫자(타일 32px, 요약 30px)/800.
  * 보조 글은 --c-sub 13px(작은 11px 회색은 쓰지 않음). 차트 색 --ch-*(console-v2.css, dataviz 검증 값).
  * 표시(막대·띠)는 얇게, 둘레는 비워 둔다(dataviz marks: 막대 24px 이하·윗끝 4px 둥글게·쌓은 조각 사이 2px 틈).
  */
 .an {
-  --an-t1: 15px;
-  --an-t2: 13px;
-  --an-t3: 12px;
+  /* 2026-11-20 한 단계 크게(사용자 "항목은 눈에 딱 들어와야") — 제목 18 · 본문 14 · 축·보조 13 */
+  --an-t1: 18px;
+  --an-t2: 14px;
+  --an-t3: 13px;
   font-size: var(--an-t2);
   color: var(--c-ink);
 }
@@ -25,7 +26,7 @@
   margin-bottom: 14px;
 }
 .an-head h2 {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 800;
 }
 .an-head p,
@@ -57,7 +58,7 @@
   color: var(--c-sub);
 }
 .an-tile .v {
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.5px;
@@ -217,7 +218,7 @@
   margin-bottom: 16px;
 }
 .an-sum .big {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 800;
   line-height: 1;
 }
@@ -732,4 +733,16 @@
 }
 .an .ord-dlv li {
   font-size: var(--an-t2);
+}
+/* 항목 이름(타일 이름·표 머리)은 진한 글로 — 눈에 먼저 들어오게 */
+.an-tile .l {
+  color: var(--c-ink);
+  font-weight: 700;
+}
+.an-table th {
+  color: var(--c-ink);
+  font-weight: 700;
+}
+.an-phases li {
+  grid-template-columns: 120px minmax(0, 1fr) auto;
 }

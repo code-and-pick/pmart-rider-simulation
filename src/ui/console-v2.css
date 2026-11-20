@@ -1121,3 +1121,87 @@ a.c-btn-s {
   background: var(--c-line);
   color: var(--c-ink);
 }
+
+/* ───────── 목록 관제 — 글자 한 단계 크게(사용자 2026-11-20 "항목은 눈에 딱 들어와야 하는데 그렇지가 않아").
+   이 화면만(.c-roomy). 단계: 화면 제목 22 · 구역 제목 18 · 표 머리 13.5(진한 글) · 표 본문 14 · 꼬리표 12.5 · 보조 13 ───────── */
+.c-roomy .c-page-head h2 {
+  font-size: 22px;
+}
+.c-roomy .c-page-head p,
+.c-roomy .c-page-src {
+  font-size: 14px;
+}
+.c-roomy .c-page-h3 {
+  font-size: 18px;
+  margin: 28px 0 12px;
+}
+.c-roomy .c-page-h3 .c-muted,
+.c-roomy .c-page-h3 .c-n {
+  font-size: 13px;
+}
+.c-roomy .c-kpi {
+  padding: 14px 18px 14px 20px;
+  gap: 4px;
+}
+.c-roomy .c-kpi-l {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--c-ink);
+}
+.c-roomy .c-kpi-v {
+  font-size: 30px;
+}
+.c-roomy .c-kpi-s {
+  font-size: 13px;
+}
+.c-roomy .c-table {
+  font-size: 14px;
+}
+.c-roomy .c-table th {
+  font-size: 13.5px;
+  color: var(--c-ink);
+  padding: 11px 14px;
+}
+.c-roomy .c-table td {
+  padding: 12px 14px;
+}
+.c-roomy .c-muted {
+  font-size: 13px;
+}
+.c-roomy .c-st,
+.c-roomy .c-badge,
+.c-roomy .c-tag {
+  font-size: 12.5px;
+  padding: 3px 10px;
+}
+.c-roomy .c-mini {
+  font-size: 12.5px;
+}
+.c-roomy .c-recent-q {
+  font-size: 14px;
+  padding: 9px 12px;
+  width: min(380px, 100%);
+}
+.c-roomy .c-recent-funnel {
+  width: 40px;
+  height: 40px;
+}
+.c-roomy .c-pop button,
+.c-roomy .c-recent-chip {
+  font-size: 14px;
+}
+.c-roomy .c-rd-h {
+  font-size: 16px;
+}
+.c-roomy .c-rd-tile-l,
+.c-roomy .c-rd-facts {
+  font-size: 13px;
+}
+.c-roomy .c-empty {
+  font-size: 14px;
+}
+.c-roomy .c-active td > .c-muted,
+.c-roomy .c-active td > div.c-muted,
+.c-roomy .c-active td .c-muted {
+  font-size: 13px;
+}

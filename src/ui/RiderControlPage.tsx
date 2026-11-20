@@ -57,7 +57,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
       ? '이 기기에서는 관제 응답을 못 읽음(라이더 앱 위치는 개발 서버가 있는 PC 에서만) — 시뮬레이터 라이더만'
       : '가상(MOCK) 라이더';
   return (
-    <section className="c-page" aria-label="라이더 관제">
+    <section className="c-page c-roomy" aria-label="라이더 관제">
       <div className="c-page-head">
         <div>
           <h2>라이더 관제</h2>
