@@ -58,6 +58,7 @@ export function createRiderEl(vehicle?: string | null): HTMLElement {
   el.className = 'mk-rider';
   el.dataset.vehicle = vehicle ?? 'MOTORCYCLE';
   el.innerHTML = `
+    <i class="mk-leg"></i><i class="mk-origin"></i>
     <div class="mk-rider-shadow"></div>
     <div class="mk-rider-ring"></div>
     ${vehicleSvg(vehicle)}
@@ -91,6 +92,18 @@ export function updateRiderEl(
   const tr = offset && (offset.x || offset.y) ? `${Math.round(offset.x)}px ${Math.round(offset.y)}px` : '';
   if (el.style.translate !== tr) el.style.translate = tr;
   el.classList.toggle('mk-spread', !!tr);
+  // 벌린 라이더 — 그림 가운데(22,20)에서 실제 자리(기준점 22,35 를 비킨 만큼 되돌린 곳)까지 가는 선 + 자리 점(사용자 2026-11-20 "위치가 너무 동떨어지게")
+  if (tr && offset) {
+    const dx = -offset.x;
+    const dy = 15 - offset.y;
+    const leg = el.querySelector('.mk-leg') as HTMLElement | null;
+    const org = el.querySelector('.mk-origin') as HTMLElement | null;
+    if (leg) {
+      leg.style.width = `${Math.hypot(dx, dy).toFixed(1)}px`;
+      leg.style.transform = `rotate(${Math.atan2(dy, dx).toFixed(3)}rad)`;
+    }
+    if (org) org.style.translate = `${(dx).toFixed(1)}px ${(dy).toFixed(1)}px`;
+  }
   el.style.setProperty('--rider-color', color);
   el.classList.toggle('offline', offline);
   if (el.title !== title) el.title = title;

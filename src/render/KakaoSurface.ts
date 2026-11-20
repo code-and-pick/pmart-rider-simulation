@@ -33,6 +33,7 @@ export class KakaoSurface implements MapSurface {
     private readonly container: HTMLElement,
     center: LatLng,
     private readonly onRiderClick: (id: string) => void,
+    private readonly onClusterClick: (id: string) => boolean = () => false,
   ) {
     this.map = new k.Map(container, { center: new k.LatLng(center.lat, center.lng), level: 6 });
     this.ro = new ResizeObserver(() => this.map.relayout());
@@ -104,7 +105,7 @@ export class KakaoSurface implements MapSurface {
       const el = createClusterEl();
       el.addEventListener('click', () => {
         const cur = this.clusters.get(id);
-        if (cur) this.zoomInAt(cur.pos);
+        if (cur && !this.onClusterClick(id)) this.zoomInAt(cur.pos);
       });
       const ov = new this.k.CustomOverlay({ position: this.ll(pos), content: el, xAnchor: 0.5, yAnchor: 0.5, zIndex: 25, map: this.map, clickable: true });
       m = { ov, el, lat: pos.lat, lng: pos.lng, pos };

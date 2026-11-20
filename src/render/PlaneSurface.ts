@@ -30,6 +30,7 @@ export class PlaneSurface implements MapSurface {
     private readonly container: HTMLElement,
     center: LatLng,
     private readonly onRiderClick: (id: string) => void,
+    private readonly onClusterClick: (id: string) => boolean = () => false,
   ) {
     this.origin = { ...center };
     container.classList.add('plane');
@@ -137,7 +138,7 @@ export class PlaneSurface implements MapSurface {
       el.classList.add('plane-anchor');
       el.addEventListener('click', () => {
         const cur = this.clusters.get(id);
-        if (cur) this.zoomInAt(cur.pos);
+        if (cur && !this.onClusterClick(id)) this.zoomInAt(cur.pos);
       });
       this.layer.appendChild(el);
       c = { el, pos };

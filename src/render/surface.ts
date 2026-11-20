@@ -44,7 +44,7 @@ export interface MapSurface {
    */
   upsertRoute(id: string, points: LatLng[], kind: RouteKind, road: boolean): void;
   removeRoute(id: string): void;
-  /** 라이더 묶음 "n명"(한 자리에 많이 모인 라이더) — 누르면 그 자리로 확대 */
+  /** 라이더 묶음 "n명"(같은 자리 라이더) — 누르면 onClusterClick(펼쳐 고르기), false 면 그 자리로 확대 */
   upsertCluster(id: string, pos: LatLng, count: number, title: string): void;
   removeCluster(id: string): void;
   /** 그 자리를 가운데로 두고 확대 */

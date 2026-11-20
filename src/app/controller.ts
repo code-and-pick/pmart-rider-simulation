@@ -88,16 +88,27 @@ export class AppController {
     const center = this.sim.mfcLocation;
     // 지도에서 라이더를 누르면 선택(오른쪽 탭이 그 라이더로 걸러짐), 다시 누르면 풀림
     const onClick = (id: string) => this.select(this.selected === id ? null : id);
+    // 묶음 "n명"을 누르면 그 무리를 펼친다(SPREAD_MAX 넘으면 false → 지도가 확대)
+    const onCluster = (key: string) => {
+      const ids = this.clusterMembers.get(key);
+      if (!ids || ids.length > SPREAD_MAX) return false;
+      this.spider = new Set(ids);
+      return true;
+    };
+    // 지도 빈 곳을 누르면 펼친 무리를 접는다
+    container.addEventListener('click', (e) => {
+      if (!(e.target as HTMLElement | null)?.closest?.('.mk-rider, .mk-cluster')) this.spider = null;
+    });
     let surface: MapSurface;
     try {
       const k = await loadKakaoMaps(import.meta.env.VITE_KAKAO_JS_KEY);
       if (gen !== this.mapGen) return;
-      surface = new KakaoSurface(k, container, center, onClick);
+      surface = new KakaoSurface(k, container, center, onClick, onCluster);
       this.mapStatus = { kind: 'kakao' };
     } catch (e) {
       if (gen !== this.mapGen) return;
       container.innerHTML = '';
-      surface = new PlaneSurface(container, center, onClick);
+      surface = new PlaneSurface(container, center, onClick, onCluster);
       this.mapStatus = { kind: 'plane', reason: e instanceof Error ? e.message : String(e) };
     }
     surface.setMfc(center, this.sim.params.mfcId, CONTRACT.radiusStepsKm);
@@ -196,6 +207,10 @@ export class AppController {
   private drawnMfc: { lat: number; lng: number } | null = null;
   private drawnMfcLabel = '';
   private drawnClusters = new Set<string>();
+  /** 펼친 무리(묶음을 누른 것) — 지도 빈 곳을 누르거나 흩어지면 null */
+  private spider: Set<string> | null = null;
+  /** 지금 그린 묶음 키 → 그 안 라이더(묶음 누르기에 씀) */
+  private readonly clusterMembers = new Map<string, string[]>();
   private lastStep = 0;
 
   select(id: string | null) {
@@ -378,7 +393,11 @@ export class AppController {
       if (this.selectedDelivery) focusDeliveries.add(this.selectedDelivery);
     }
     // 같은 자리(화면에서 가까이)에 겹친 라이더는 둥글게 벌려 그린다 — 눌러 고르기 쉽게(사용자 2026-11-19 "같은 장소에 겹쳐 있으니까 클릭이 애매")
-    const layout = riderLayout(this.sim.riders.flatMap((r) => (r.pos && !isResting(r) ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])));
+    // 펼칠 무리 = 묶음을 눌렀거나(spider) 그중 한 명을 고른 무리. 확대해서 흩어지면 접힘 상태도 푼다
+    const open = (ids: readonly string[]) => ids.some((id) => this.spider?.has(id) || id === this.selected || id === this.mapRider);
+    const layout = riderLayout(this.sim.riders.flatMap((r) => (r.pos && !isResting(r) ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])), open);
+    if (this.spider && !layout.groups.some((g) => g.some((id) => this.spider?.has(id)))) this.spider = null;
+    this.clusterMembers.clear();
     const offsets = layout.offsets;
     const hidden = new Set(layout.clusters.flat());
     // 묶음 "n명" — 고른 라이더가 있으면 그 라이더는 묶음에서 빼고 낱개로 보인다
@@ -393,8 +412,9 @@ export class AppController {
       }
       const key = `cl:${members[0]}`;
       seenClusters.add(key);
+      this.clusterMembers.set(key, members);
       const center = { lat: ps.reduce((acc, p) => acc + p.lat, 0) / ps.length, lng: ps.reduce((acc, p) => acc + p.lng, 0) / ps.length };
-      s.upsertCluster(key, center, ps.length, `라이더 ${ps.length}명이 이 근처에 모여 있어요 — 누르면 확대`);
+      s.upsertCluster(key, center, ps.length, ps.length <= SPREAD_MAX ? `같은 자리 라이더 ${ps.length}명 — 누르면 펼쳐서 고르기` : `라이더 ${ps.length}명이 이 근처에 모여 있어요 — 누르면 확대`);
     }
     for (const key of this.drawnClusters) if (!seenClusters.has(key)) s.removeCluster(key);
     this.drawnClusters = seenClusters;
@@ -470,13 +490,20 @@ const SPREAD_NEAR_PX = 40;
 export const SPREAD_MAX = 8;
 
 export interface RiderLayout {
-  /** 화면에서 옮길 만큼(px) — 2~SPREAD_MAX 명 무리 */
+  /** 화면에서 옮길 만큼(px) — 펼친 무리(2~SPREAD_MAX 명)만 */
   offsets: Map<string, { x: number; y: number }>;
-  /** SPREAD_MAX 넘는 무리 — 낱개는 숨기고 묶음 하나(ID 순) */
+  /** 펼치지 않은 무리 — 낱개는 숨기고 실제 자리에 묶음 하나(ID 순) */
   clusters: string[][];
+  /** 겹친 무리 전부(2명 이상, ID 순) — 펼친 무리가 흩어졌는지 볼 때 */
+  groups: string[][];
 }
 
-export function riderLayout(items: readonly { id: string; p: { x: number; y: number } | null }[]): RiderLayout {
+/**
+ * isOpen — 그 무리를 펼칠지(사용자 2026-11-20 "같은 건물에 있는 사람이 신호등 건너 다른 블록에 있는 걸로 뜬다"):
+ * 늘 벌리면 실제 자리와 동떨어져 보여서, 기본은 실제 자리에 "n명" 묶음 하나, 누르거나 그중 한 명을 고른 무리만 둘레로 펼친다(실제 자리까지 가는 선과 함께).
+ * 시험·예전 호출은 isOpen 없이 = 늘 펼침.
+ */
+export function riderLayout(items: readonly { id: string; p: { x: number; y: number } | null }[], isOpen: (ids: readonly string[]) => boolean = () => true): RiderLayout {
   const pts = items.flatMap((it) => (it.p ? [{ id: it.id, x: it.p.x, y: it.p.y }] : []));
   // 가까운 것끼리 이어진 무리(이웃의 이웃도 같은 무리) — 경계에 걸친 라이더가 다른 무리와 또 겹치지 않게
   const parent = pts.map((_, i) => i);
@@ -487,25 +514,28 @@ export function riderLayout(items: readonly { id: string; p: { x: number; y: num
   pts.forEach((p, i) => groups.set(root(i), [...(groups.get(root(i)) ?? []), p]));
   const offsets = new Map<string, { x: number; y: number }>();
   const clusters: string[][] = [];
+  const all: string[][] = [];
   for (const members of groups.values()) {
     const n = members.length;
     if (n < 2) continue;
     // 같은 무리 안 순서는 ID 순 — 매 프레임 자리가 바뀌지 않게
     const sorted = [...members].sort((p, q) => p.id.localeCompare(q.id));
-    if (n > SPREAD_MAX) {
-      clusters.push(sorted.map((m) => m.id));
+    const ids = sorted.map((m) => m.id);
+    all.push(ids);
+    if (n > SPREAD_MAX || !isOpen(ids)) {
+      clusters.push(ids);
       continue;
     }
     const cx = members.reduce((acc, m) => acc + m.x, 0) / n;
     const cy = members.reduce((acc, m) => acc + m.y, 0) / n;
-    // 그림 폭 약 44px + 이름표 — 이웃끼리 안 겹치게(최대 8명이라 반지름은 88px 까지)
-    const radius = Math.max(36, 11 * n);
+    // 펼칠 때만 쓰는 반지름 — 그림(36px)·이름표가 이웃과 안 겹치고 실제 자리까지 가는 선이 보이게(최대 8명 120px) [시뮬]
+    const radius = Math.min(120, Math.max(56, 16 * n));
     sorted.forEach((m, i) => {
       const ang = (i / n) * Math.PI * 2 - Math.PI / 2;
       offsets.set(m.id, { x: cx + radius * Math.cos(ang) - m.x, y: cy + radius * Math.sin(ang) - m.y });
     });
   }
-  return { offsets, clusters };
+  return { offsets, clusters, groups: all };
 }
 
 /** 벌릴 만큼만(시험·예전 이름) */
