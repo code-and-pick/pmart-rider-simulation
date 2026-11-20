@@ -631,7 +631,7 @@ i.k-other {
 .c-tl-axis,
 .c-tl-row {
   display: grid;
-  grid-template-columns: 170px minmax(0, 1fr) 120px;
+  grid-template-columns: 170px minmax(0, 1fr) 250px;
   align-items: center;
   gap: 10px;
 }
@@ -720,11 +720,151 @@ i.k-other {
 .c-tl-bar.k-other {
   background: var(--ch-other);
 }
+/* 오른쪽 세 칸 — 맡은 배송 · 완료 · 평균 걸린 시간(칸마다 제목·단위) */
 .c-tl-sum {
-  font-size: 12px;
-  color: var(--c-sub);
+  display: grid;
+  grid-template-columns: 64px 52px minmax(0, 1fr);
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.c-tl-sum.head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-sub);
+}
+.c-tl-axis > .c-tl-name {
+  font-size: 12px;
+  color: var(--c-sub);
+}
+.c-tl-bar.on {
+  outline: 3px solid var(--c-ink);
+  outline-offset: 1px;
+}
+.c-an-legend i.al {
+  background: transparent;
+  outline: 2px solid var(--c-orange);
+  outline-offset: -2px;
+}
+/* 읽는 법 — 보통 크기 글, 짧은 줄 셋 */
+.c-an-how {
+  margin: 0 0 12px;
+  padding: 10px 12px 10px 28px;
+  background: var(--c-soft);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--c-ink);
+}
+.c-an-chart svg .tick.unit {
+  font-size: 11px;
+}
+.c-an-chart .is-pick rect.hit {
+  fill: color-mix(in srgb, var(--c-ink) 8%, transparent);
+}
+/* 막대를 누르면 아래에 펼치는 칸 — 어떤 배송인지 */
+.c-an-pick {
+  margin-top: 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.c-an-pick-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.c-an-pick table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.c-an-pick th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--c-sub);
+  font-weight: 700;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--c-line);
+}
+.c-an-pick td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--c-line);
+}
+.c-an-pick p {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.c-an-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.c-an-badge {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #fff;
+}
+.c-an-facts {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 0 0 10px;
+}
+.c-an-facts dt {
+  color: var(--c-sub);
+}
+.c-an-facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+.c-an-steps {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  border-left: 2px solid var(--c-line);
+}
+.c-an-steps li {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 3px 0 3px 12px;
+  font-variant-numeric: tabular-nums;
+}
+.c-an-steps li.bad .l {
+  color: var(--ch-failed);
+  font-weight: 700;
+}
+.c-an-steps .t {
+  color: var(--c-sub);
+}
+.c-an-pick-f {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.c-an-pick-f .c-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-panel);
+  color: var(--c-ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+.c-an-pick-f .c-muted {
+  font-size: 12px;
 }
 
 /* 어두운 화면에서도 예전 조각(흐름·로그·운영 화면)의 글자색이 맞게 */
@@ -751,7 +891,7 @@ i.k-other {
   }
   .c-tl-axis,
   .c-tl-row {
-    grid-template-columns: 90px minmax(0, 1fr) 70px;
+    grid-template-columns: 90px minmax(0, 1fr) 170px;
   }
 }
 
@@ -1197,4 +1337,16 @@ i.k-other {
 .c-ongoing {
   color: var(--c-blue);
   font-weight: 600;
+}
+.c-an-badge.k-done {
+  background: var(--ch-done);
+}
+.c-an-badge.k-active {
+  background: var(--ch-active);
+}
+.c-an-badge.k-failed {
+  background: var(--ch-failed);
+}
+.c-an-badge.k-other {
+  background: var(--ch-other);
 }

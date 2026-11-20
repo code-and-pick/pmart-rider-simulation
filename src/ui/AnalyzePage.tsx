@@ -56,7 +56,7 @@ export function AnalyzePage() {
 
       <div className="c-an-grid">
         <section className="c-an-card wide" aria-label="시간대별 배송">
-          <h3>시간대별 배송 <span className="c-muted">배차 요청 시각 기준 · 서울</span></h3>
+          <h3>시간대별 배송 건수</h3>
           <TimeChart rows={rows} />
         </section>
         <section className="c-an-card" aria-label="상태 구성">
@@ -85,9 +85,7 @@ export function AnalyzePage() {
       </div>
 
       <section className="c-an-card" aria-label="라이더 타임라인">
-        <h3>
-          라이더 타임라인 <span className="c-muted">라이더마다 배송을 시간 축에 — 막대 = 라이더가 맡은 때 ~ 끝(진행 중은 지금까지), 배차 대기 줄은 배차 요청부터 · 누르면 지도에서</span>
-        </h3>
+        <h3>라이더 타임라인</h3>
         <RiderTimeline rows={rows} />
       </section>
     </section>
@@ -117,7 +115,9 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
   const nowMs = app.sim.clock.epochMs();
   const [chosen, setChosen] = useState<ChartView | null>(null);
   const [hover, setHover] = useState<number | null>(null);
-  const items = rows.map((r) => ({ at: r.startMs as number, kind: kindOf(r) }));
+  const [pick, setPick] = useState<number | null>(null);
+  const idx = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
+  const items = rows.map((r) => ({ at: r.startMs as number, kind: kindOf(r), r }));
   const v = chosen ?? defaultView(items.map((i) => i.at), nowMs);
   const f = frame(v, nowMs);
   const bins = binCount(items, f, ORDER);
@@ -127,6 +127,7 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
   const latest = items.length ? Math.max(...items.map((i) => i.at)) : null;
   const go = (n: ChartView) => {
     setHover(null);
+    setPick(null);
     setChosen(n);
   };
 
@@ -141,9 +142,21 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
   const y = (n: number) => pad.t + (H - pad.t - pad.b) * (1 - n / max);
   const ticks = Array.from({ length: Math.round(max / yStep) + 1 }, (_, i) => i * yStep);
   const hv = hover !== null ? bins[hover] : null;
+  const pb = pick !== null ? (bins.find((b) => b.from === pick) ?? null) : null;
+  const picked = pb ? items.filter((i) => i.at >= pb.from && i.at < pb.to).sort((a, b) => a.at - b.at) : [];
+  const binText = f.mode === 'recent' ? '10분' : f.mode === 'day' ? '1시간' : '하루';
 
   return (
     <div className="c-an-chart">
+      <ul className="c-an-how">
+        <li>
+          <b>무엇을 세나</b> — MFC 점원이 <b>배차를 요청한 시각</b>(배송이 생긴 때)으로 배송을 {binText} 칸에 모아 셉니다. 라이더가 움직인 시간이 아닙니다.
+        </li>
+        <li>
+          <b>막대 위 숫자</b> = 그 칸에 생긴 배송 <b>건수</b>. 색은 그 배송의 지금 결과(완료·진행 중·실패).
+        </li>
+        <li>{f.mode === 'week' ? '막대를 누르면 그날 하루(1시간 칸)로 들어갑니다.' : '막대를 누르면 아래에 어떤 배송인지(배송 번호·라이더·상태) 나옵니다.'}</li>
+      </ul>
       <div className="c-an-ctl">
         <div className="c-an-seg" role="tablist" aria-label="보는 기간">
           {(
@@ -202,6 +215,9 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
       </p>
 
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`시간대별 배송 막대 — ${frameTitle(f, nowMs)}`}>
+        <text className="tick unit" x={pad.l - 6} y={pad.t - 8} textAnchor="end">
+          (건)
+        </text>
         {ticks.map((t) => (
           <g key={t}>
             <line className="grid" x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} />
@@ -218,10 +234,10 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
           return (
             <g
               key={b.from}
-              className={`${isNow ? 'is-now' : ''} ${future ? 'is-future' : ''} ${f.mode === 'week' ? 'drill' : ''}`}
+              className={`${isNow ? 'is-now' : ''} ${future ? 'is-future' : ''} ${f.mode === 'week' || b.total ? 'drill' : ''} ${pick === b.from ? 'is-pick' : ''}`}
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover(null)}
-              onClick={f.mode === 'week' ? () => go({ mode: 'day', anchor: b.from }) : undefined}
+              onClick={f.mode === 'week' ? () => go({ mode: 'day', anchor: b.from }) : b.total ? () => setPick(pick === b.from ? null : b.from) : undefined}
             >
               <rect className="hit" x={pad.l + i * slot} y={pad.t} width={slot} height={H - pad.t - pad.b} />
               {isNow && <rect className="nowband" x={pad.l + i * slot} y={pad.t} width={slot} height={H - pad.t - pad.b} />}
@@ -235,7 +251,7 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
               })}
               {b.total > 0 && (
                 <text className="val" x={x(i)} y={y(b.total) - 5} textAnchor="middle">
-                  {b.total}
+                  {b.total}건
                 </text>
               )}
               {(i % f.labelEvery === 0 || isNow) && (
@@ -272,12 +288,62 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
           ) : f.mode === 'week' ? (
             '막대를 누르면 그날 시간대로'
           ) : (
-            '막대에 마우스를 올리면 칸 숫자'
+            '막대를 누르면 어떤 배송인지 아래에'
           )}
         </span>
       </div>
+
+      {pb && (
+        <div className="c-an-pick">
+          <div className="c-an-pick-h">
+            <b>
+              {binRange(f.mode, pb)} 에 생긴 배송 {picked.length}건
+            </b>
+            <button className="chip-x" aria-label="닫기" onClick={() => setPick(null)}>
+              ✕
+            </button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>배차 요청</th>
+                <th>배송 번호</th>
+                <th>라이더</th>
+                <th>지금</th>
+                <th>걸린 시간</th>
+              </tr>
+            </thead>
+            <tbody>
+              {picked.map(({ r, at, kind }) => (
+                <tr key={r.card.deliveryId}>
+                  <td>{seoulTime(at).slice(0, 5)}</td>
+                  <td>
+                    <button className="link" title="배송 관제 지도에서 이 배송 열기" onClick={() => openOnMap(app, r.card.deliveryId)}>
+                      {deliveryLabel(r.card)}
+                    </button>
+                  </td>
+                  <td>{r.card.riderId ? (idx.get(r.card.riderId)?.name ?? r.card.riderId) : '아직 없음'}</td>
+                  <td>
+                    <i className={`c-an-dot k-${kind}`} />
+                    {r.stepLabel ?? KIND_LABEL[kind]}
+                  </td>
+                  <td>{dur(r.totalSec)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="c-muted">걸린 시간 = 배차 요청부터 끝날 때까지(진행 중이면 지금까지). 배송 번호를 누르면 배송 관제 지도에서 엽니다.</p>
+        </div>
+      )}
     </div>
   );
+}
+
+/** 배송 관제(지도)로 가서 그 배송을 고른다 — 지도에 라이더·MFC·전달지 핀, 오른쪽에 상세 창 */
+function openOnMap(app: ReturnType<typeof useApp>, deliveryId: string) {
+  app.setView('field');
+  app.setFilter(null, true);
+  app.selectDelivery(deliveryId, true);
 }
 
 /** 상태 구성 — 한 줄 100% 막대(조각 사이 2px 틈) + 글자 범례(건수·비율) */
@@ -332,13 +398,16 @@ function laneHeight(lines: number): number {
 }
 
 /**
- * 라이더 타임라인(루티 배차 화면처럼) — 라이더 한 줄, 색 = 상태, 오른쪽에 건수·완료·평균.
+ * 라이더 타임라인(루티 배차 화면처럼) — 라이더 한 줄, 색 = 상태, 오른쪽에 맡은 배송·완료·평균.
  * 라이더 줄 막대 = 그 라이더가 맡은 때(배정) ~ 끝 — 배차 요청부터 그리면 라이더 찾던 시간까지 들어가 앞뒤 배송이 겹친다.
  * 배차 대기 줄 = 배차 요청 ~ 지금(아직 라이더 없음).
+ * 막대를 누르면 화면을 넘기지 않고 아래에 그 배송의 단계별 시각을 펼친다(지도는 버튼으로 — 사용자 2026-11-20
+ * "클릭하니 배송관제로 넘어가는데 뭘 보여주는 건지 모르겠어").
  */
 function RiderTimeline({ rows }: { rows: readonly OpsRow[] }) {
   const app = useApp();
   const { sim } = app;
+  const [picked, setPicked] = useState<string | null>(null);
   const nowMs = sim.clock.epochMs();
   const idx = riderIndex(sim.controlBoard?.()?.items ?? null, sim.riders, isSimRiderId);
   const byRider = new Map<string, Span[]>();
@@ -362,10 +431,20 @@ function RiderTimeline({ rows }: { rows: readonly OpsRow[] }) {
   for (let t = Math.ceil((t0 + KST) / (stepMin * 60_000)) * stepMin * 60_000 - KST; t <= t1; t += stepMin * 60_000) ticks.push(t);
   const tickDay = (t: number, i: number) => tlMultiDay && stepMin < 1440 && (i === 0 || seoulDay(ticks[i - 1]!) !== seoulDay(t));
   const lanes = [...byRider.entries()].sort((a, b) => (a[0] === '' ? -1 : b[0] === '' ? 1 : b[1].length - a[1].length));
+  const pick = picked ? (spans.find((x) => x.r.card.deliveryId === picked) ?? null) : null;
   return (
     <div className="c-tl">
+      <ul className="c-an-how">
+        <li>
+          <b>한 줄 = 라이더 한 명</b>이 맡은 배송들입니다. 맨 위 <b>배차 대기</b> 줄은 아직 라이더가 붙지 않은 배송입니다.
+        </li>
+        <li>
+          <b>막대 하나 = 배송 1건.</b> 왼쪽 끝 = 라이더가 맡은 때, 오른쪽 끝 = 끝난 때(진행 중이면 지금). 길수록 오래 걸린 배송입니다.
+        </li>
+        <li>색 = 결과, 주황 테두리 = 지연·이상, 세로 선 = 지금. 막대를 누르면 아래에 그 배송의 단계별 시각이 나옵니다.</li>
+      </ul>
       <div className={`c-tl-axis ${tlMultiDay && stepMin < 1440 ? 'two' : ''}`}>
-        <span className="c-tl-name" />
+        <span className="c-tl-name">라이더</span>
         <div className="c-tl-track">
           {ticks.map((t, i) => (
             <span key={t} style={{ left: `${pct(t)}%` }}>
@@ -374,16 +453,20 @@ function RiderTimeline({ rows }: { rows: readonly OpsRow[] }) {
             </span>
           ))}
         </div>
-        <span className="c-tl-sum">건 · 완료 · 평균</span>
+        <span className="c-tl-sum head">
+          <span title="이 목록에서 이 라이더가 맡은 배송 수">맡은 배송</span>
+          <span title="그중 전달 완료">완료</span>
+          <span title="완료한 배송의 평균 — 라이더가 맡은 때부터 전달 완료까지">평균 걸린 시간</span>
+        </span>
       </div>
       {lanes.map(([id, list]) => {
-        const done = list.map((x) => x.r).filter((r) => r.bucket === 'done' && r.totalSec !== null);
-        const avg = done.length ? done.reduce((a, r) => a + (r.totalSec as number), 0) / done.length : null;
+        const done = list.filter((x) => x.r.bucket === 'done' && x.r.totalSec !== null);
+        const avg = done.length ? done.reduce((a, x) => a + (x.e - x.s), 0) / done.length / 1000 : null;
         const packed = pack(list);
         return (
           <div key={id || 'none'} className="c-tl-row">
             <span className="c-tl-name" title={id}>
-              {id ? (idx.get(id)?.name ?? id) : '배차 대기·라이더 없음'}
+              {id ? (idx.get(id)?.name ?? id) : '배차 대기 (라이더 없음)'}
             </span>
             <div className="c-tl-track" style={{ height: `${laneHeight(packed.lines)}px` }}>
               {ticks.map((t) => (
@@ -394,21 +477,19 @@ function RiderTimeline({ rows }: { rows: readonly OpsRow[] }) {
                 return (
                   <button
                     key={r.card.deliveryId}
-                    className={`c-tl-bar k-${kindOf(r)} ${r.alert ? 'al' : ''}`}
+                    className={`c-tl-bar k-${kindOf(r)} ${r.alert ? 'al' : ''} ${picked === r.card.deliveryId ? 'on' : ''}`}
                     style={{ left: `${pct(s)}%`, width: `${Math.max(0.6, pct(e) - pct(s))}%`, top: `${3 + line * h}px`, height: `${Math.max(4, h - 2)}px` }}
-                    title={`${deliveryLabel(r.card)} · ${KIND_LABEL[kindOf(r)]}${r.totalSec !== null ? ` · ${dur(r.totalSec)}` : ''} — 누르면 지도에서`}
-                    onClick={() => {
-                      app.setView('field');
-                      app.setFilter(null, true);
-                      app.selectDelivery(r.card.deliveryId, true);
-                    }}
+                    title={`배송 ${deliveryLabel(r.card)} · ${KIND_LABEL[kindOf(r)]} · ${seoulTime(s).slice(0, 5)} ~ ${r.totalSec !== null ? seoulTime(e).slice(0, 5) : '지금'} — 누르면 아래에 자세히`}
+                    onClick={() => setPicked(picked === r.card.deliveryId ? null : r.card.deliveryId)}
                   />
                 );
               })}
               <i className="c-tl-now" style={{ left: `${pct(nowMs)}%` }} title="지금" />
             </div>
             <span className="c-tl-sum">
-              {list.length} · {done.length} · {avg !== null ? dur(avg) : '—'}
+              <span>{list.length}건</span>
+              <span>{id ? `${done.length}건` : '—'}</span>
+              <span>{id && avg !== null ? dur(avg) : '—'}</span>
             </span>
           </div>
         );
@@ -421,9 +502,74 @@ function RiderTimeline({ rows }: { rows: readonly OpsRow[] }) {
           </span>
         ))}
         <span>
+          <i className="al" />
+          지연·이상
+        </span>
+        <span>
           <i className="now" />
           지금
         </span>
+      </div>
+      {pick && (
+        <TimelinePick
+          span={pick}
+          riderName={pick.r.card.riderId ? (idx.get(pick.r.card.riderId)?.name ?? pick.r.card.riderId) : null}
+          nowMs={nowMs}
+          onClose={() => setPicked(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 타임라인에서 누른 배송 한 건 — 언제 무엇을 했나(서버 기록 시각) + 지도에서 보기 */
+function TimelinePick({ span, riderName, nowMs, onClose }: { span: Span; riderName: string | null; nowMs: number; onClose: () => void }) {
+  const app = useApp();
+  const { r, s, e } = span;
+  const kind = kindOf(r);
+  const tl = app.sim.deliveryTimeline(r.card.deliveryId);
+  const ended = r.totalSec !== null && kind !== 'active';
+  return (
+    <div className="c-an-pick">
+      <div className="c-an-pick-h">
+        <b>
+          배송 {deliveryLabel(r.card)}
+          <span className={`c-an-badge k-${kind}`}>{KIND_LABEL[kind]}</span>
+        </b>
+        <button className="chip-x" aria-label="닫기" onClick={onClose}>
+          ✕
+        </button>
+      </div>
+      <dl className="c-an-facts">
+        <dt>라이더</dt>
+        <dd>{riderName ?? '아직 없음(배차 대기)'}</dd>
+        <dt>막대 구간</dt>
+        <dd>
+          {seoulDay(s)} {seoulTime(s).slice(0, 5)} ~ {ended ? `${seoulDay(e)} ${seoulTime(e).slice(0, 5)}` : '지금'} ({dur(((ended ? e : nowMs) - s) / 1000)})
+        </dd>
+        <dt>지금 단계</dt>
+        <dd>{r.stepLabel ?? '—'}</dd>
+        <dt>배차 요청부터</dt>
+        <dd>{dur(r.totalSec)}</dd>
+      </dl>
+      {tl && tl.steps.length > 0 && (
+        <ol className="c-an-steps">
+          {tl.steps.map((st, i) => (
+            <li key={`${st.key}-${i}`} className={st.bad ? 'bad' : ''}>
+              <span className="t">
+                {seoulDay(st.atMs)} {seoulTime(st.atMs).slice(0, 5)}
+              </span>
+              <span className="l">{st.label}</span>
+              <span className="c-muted">{st.source}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <div className="c-an-pick-f">
+        <button className="c-btn" onClick={() => openOnMap(app, r.card.deliveryId)}>
+          배송 관제 지도에서 보기
+        </button>
+        <span className="c-muted">지도에 이 배송의 라이더 위치·MFC·전달지를 표시하고, 오른쪽에 상세 창(상세·주문·흐름)을 엽니다.</span>
       </div>
     </div>
   );
