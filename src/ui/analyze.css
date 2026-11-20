@@ -725,3 +725,103 @@
   color: var(--c-sub);
   font-size: var(--an-t3);
 }
+
+/* 주문 내역(OrderTab) — 분석 상세에서는 넓으니 간격을 넉넉히(사용자 2026-11-20 "너무 다닥다닥 붙어 있어서 보기 힘들다").
+   배송 관제 지도 상세 창(좁음)은 그대로 둔다. */
+.an .od {
+  gap: 0;
+  font-size: var(--an-t2);
+  line-height: 1.5;
+}
+.an .od .c-muted {
+  font-size: var(--an-t3);
+  white-space: normal;
+}
+.an .od-head {
+  gap: 8px 12px;
+  padding-bottom: 16px;
+}
+.an .od-status {
+  font-size: var(--an-t3);
+  padding: 3px 10px;
+}
+.an .od-sec {
+  padding: 16px 0;
+}
+.an .od-sec h4 {
+  margin: 0 0 12px;
+  font-size: var(--an-t2);
+  gap: 8px;
+}
+.an .od-lines {
+  gap: 10px;
+}
+.an .od-lines li {
+  gap: 16px;
+}
+.an .od-lines .nm small {
+  font-size: var(--an-t3);
+}
+.an .od-lines .a {
+  min-width: 80px;
+}
+.an .od-tag {
+  font-size: var(--an-t3);
+  padding: 1px 8px;
+}
+.an .od-amt,
+.an .od-kv {
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px 16px;
+}
+.an .od-amt .tot {
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top-style: solid;
+}
+.an .od-open {
+  font-size: var(--an-t3);
+}
+.an .od-reveal {
+  margin-top: 16px;
+  padding: 14px 16px;
+  gap: 12px;
+  border-style: solid;
+  background: var(--c-panel);
+}
+.an .od-reveal-h .c-muted {
+  font-size: var(--an-t3);
+  margin-left: 8px;
+}
+.an .od-quick {
+  gap: 8px;
+}
+.an .od-quick button {
+  font-size: var(--an-t3);
+  padding: 4px 12px;
+}
+.an .od-reveal input:not([type]) {
+  padding: 8px 10px;
+}
+.an .od-fields {
+  gap: 6px 18px;
+  font-size: var(--an-t2);
+}
+.an .od-fields label {
+  gap: 6px;
+}
+.an .od-issues li + li {
+  margin-top: 6px;
+}
+.an .od-foot {
+  padding-top: 14px;
+  border-top: 1px solid var(--c-line);
+  font-size: var(--an-t3);
+}
+.an .ord-dlv {
+  gap: 10px;
+  margin-top: 4px;
+}
+.an .ord-dlv li {
+  font-size: var(--an-t2);
+}
