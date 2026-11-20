@@ -132,10 +132,16 @@ export interface MockParams {
   networkDropRate: number;
   /** 전달 실패 등록 → 운영자 확정까지 초 [시뮬] — MOCK 이 운영자 대신(실서버는 사람이 확정) */
   failureConfirmSec: number;
+  /** 반납 인증번호 필수(execution 설정 pmart.execution.return-handover.required) [확정] 서버 기본 false — MOCK 도 같게. 켜면 번호 없는 반납이 422 */
+  returnHandoverRequired: boolean;
   /** 오배송 확률 [시뮬] — 전달 완료된 배송이 나중에 오배송으로 확인될 확률(조절 바). MOCK 이 case-service 대신 MisdeliveryConfirmed */
   misdeliveryRate: number;
   /** 전달 완료 → 오배송 확인까지 초 [시뮬](고객 문의·상담원 확인) */
   misdeliveryConfirmSec: number;
+  /** 고객 반품 확률 [시뮬] — 전달 완료된 배송이 나중에 반품 회수(CLAIM_RETURN, 고객 집 → MFC)가 될 확률(조절 바). MOCK 이 claim·dispatch 대신 */
+  claimReturnRate: number;
+  /** 전달 완료 → 반품 회수 배송 생성까지 초 [시뮬](고객 반품 신청·승인) */
+  claimReturnAfterSec: number;
   /** 오배송 중 고객 잘못(잘못 둔 곳 → 실제 집 다시 배송) 비율 [시뮬] — 나머지는 라이더·시스템 잘못(MFC 회수 + 재발송) */
   customerFaultShare: number;
   /** 고객 잘못일 때 잘못 둔 곳 ↔ 실제 집 직선 거리 범위(m) [시뮬] — 200m 미만이면 원래 기사 먼저(0원), 이상이면 결제 대기 [확정 기준값 200m — dispatch 0.4.2] */
@@ -193,8 +199,11 @@ export const DEFAULT_PARAMS: SimParams = {
     packTimeScale: 1,
     networkDropRate: 0,
     failureConfirmSec: 60,
+    returnHandoverRequired: false,
     misdeliveryRate: 0,
     misdeliveryConfirmSec: 300,
+    claimReturnRate: 0,
+    claimReturnAfterSec: 600,
     customerFaultShare: 0.5,
     redeliveryDistanceM: [60, 450],
     redeliveryPayProbability: 0.7,

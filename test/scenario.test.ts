@@ -15,7 +15,7 @@ describe('시나리오 조절 바', () => {
   it('조절해도 기본 설정(DEFAULT_PARAMS)은 그대로 — 시뮬레이션마다 사본', () => {
     const before = JSON.stringify(DEFAULT_PARAMS);
     const sim = new Simulation({ ...DEFAULT_PARAMS }, { startEpochMs: START });
-    const k = { ordersPerHour: 55, acceptProbability: 0.2, packTimeScale: 3, customerAbsentRate: 0.5, networkDropRate: 0.3, riderCancelRate: 0.4, locationOutageRate: 0.6, misdeliveryRate: 0.7, handoverByCodeRate: 0.8 };
+    const k = { ordersPerHour: 55, acceptProbability: 0.2, packTimeScale: 3, customerAbsentRate: 0.5, networkDropRate: 0.3, riderCancelRate: 0.4, locationOutageRate: 0.6, misdeliveryRate: 0.7, handoverByCodeRate: 0.8, claimReturnRate: 0.9 };
     sim.setKnobs(k);
     expect(sim.getKnobs()).toEqual(k);
     expect(JSON.stringify(DEFAULT_PARAMS)).toBe(before);
@@ -111,6 +111,68 @@ describe('시나리오 조절 바', () => {
     sim.backend.createOrder({ pickSec: 1, packMinutes: 3, packages: 1, customer: offsetM(MFC, 900, 0) });
     await sim.runFor(30 * 60);
     expect(sim.metrics().completed).toBe(1);
+  }, 60_000);
+
+  it('고객 반품 회수(CLAIM_RETURN): 수락 → 고객 집(전달지 받기 전부터) → 사진·받음 → MFC → 직원 화면 번호로 반납', async () => {
+    const sim = new Simulation({ ...DEFAULT_PARAMS, acceptProbability: 1 }, { startEpochMs: START });
+    sim.backend.autoOrders = false;
+    sim.backend.params.returnHandoverRequired = true; // 번호가 필수여도 통과해야 한다
+    sim.setKnobs({ claimReturnRate: 1 });
+    sim.startRiders(1, () => offsetM(MFC, 300, 0));
+    const calls: string[] = [];
+    sim.backend.onApiCall((r) => calls.push(`${r.method} ${r.path}`));
+    await sim.runFor(10);
+    sim.backend.createOrder({ pickSec: 1, packMinutes: 3, packages: 1, customer: offsetM(MFC, 1000, 0) });
+    await sim.runFor(60 * 60);
+    const claim = [...sim.backend.deliveries.values()].find((d) => d.purpose === 'CLAIM_RETURN')!;
+    expect(claim).toMatchObject({ type: 'RETURN' });
+    expect(claim.claimId).toMatch(/^CL/);
+    expect(claim.x.state).toBe('RETURNED_TO_STORE');
+    expect(claim.d.state).toBe('CLOSED');
+    expect(claim.returnCode).toMatchObject({ failed: 0, locked: false });
+    expect(calls).toContain(`GET /deliveries/${claim.deliveryId}/drop-info`);
+    expect(calls).toContain(`POST /deliveries/${claim.deliveryId}/returns/pickups`);
+    expect(calls).toContain(`POST /deliveries/${claim.deliveryId}/returns/store-deliveries`);
+    expect(calls.some((c) => c.startsWith('GET /return-handovers'))).toBe(true);
+    // 일반 단계는 부르지 않는다
+    expect(calls).not.toContain(`POST /deliveries/${claim.deliveryId}/store-arrivals`);
+    expect(calls).not.toContain(`POST /deliveries/${claim.deliveryId}/completions`);
+    expect(sim.metrics().completed).toBe(2); // 원래 배송 + 반품 회수
+  }, 60_000);
+
+  it('반납 인증번호 필수(설정 켬)여도 실패 반납이 직원 화면 번호로 끝난다 — MOCK 은 번호 없음·틀림·잠김을 계약대로', async () => {
+    const sim = new Simulation({ ...DEFAULT_PARAMS, acceptProbability: 1, customerAbsentRate: 1 }, { startEpochMs: START });
+    sim.backend.autoOrders = false;
+    sim.backend.params.returnHandoverRequired = true;
+    sim.startRiders(1, () => offsetM(MFC, 300, 0));
+    await sim.runFor(10);
+    sim.backend.createOrder({ pickSec: 1, packMinutes: 3, packages: 1, customer: offsetM(MFC, 1200, 0) });
+    await sim.runFor(40 * 60);
+    const back = [...sim.backend.deliveries.values()].find((d) => d.purpose === 'FAILED_DELIVERY_RETURN')!;
+    expect(back.x.state).toBe('RETURNED_TO_STORE');
+    expect(back.returnCode?.failed).toBe(0);
+
+    // 계약 오류 모양(execution 0.28.0): 새 실패 반납을 하나 더 만들어 직접 부른다
+    sim.setKnobs({ customerAbsentRate: 0 });
+    const del = [...sim.backend.deliveries.values()][0]!;
+    const riderId = del.x.riderId!;
+    const api = sim.backend.asRider(riderId);
+    const b2 = (sim.backend as unknown as { newReturnDelivery(d: unknown): { deliveryId: string }; assign(d: unknown, r: string): void });
+    const extra = b2.newReturnDelivery(del);
+    b2.assign(extra, riderId);
+    await sim.runFor(5);
+    const key = (n: number) => `k-${n}`;
+    const err = async (p: Promise<unknown>) => p.then(() => null, (e: unknown) => e as ApiProblem);
+    expect((await err(api.reportReturnStoreDelivery(extra.deliveryId, {}, { idempotencyKey: key(1) })))?.code).toBe('RETURN_HANDOVER_CODE_REQUIRED');
+    const row = (await sim.backend.observer.listReturnHandovers(DEFAULT_PARAMS.mfcId)).items.find((x) => x.deliveryId === extra.deliveryId)!;
+    expect(row).toMatchObject({ purpose: 'FAILED_DELIVERY_RETURN', state: 'ASSIGNED', failedAttempts: 0, locked: false });
+    const wrong = row.code === '0000' ? '0001' : '0000';
+    for (let i = 0; i < 5; i++) {
+      const e = await err(api.reportReturnStoreDelivery(extra.deliveryId, { handoverCode: wrong }, { idempotencyKey: key(10 + i) }));
+      expect(e?.code).toBe('RETURN_HANDOVER_CODE_MISMATCH');
+      expect(e?.problem.details?.[0]).toEqual({ field: 'attemptsLeft', reason: String(4 - i) });
+    }
+    expect((await err(api.reportReturnStoreDelivery(extra.deliveryId, { handoverCode: row.code }, { idempotencyKey: key(20) })))?.code).toBe('RETURN_HANDOVER_LOCKED');
   }, 60_000);
 
   it('응답 끊김 25%: 같은 키 재전송으로 멈춤·중복 없이 이어진다', async () => {

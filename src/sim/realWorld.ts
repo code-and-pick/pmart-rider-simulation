@@ -415,6 +415,7 @@ export class RealWorld implements World {
       riderCancelRate: 0,
       locationOutageRate: 0,
       misdeliveryRate: 0,
+      claimReturnRate: 0,
       handoverByCodeRate: this.params.handoverByCodeRate,
     };
   }

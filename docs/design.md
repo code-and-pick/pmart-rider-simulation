@@ -97,6 +97,11 @@
 - 고객 "받았어요"·픽업 5시간 자동 완료(execution 0.20.0)와 겹쳐 도착·완료가 409 면 다시 조회해 COMPLETED 면 끝난 것으로 본다.
 - MOCK: 실패 확정은 60초 뒤 MOCK 이 대신(늘 SAME_RIDER), 반려·되돌리기는 흉내 내지 않는다.
 
+### 3-3. 고객 반품 회수·반납 인증번호 (2026-11-20 사용자 "받게 해", "반납 인증번호를 받게 해")
+
+- 고객 반품 회수(type RETURN, purpose `CLAIM_RETURN` — dispatch 0.5.0·execution 0.10.0): 일반 배송처럼 MFC 중심 반경으로 제안 → 수락 → 전달지(`drop-info` — 회수지 = 고객 집, 배정·실패 등록 동안 열림) 좌표만 써서 고객 집으로 → 사진 → `returns/pickups`(items 빈 배열) → RETURN_PICKED_UP → MFC → `returns/store-deliveries`. 일반 단계(가게 도착·인계·고객 도착·완료)는 409. 위치를 못 찾으면 배정 취소(재배차). 받기 전 고객 부재 실패는 아직 흉내 내지 않는다.
+- 반납 인증번호(execution 0.28.0): MFC 반납(회수·반품 회수·실패 반납) 때 관찰 계정으로 `GET /return-handovers?mfcId=`(MFC 직원 화면 목록)를 읽어 그 배송 번호를 `handoverCode` 로 넣는다(RR-09). 잠겼으면 보내지 않고, 틀림·필수 422 면 멈추지 않고 그 반납만 놓는다.
+
 ## 4. 같은 배송, 두 서비스의 두 상태
 
 배송 하나(`deliveryId`)를 **delivery-dispatch** 와 **delivery-execution** 이 각자 자기 관점으로 갖고 있다(service-map §7: 배정 권리 = dispatch, 수행 = execution). 서로의 DB 를 읽지 않고 사건으로 사본을 맞추므로 **값 이름도, 바뀌는 시점도 다르다.**

@@ -209,6 +209,7 @@ export class Simulation implements World {
       riderCancelRate: p.riderCancelRate,
       locationOutageRate: p.locationOutageRate,
       misdeliveryRate: p.mock.misdeliveryRate,
+      claimReturnRate: p.mock.claimReturnRate,
       handoverByCodeRate: p.handoverByCodeRate,
     };
   }
@@ -228,6 +229,7 @@ export class Simulation implements World {
     if (k.riderCancelRate !== undefined) p.riderCancelRate = clamp(k.riderCancelRate, 0, 1);
     if (k.locationOutageRate !== undefined) p.locationOutageRate = clamp(k.locationOutageRate, 0, 1);
     if (k.misdeliveryRate !== undefined) p.mock.misdeliveryRate = clamp(k.misdeliveryRate, 0, 1);
+    if (k.claimReturnRate !== undefined) p.mock.claimReturnRate = clamp(k.claimReturnRate, 0, 1);
     if (k.handoverByCodeRate !== undefined) p.handoverByCodeRate = clamp(k.handoverByCodeRate, 0, 1);
   }
 

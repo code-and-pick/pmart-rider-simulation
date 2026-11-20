@@ -12,6 +12,7 @@ const NORMAL: ScenarioKnobs = {
   riderCancelRate: DEFAULT_PARAMS.riderCancelRate,
   locationOutageRate: DEFAULT_PARAMS.locationOutageRate,
   misdeliveryRate: DEFAULT_PARAMS.mock.misdeliveryRate,
+  claimReturnRate: DEFAULT_PARAMS.mock.claimReturnRate,
   handoverByCodeRate: DEFAULT_PARAMS.handoverByCodeRate,
 };
 
@@ -30,6 +31,7 @@ const PRESETS: { label: string; hint: string; knobs: Partial<ScenarioKnobs> }[] 
     hint: '전달 완료 30%가 5분 뒤 오배송으로 확인 — 반은 MFC 회수 + 재발송, 반은 고객 잘못 다시 배송(200m 미만 원래 기사 먼저 0원, 이상 결제 대기)',
     knobs: { misdeliveryRate: 0.3 },
   },
+  { label: '반품 회수', hint: '전달 완료 30%가 10분 뒤 고객 반품 — 라이더가 고객 집에서 받아 MFC 에 반납(반납 인증번호)', knobs: { claimReturnRate: 0.3 } },
 ];
 
 interface Slider {
@@ -51,6 +53,7 @@ const SLIDERS: Slider[] = [
   { key: 'riderCancelRate', label: '라이더 취소', min: 0, max: 1, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '수락한 라이더가 가게 가는 길에 배정을 취소할 확률(픽업 전, RIDER_UNABLE) — 취소한 라이더를 빼고 재배차' },
   { key: 'locationOutageRate', label: '위치 끊김', min: 0, max: 1, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '고객에게 가는 중 위치 전송이 4분 멈출 확률 — 3분 지나면 tracking 이 위치 끊김(RiderLocationStale)을 낸다. 배송 상태는 바뀌지 않는다' },
   { key: 'misdeliveryRate', label: '오배송', min: 0, max: 1, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '전달 완료가 5분 뒤 오배송으로 확인될 확률(MOCK 이 상담원 대신) — 라이더·시스템 잘못이면 회수 + 재발송, 고객 잘못이면 다시 배송' },
+  { key: 'claimReturnRate', label: '반품 회수', min: 0, max: 1, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '전달 완료가 10분 뒤 고객 반품 회수(CLAIM_RETURN)가 될 확률(MOCK 이 반품 승인 대신) — 고객 집에서 받아 MFC 반납, 반납 인증번호는 MFC 직원 화면 번호' },
   { key: 'handoverByCodeRate', label: '번호로 인계', min: 0, max: 1, step: 0.1, show: (v) => `${Math.round(v * 100)}%`, hint: 'QR 대신 포장 라벨 숫자(4자리)로 픽업 허가하는 비율 — 라이더 앱 "번호로 인계". 틀리면 남은 횟수, 5번이면 잠김' },
   { key: 'networkDropRate', label: '응답 끊김', min: 0, max: 0.5, step: 0.05, show: (v) => `${Math.round(v * 100)}%`, hint: '쓰기 요청 응답이 사라질 확률 — 절반은 처리 전, 절반은 처리 뒤 끊김. 라이더는 같은 키로 다시 보낸다' },
 ];

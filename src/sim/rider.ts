@@ -9,7 +9,8 @@
 //  - 전달지(drop-info)는 좌표만 쓰고 나머지는 버린다(저장·로그·화면 금지).
 //  - 일반 배송·재발송(MISDELIVERY_RESHIPMENT)·오배송 회수(MISDELIVERY_RECOVERY)를 받는다. 고객 잘못 다시 배송(MISDELIVERY_REDELIVERY)은
 //    전달지에 지도 핀이 없어 주소로 찾을 수단(AddressLocator — MOCK 주소록, 실서버 개발 서버 카카오 주소 검색)이 준비됐을 때만 받는다.
-//    고객 반품(CLAIM_RETURN)은 거절(docs/design.md §3-1).
+//    고객 반품 회수(CLAIM_RETURN — 고객 집 → MFC)도 받는다(사용자 2026-11-20 "받게 해"). 실패 반납(FAILED_DELIVERY_RETURN)은 제안 없이 배정된다(대기 중 내 배송에서 찾음).
+//  - MFC 반납 때 반납 인증번호(execution 0.28.0)를 관찰 계정으로 MFC 직원 화면 목록에서 읽어 넣는다(사용자 2026-11-20 "반납 인증번호를 받게 해" — RR-09).
 
 import type { ObserverApi, RiderApi, WriteOptions } from '../backend/port';
 import { CONTRACT, simRiderPhone, type SimParams } from '../config';
@@ -75,8 +76,8 @@ export const PHASE_LABEL: Record<RiderPhase, string> = {
 /** 제안을 어떻게 할지 — 순수 함수(시험용). */
 export type OfferDecision = { kind: 'ACCEPT' } | { kind: 'REJECT'; reason: 'OTHER' | 'TOO_FAR' } | { kind: 'IGNORE' };
 
-/** 가상 라이더가 받는 배송 목적 — 일반·재발송(가게 → 고객)과 오배송 회수(잘못 둔 곳 → MFC) */
-const ACCEPTED_PURPOSES: ReadonlySet<string> = new Set(['DELIVERY', 'MISDELIVERY_RESHIPMENT', 'MISDELIVERY_RECOVERY']);
+/** 가상 라이더가 받는 배송 목적 — 일반·재발송(가게 → 고객), 오배송 회수(잘못 둔 곳 → MFC), 고객 반품 회수(고객 집 → MFC) */
+const ACCEPTED_PURPOSES: ReadonlySet<string> = new Set(['DELIVERY', 'MISDELIVERY_RESHIPMENT', 'MISDELIVERY_RECOVERY', 'CLAIM_RETURN']);
 
 /**
  * canRedeliver: 다시 배송 전달지(주소만, 핀 없음)를 좌표로 찾을 수 있나.
@@ -89,13 +90,13 @@ export function decideOffer(
   canRedeliver = false,
   maxTripEtaSec: number | null = null,
 ): OfferDecision {
-  // 회수(MISDELIVERY_RECOVERY)·고객 반품·재발송(MISDELIVERY_RESHIPMENT — dispatch 0.4.1)·고객 잘못 다시 배송(MISDELIVERY_REDELIVERY — 0.4.2, 가게 대신 잘못 둔 곳에서 받음)은 받지 않는다(§3-1).
+  // 고객 반품 회수(CLAIM_RETURN)는 받는다(사용자 2026-11-20). 옛 주석: 회수(MISDELIVERY_RECOVERY)·고객 반품·재발송(MISDELIVERY_RESHIPMENT — dispatch 0.4.1)·고객 잘못 다시 배송(MISDELIVERY_REDELIVERY — 0.4.2, 가게 대신 잘못 둔 곳에서 받음)은 받지 않는다(§3-1).
   // 재발송(MISDELIVERY_RESHIPMENT, type RESHIPMENT)은 받는다 — execution 0.5.1 "수행은 일반 배송과 같다", 서비스 코드도 다시 배송(purpose)·회수(type RETURN)만 따로 처리
   // (pmart-backend 6df1e842 ExecutionStore.redelivery·recovery, 2026-11-16 확인). 목적이 없으면 종류로만 본다(FORWARD 만).
   if (offer.purpose !== undefined) {
     const ok = offer.purpose === 'MISDELIVERY_REDELIVERY' ? canRedeliver : ACCEPTED_PURPOSES.has(offer.purpose);
     if (!ok) return { kind: 'REJECT', reason: 'OTHER' };
-  } else if (offer.deliveryType !== undefined && offer.deliveryType !== 'FORWARD') return { kind: 'REJECT', reason: 'OTHER' };
+  } else if (offer.deliveryType !== undefined && offer.deliveryType !== 'FORWARD') return { kind: 'REJECT', reason: 'OTHER' }; // 목적 모름 + 회수·재발송 종류
   const eta = tripEtaSec(offer);
   if (maxTripEtaSec !== null && eta !== null && eta > maxTripEtaSec) return { kind: 'REJECT', reason: 'TOO_FAR' };
   if (roll < acceptProbability) return { kind: 'ACCEPT' };
@@ -532,6 +533,10 @@ export class VirtualRider {
       await this.returnFailedGoods(deliveryId, trip);
       return;
     }
+    if (offer.purpose === 'CLAIM_RETURN') {
+      await this.claimReturn(deliveryId, trip);
+      return;
+    }
 
     // 4. MFC 로
     this.phase = 'TO_STORE';
@@ -731,8 +736,10 @@ export class VirtualRider {
     await this.moveTo(this.home, this.params.riderSpeedMps, true);
     const back = await this.waitExecution(deliveryId, (s) => s === 'RETURN_PICKED_UP', 60);
     if (back === null) throw new Error(`회수 뒤 RETURN_PICKED_UP 이 보이지 않음 (${deliveryId})`);
-    const storeBody = { evidenceRefs: [photo.photoRef], occurredAt: this.clock.iso(), location: { ...this.pos } };
-    await this.write(this.opts('ret-store', back), (o) => this.api.reportReturnStoreDelivery(deliveryId, storeBody, o));
+    if (!(await this.storeReturn(deliveryId, back, [photo.photoRef]))) {
+      this.hooks.onTripDone(trip);
+      return;
+    }
     trip.completedAt = this.clock.now;
     this.say(`회수품 MFC 반납 ${deliveryId}`);
     this.hooks.onTripDone(trip);
@@ -768,6 +775,103 @@ export class VirtualRider {
     this.say(`배정 취소 — ${deliveryId} 다른 라이더에게 재배차`);
     this.hooks.onTripDone(trip);
     return true;
+  }
+
+  /**
+   * 고객 반품 회수(CLAIM_RETURN — dispatch 0.5.0·execution 0.10.0): 배정 → 전달지(= 회수지, 고객 집 — 받기 전에도 열림) → 고객 집 →
+   * 사진 → 받음(returns/pickups, items 빈 배열 — 줄·수량은 claim 이 정함) → RETURN_PICKED_UP → MFC → 반납(반납 인증번호).
+   * 가게 도착·MFC 인계·고객 도착·전달 완료 같은 일반 단계는 없다(409). 전달지는 좌표만 쓰고 버린다.
+   * 고객 부재로 못 받는 경우(받기 전 실패 등록)는 아직 흉내 내지 않는다.
+   */
+  private async claimReturn(deliveryId: string, trip: RiderTrip) {
+    this.phase = 'WAIT_ASSIGN_REFLECT';
+    const reflectFrom = this.clock.now;
+    let version = await this.waitExecution(deliveryId, (s) => s === 'ASSIGNED', this.params.assignmentReflectWaitSec);
+    if (version === null) {
+      this.say('배정이 execution 에 보이지 않음 — 이 배송을 놓고 대기로');
+      this.hooks.onTripDone(trip);
+      return;
+    }
+    this.say(`배정 반영 ${Math.round(this.clock.now - reflectFrom)}초`);
+    const drop = await this.api.getDropInfo(deliveryId);
+    const pin = drop.lat !== null && drop.lat !== undefined && drop.lng !== null && drop.lng !== undefined ? { lat: drop.lat, lng: drop.lng } : null;
+    const point = pin ?? (this.options.locator ? await this.options.locator.locate(drop.roadAddress) : null);
+    if (!point) {
+      this.say('반품 회수지(고객 집) 위치를 못 찾음 — 배정 취소(재배차)');
+      const disp = await this.api.getDispatch(deliveryId);
+      await this.write(this.opts('cancel', disp.version), (o) =>
+        this.api.cancelAssignment(deliveryId, { requestedBy: 'RIDER', reason: 'RIDER_UNABLE', reasonDetail: '회수지 위치 못 찾음(시뮬레이터)', reassign: true }, o),
+      );
+      trip.cancelledAt = this.clock.now;
+      this.hooks.onTripDone(trip);
+      return;
+    }
+    this.dropPoint = point;
+    this.phase = 'TO_PICKUP';
+    this.say('반품 회수 — 고객 집으로 이동');
+    await this.moveTo(point, this.params.riderSpeedMps, true);
+    this.phase = 'AT_PICKUP';
+    this.say('고객 집 도착 — 반품 상품 받아 사진');
+    await this.wait(30); // 고객에게 받기 [시뮬]
+    const photo = await this.write(this.opts('photo'), (o) => this.api.uploadEvidencePhoto(deliveryId, testPhoto(), o));
+    version = (await this.api.getExecution(deliveryId)).version ?? version;
+    const pickBody = { items: [], evidenceRefs: [photo.photoRef], occurredAt: this.clock.iso(), location: { ...this.pos } }; // 한 번만 — 재전송 때 같은 본문
+    await this.write(this.opts('ret-pickup', version), (o) => this.api.reportReturnPickup(deliveryId, pickBody, o));
+    trip.pickedUpAt = this.clock.now;
+    this.dropPoint = null;
+    this.say('반품 상품 받음 — MFC 로');
+    this.phase = 'RETURNING';
+    await this.moveTo(this.home, this.params.riderSpeedMps, true);
+    const back = await this.waitExecution(deliveryId, (s) => s === 'RETURN_PICKED_UP', 60);
+    if (back === null) throw new Error(`반품 받은 뒤 RETURN_PICKED_UP 이 보이지 않음 (${deliveryId})`);
+    if (!(await this.storeReturn(deliveryId, back, [photo.photoRef]))) {
+      this.hooks.onTripDone(trip);
+      return;
+    }
+    trip.completedAt = this.clock.now;
+    this.say(`반품 상품 MFC 반납 ${deliveryId}`);
+    this.hooks.onTripDone(trip);
+    this.target = null;
+  }
+
+  /**
+   * MFC 반납(returns/store-deliveries). 반납 인증번호(execution 0.28.0)는 MFC 직원 화면 목록(GET /return-handovers?mfcId= — 관찰 계정, MFC 작업자)에서
+   * 이 배송 번호를 읽어 넣는다 = 직원이 라이더에게 번호를 불러 준다(RR-09). 목록을 못 읽거나 없으면 번호 없이 보낸다(서버 설정이 꺼져 있으면 통과).
+   * 돌려주는 값: 반납됐으면 true. 번호 때문에 막히면(422 RETURN_HANDOVER_*) 멈추지 않고 false.
+   */
+  private async storeReturn(deliveryId: string, version: number, evidenceRefs: string[]): Promise<boolean> {
+    const code = await this.returnCode(deliveryId);
+    if (code === 'LOCKED') {
+      this.say('반납 인증번호 잠김(5번 틀림) — MFC 직원이 번호를 새로 내야 함');
+      return false;
+    }
+    // 본문은 한 번만 — 응답이 끊겨 같은 키로 다시 보낼 때 같은 본문
+    const body = { ...(evidenceRefs.length ? { evidenceRefs } : {}), occurredAt: this.clock.iso(), location: { ...this.pos }, ...(code ? { handoverCode: code } : {}) };
+    try {
+      await this.write(this.opts('ret-store', version), (o) => this.api.reportReturnStoreDelivery(deliveryId, body, o));
+    } catch (e) {
+      if (!(e instanceof ApiProblem && e.status === 422 && e.code?.startsWith('RETURN_HANDOVER'))) throw e;
+      this.say(`MFC 반납 막힘(422 ${e.code}) — 반납 인증번호 확인 필요`);
+      return false;
+    }
+    if (code) this.say('반납 인증번호(직원 화면)로 반납'); // 번호 자체는 메모·로그에 남기지 않는다(인증용 값)
+    return true;
+  }
+
+  /** 직원 화면의 반납 인증번호 — 없으면 null, 잠겼으면 'LOCKED'. 목록을 못 읽으면 null(번호 없이 보내 본다) */
+  private async returnCode(deliveryId: string): Promise<string | null | 'LOCKED'> {
+    try {
+      const list = await this.observer.listReturnHandovers(this.params.mfcId);
+      const row = (list.items ?? []).find((x) => x.deliveryId === deliveryId);
+      if (!row) return null;
+      return row.locked ? 'LOCKED' : row.code;
+    } catch (e) {
+      if (e instanceof ApiProblem) {
+        this.say(`반납 인증번호 목록을 못 읽음(${e.status} ${e.code ?? ''}) — 번호 없이 반납 시도`);
+        return null;
+      }
+      throw e;
+    }
   }
 
   /**
@@ -849,7 +953,7 @@ export class VirtualRider {
 
   /**
    * 실패 반납(FAILED_DELIVERY_RETURN): 상품을 들고 MFC 로 → ASSIGNED 에서 바로 반납(returns/store-deliveries → RETURNED_TO_STORE).
-   * 받음(returns/pickups) 단계는 없다(execution 0.15.0 — 409). 반납 인증번호는 서버 설정이 켜졌을 때만 필수 — 켜져서 422 면 멈추지 않고 도움 대화 없이 기록만 남긴다.
+   * 받음(returns/pickups) 단계는 없다(execution 0.15.0 — 409). 반납 인증번호는 storeReturn 이 직원 화면 목록에서 읽어 넣는다.
    */
   private async returnFailedGoods(deliveryId: string, trip: RiderTrip) {
     this.phase = 'RETURNING';
@@ -864,13 +968,7 @@ export class VirtualRider {
       this.hooks.onTripDone(trip);
       return;
     }
-    const body = { occurredAt: this.clock.iso(), location: { ...this.pos } }; // 한 번만 — 재전송 때 같은 본문
-    try {
-      await this.write(this.opts('ret-store', version), (o) => this.api.reportReturnStoreDelivery(deliveryId, body, o));
-    } catch (e) {
-      if (!(e instanceof ApiProblem && e.status === 422 && e.code?.startsWith('RETURN_HANDOVER'))) throw e;
-      // 반납 인증번호가 켜짐 — 번호는 MFC 직원 화면에만 있어 시뮬레이터가 얻는 길이 없다(docs/backend-requests.md)
-      this.say(`실패 반납 막힘(422 ${e.code}) — 반납 인증번호 필요, MFC 직원 확인 기다림`);
+    if (!(await this.storeReturn(deliveryId, version, []))) {
       this.stuckReturns.add(deliveryId);
       this.hooks.onTripDone(trip);
       return;

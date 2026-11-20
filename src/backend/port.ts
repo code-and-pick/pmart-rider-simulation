@@ -36,6 +36,7 @@ import type {
   RiderLocation,
   RiderProfile,
   RiderSignupRequest,
+  ReturnHandover,
   Shipment,
   StaffDeliveryListResponse,
   TransitionRequest,
@@ -158,6 +159,8 @@ export interface ObserverApi {
   getDispatch(deliveryId: string): Promise<Delivery>;
   /** 포장 qrCode 를 얻는 길(RR-03) */
   getShipment(shipmentId: string): Promise<Shipment>;
+  /** 반납 인증번호(execution 0.28.0) — MFC 직원 화면 목록. 반납 때 라이더가 넣는다(RR-09) */
+  listReturnHandovers(mfcId: string): Promise<{ items: ReturnHandover[] }>;
   /** center-master 센터 조회 — MFC 위치의 정본(배차 반경 기준) */
   getCenter(centerId: string): Promise<Center>;
 }

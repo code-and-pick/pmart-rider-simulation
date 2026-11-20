@@ -96,6 +96,8 @@ export interface ScenarioKnobs {
   handoverByCodeRate: number;
   /** 전달 완료가 나중에 오배송으로 확인될 확률(0~1) → 회수·재발송·다시 배송 */
   misdeliveryRate: number;
+  /** 전달 완료가 나중에 고객 반품 회수가 될 확률(0~1) */
+  claimReturnRate: number;
 }
 
 /** 지금까지 일어난 사건 수(MOCK — 실서버는 사건을 구독하지 못해 없음) */

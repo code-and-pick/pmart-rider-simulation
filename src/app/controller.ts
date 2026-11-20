@@ -519,6 +519,8 @@ const CONTROL_COLOR = { stale: '#ea7a0c', delivering: '#2563eb', waiting: '#16a3
 /** 배송 핀 자리 — 회수·다시 배송은 받기 전엔 잘못 둔 곳, 다시 배송은 받은 뒤 실제 집, 회수는 받은 뒤 없음(MFC 로) */
 function pinOf(c: DeliveryCard): LatLng | null {
   if (c.purpose === 'FAILED_DELIVERY_RETURN') return null; // 고객 전달지 없음(MFC 로 반납)
+  // 고객 반품 회수 — 받기 전엔 고객 집, 받은 뒤엔 없음(MFC 로)
+  if (c.purpose === 'CLAIM_RETURN' && c.executionState !== null && !['UNASSIGNED', 'ASSIGNED', 'FAILURE_REPORTED', 'CANCELLED'].includes(c.executionState)) return null;
   if (c.pickup) {
     const before = c.executionState === null || c.executionState === 'UNASSIGNED' || c.executionState === 'ASSIGNED' || c.executionState === 'CANCELLED';
     if (before) return c.pickup;

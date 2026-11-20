@@ -10,6 +10,9 @@ export const RECOVERY_STAGES = ['배차 요청', '배정', '잘못 둔 곳', '�
 /** 고객 잘못 다시 배송: 잘못 둔 곳 → 실제 집 */
 export const REDELIVERY_STAGES = ['배차 요청', '배정', '잘못 둔 곳', '받음', '고객 도착', '완료'] as const;
 
+/** 고객 반품 회수(dispatch 0.5.0): 고객 집 → MFC 반납 */
+export const CLAIM_RETURN_STAGES = ['배차 요청', '배정', '고객 집', '받음', 'MFC 도착', '반납'] as const;
+
 /** 전달 실패 반납(dispatch 0.6.0): 실패 확정 → 같은 라이더에게 바로 배정 → 상품 들고 MFC 반납(받음 단계 없음) */
 export const FAILED_RETURN_STAGES = ['실패 확정', '바로 배정', '상품 들고', 'MFC 로', 'MFC 도착', '반납'] as const;
 
@@ -18,6 +21,7 @@ export function stagesFor(purpose?: DeliveryPurpose | null): readonly string[] {
   if (purpose === 'MISDELIVERY_RECOVERY') return RECOVERY_STAGES;
   if (purpose === 'MISDELIVERY_REDELIVERY') return REDELIVERY_STAGES;
   if (purpose === 'FAILED_DELIVERY_RETURN') return FAILED_RETURN_STAGES;
+  if (purpose === 'CLAIM_RETURN') return CLAIM_RETURN_STAGES;
   return STAGES;
 }
 
@@ -69,6 +73,11 @@ function stageOf(d: DispatchState | null, x: ExecutionState | null, radiusKm: nu
     if (x === 'ASSIGNED') return { index: 2, tone: 'active', text: '배정 — 잘못 둔 곳으로 가는 중' };
     if (purpose === 'MISDELIVERY_REDELIVERY' && x === 'PICKED_UP') return { index: 3, tone: 'active', text: '잘못 둔 곳에서 받음 — 실제 집으로' };
     if (purpose === 'MISDELIVERY_REDELIVERY' && d === 'CREATED') return { index: 0, tone: 'warn', text: '결제 대기 — 다시 배송비 결제되면 배차' };
+  }
+  if (purpose === 'CLAIM_RETURN') {
+    if (x === 'RETURN_PICKED_UP') return { index: 4, tone: 'active', text: '반품 상품 받음 — MFC 로 가는 중' };
+    if (x === 'ASSIGNED') return { index: 2, tone: 'active', text: '배정 — 고객 집으로(반품 받으러)' };
+    if (x === 'RETURNED_TO_STORE') return { index: 5, tone: 'done', text: '반품 상품 MFC 반납' };
   }
   if (purpose === 'FAILED_DELIVERY_RETURN') {
     if (x === 'RETURNED_TO_STORE') return { index: 5, tone: 'done', text: '실패 상품 MFC 반납' };

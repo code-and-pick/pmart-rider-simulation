@@ -69,6 +69,7 @@ import {
   type RiderSignupRequest,
   type Shipment,
   type ShipmentState,
+  type ReturnHandover,
   type StaffDeliveryListResponse,
   type StatusHistoryEntry,
   type TransitionRequest,
@@ -201,6 +202,10 @@ export interface MDelivery {
   pickup?: { at: LatLng; source: 'RIDER_COMPLETION_LOCATION' | 'DROP_ADDRESS' };
   /** 다시 배송 실제 집 주소(MOCK 가짜 문자열) — 좌표는 MockBackend.locateAddress 로만 */
   homeAddress?: string;
+  /** 고객 반품 회수(CLAIM_RETURN) 클레임 */
+  claimId?: string;
+  /** 반납 인증번호(execution 0.28.0) — 직원 화면 목록을 처음 볼 때 만든다 */
+  returnCode?: { code: string; failed: number; locked: boolean; issuedAt: number };
   /** 다시 배송 결제 대기(200m 이상) — 결제되면 배차를 푼다 */
   paymentRequired?: boolean;
   /** 다시 배송 200m 미만 — 원래 기사에게 먼저(반경 무관, 0원). 그 제안이 끝나면 지운다 */
@@ -274,6 +279,13 @@ type IdemOutcome = { ok: unknown } | { err: unknown };
 
 const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 const CUSTOMER_REASONS = new Set(['CUSTOMER_ABSENT', 'UNREACHABLE', 'ADDRESS_ERROR', 'REFUSED']);
+
+/** MOCK 반납 인증번호 4자리 — 배송 ID 로 정한다(난수를 쓰면 다른 MOCK 난수 순서가 바뀐다) */
+function returnCodeOf(deliveryId: string): string {
+  let h = 7;
+  for (const ch of deliveryId) h = (h * 31 + ch.charCodeAt(0)) % 10000;
+  return String(h).padStart(4, '0');
+}
 
 /** 라벨 숫자 인계 — 같은 라이더·배송이 이만큼 틀리면 잠김(fulfillment 0.23.0 R-26) */
 const MAX_CODE_FAILURES = 5;
@@ -426,6 +438,48 @@ export class MockBackend implements RiderPort {
     this.schedule(p.misdeliveryConfirmSec, () => this.confirmMisdelivery(del));
   }
 
+  /** 전달 완료 뒤 조절 바 확률로 고객 반품 회수를 만든다(일반·재발송만) — 0 이면 난수를 쓰지 않는다 */
+  private maybeClaimReturn(del: MDelivery) {
+    const p = this.params;
+    if (p.claimReturnRate <= 0 || del.pickup) return;
+    if (this.rng.next() >= p.claimReturnRate) return;
+    this.schedule(p.claimReturnAfterSec, () => this.createClaimReturn(del));
+  }
+
+  /**
+   * claim·dispatch 대신: 고객 반품 회수 배송(type RETURN, purpose CLAIM_RETURN, claimId — dispatch 0.5.0·execution 0.10.0).
+   * 회수지 = 고객 집, 도착지 = MFC. 배차는 일반 배송과 같은 표(MFC 중심 반경 — "바로 배차·일반 표").
+   */
+  private createClaimReturn(origin: MDelivery) {
+    const now = this.clock.now;
+    const deliveryId = this.ids.next('DL');
+    const claimId = this.ids.next('CL');
+    const del: MDelivery = {
+      deliveryId,
+      orderId: origin.orderId,
+      shipmentId: `CLM-${claimId}`,
+      mfcId: this.mfcId,
+      customer: { ...origin.customer },
+      createdAt: now,
+      type: 'RETURN',
+      purpose: 'CLAIM_RETURN',
+      claimId,
+      originDeliveryId: origin.deliveryId,
+      d: { state: 'CREATED', version: 1, attempts: [], assignment: null, updatedAt: now },
+      x: { exists: false, state: 'UNASSIGNED', version: 0, riderId: null, handoverIds: [], packageIds: [], history: [], photos: [], helps: [] },
+    };
+    this.deliveries.set(deliveryId, del);
+    this.schedule(this.lag(), () => {
+      if (!del.x.exists) {
+        del.x.exists = true;
+        this.xHistory(del, 'UNASSIGNED', 'SYSTEM_EVENT', 'DeliveryCreated');
+      }
+    });
+    this.emit('DeliveryCreated', `${deliveryId} 고객 반품 회수(${claimId}, 원래 ${origin.deliveryId})`, { deliveryId });
+    this.setDispatchState(del, 'DISPATCHING');
+    this.startAttempt(del, 'AUTO', 0, new Set());
+  }
+
   /** case-service 대신: 오배송 확인 → 귀책에 따라 회수 + 재발송, 또는 다시 배송 */
   private confirmMisdelivery(origin: MDelivery) {
     const caseId = this.ids.next('CS');
@@ -531,6 +585,29 @@ export class MockBackend implements RiderPort {
     };
     this.deliveries.set(deliveryId, del);
     return del;
+  }
+
+  /** MFC 반납을 기다리는 배송인가 — 회수품 들고 오는 중, 또는 실패 반납 배정(받음 단계 없음) */
+  private awaitingReturn(d: MDelivery): boolean {
+    return d.x.state === 'RETURN_PICKED_UP' || (d.purpose === 'FAILED_DELIVERY_RETURN' && d.x.state === 'ASSIGNED');
+  }
+
+  /** 반납 인증번호 검사(execution 0.28.0) — 번호가 왔거나 설정이 필수면. 틀리면 남은 횟수, 5번이면 잠김 */
+  private checkReturnCode(del: MDelivery, code: string | undefined) {
+    if (code === undefined) {
+      if (this.params.returnHandoverRequired) fail(422, 'RETURN_HANDOVER_CODE_REQUIRED', '반납 인증번호 필요');
+      return;
+    }
+    const rc = del.returnCode;
+    if (rc?.locked) fail(422, 'RETURN_HANDOVER_LOCKED', '5번 틀려 잠김 — MFC 직원이 새로 내야 함');
+    if (!rc || rc.code !== code) {
+      if (rc) {
+        rc.failed++;
+        if (rc.failed >= MAX_CODE_FAILURES) rc.locked = true;
+      }
+      const left = rc ? Math.max(0, MAX_CODE_FAILURES - rc.failed) : MAX_CODE_FAILURES;
+      fail(422, 'RETURN_HANDOVER_CODE_MISMATCH', '반납 인증번호가 맞지 않음', [{ field: 'attemptsLeft', reason: String(left) }]);
+    }
   }
 
   /** 다시 배송(ADR-0065): 잘못 둔 곳 → 실제 집. 200m 미만 원래 기사 먼저(0원), 이상 결제 대기 */
@@ -1524,6 +1601,7 @@ export class MockBackend implements RiderPort {
       state: del.d.state,
       purpose: del.purpose,
       caseId: del.purpose === 'MISDELIVERY_RESHIPMENT' ? del.caseId : undefined,
+      claimId: del.claimId,
       recovery: del.pickup
         ? {
             caseId: del.caseId,
@@ -1590,6 +1668,7 @@ export class MockBackend implements RiderPort {
       purpose: del.purpose,
       caseId: del.caseId,
       originDeliveryId: del.originDeliveryId,
+      claimId: del.claimId ?? null,
       returnPickupRequired: del.type === 'RETURN' ? del.purpose !== 'FAILED_DELIVERY_RETURN' : null,
       // 원래 배송의 완료 증빙(놓은 곳·사진 참조) — 회수·다시 배송 라이더가 찾아갈 때
       recoveryOrigin:
@@ -1958,8 +2037,11 @@ export class MockBackend implements RiderPort {
       getDropInfo: (deliveryId: string) =>
         b.call(me, 'GET', `/deliveries/${deliveryId}/drop-info`, (): DropInfo => {
           const del = b.myExec(me, deliveryId);
-          if (del.type === 'RETURN') fail(409, 'NO_CUSTOMER_DROP'); // 회수는 원래 고객 정보를 열지 않는다
-          if (!['PICKED_UP', 'ARRIVED_AT_CUSTOMER', 'FAILURE_REPORTED'].includes(del.x.state)) fail(409, 'DROP_INFO_CLOSED');
+          // 고객 반품 회수는 회수지 = 고객 집 — 배정·실패 등록 동안 연다(execution 0.10.0). 그 밖 회수는 원래 고객 정보를 열지 않는다
+          const claim = del.purpose === 'CLAIM_RETURN';
+          if (del.type === 'RETURN' && !claim) fail(409, 'NO_CUSTOMER_DROP');
+          const open: ExecutionState[] = claim ? ['ASSIGNED', 'FAILURE_REPORTED'] : ['PICKED_UP', 'ARRIVED_AT_CUSTOMER', 'FAILURE_REPORTED'];
+          if (!open.includes(del.x.state)) fail(409, 'DROP_INFO_CLOSED');
           if (del.purpose === 'MISDELIVERY_REDELIVERY') {
             // 다시 배송: 주소 = 상담원이 기록한 실제 집, 지도 핀 없음(execution DropInfoService — 6df1e842)
             return {
@@ -2041,6 +2123,7 @@ export class MockBackend implements RiderPort {
             del.x.completedAtPos = loc ? { lat: loc.lat, lng: loc.lng } : undefined;
             b.xHistory(del, 'COMPLETED', 'RIDER');
             b.maybeMisdelivery(del);
+            b.maybeClaimReturn(del);
             b.emit('DeliveryCompleted', `${deliveryId} 전달 완료(${body.method})`, { deliveryId, riderId: me });
             // dispatch 는 DeliveryCompleted 로 CLOSED
             b.schedule(b.lag(), () => {
@@ -2172,6 +2255,7 @@ export class MockBackend implements RiderPort {
             // 실패 반납은 ASSIGNED 에서 바로(받음 단계 없음 — execution 0.15.0). 반납 인증번호(0.28.0)는 서버 설정 꺼짐이 기본이라 MOCK 은 검사하지 않는다
             const from: ExecutionState = del.purpose === 'FAILED_DELIVERY_RETURN' ? 'ASSIGNED' : 'RETURN_PICKED_UP';
             if (del.x.state !== from) fail(409, 'INVALID_STATE');
+            b.checkReturnCode(del, body.handoverCode);
             del.x.completedAt = now();
             b.xHistory(del, 'RETURNED_TO_STORE', 'RIDER');
             b.emit('ReturnDelivered', `${deliveryId} ${del.purpose === 'FAILED_DELIVERY_RETURN' ? '실패 상품' : '회수품'} MFC 반납`, { deliveryId, riderId: me });
@@ -2274,6 +2358,18 @@ export class MockBackend implements RiderPort {
           const s = b.shipments.get(shipmentId);
           if (!s) fail(404, 'NOT_FOUND');
           return b.shipmentView(s);
+        }),
+      // execution 0.28.0 — MFC 반납을 기다리는 회수·반납 배송(회수품 들고 오는 중 / 실패 반납 배정)과 번호. 번호가 없으면 이때 만든다
+      listReturnHandovers: (mfcId: string) =>
+        b.call(who, 'GET', `/return-handovers?mfcId=${mfcId}`, (): { items: ReturnHandover[] } => {
+          const items = [...b.deliveries.values()]
+            .filter((d) => d.mfcId === mfcId && d.type === 'RETURN' && d.x.exists && b.awaitingReturn(d))
+            .map((d) => {
+              d.returnCode ??= { code: returnCodeOf(d.deliveryId), failed: 0, locked: false, issuedAt: b.clock.now };
+              const rc = d.returnCode;
+              return { deliveryId: d.deliveryId, deliveryNumber: null, purpose: d.purpose ?? null, state: d.x.state, riderId: d.x.riderId, code: rc.code, failedAttempts: rc.failed, locked: rc.locked, issuedAt: b.clock.iso(rc.issuedAt) };
+            });
+          return { items };
         }),
       getCenter: (centerId: string) =>
         b.call(who, 'GET', `/centers/${centerId}`, (): Center => {

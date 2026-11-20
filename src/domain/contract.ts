@@ -476,6 +476,26 @@ export interface ReturnStoreDeliveryRequest extends TransitionRequest {
   handoverCode?: string;
 }
 
+/**
+ * (execution 0.28.0) GET /return-handovers?mfcId= 한 줄 — MFC 반납을 기다리는 회수·반납 배송과 반납 인증번호.
+ * 그 센터 직원(작업자 포함)·OPERATOR_ADMIN·RIDER_OPS·CS_AGENT. 대상 = RETURN_PICKED_UP(회수품 들고 오는 중) 또는 실패 반납(ASSIGNED). 번호가 없으면 이때 만든다.
+ * 시뮬레이터는 관찰 계정(MFC 작업자)으로 읽는다 = "직원 화면의 번호를 라이더에게 불러 준다"(RR-09, 사용자 2026-11-20 "반납 인증번호를 받게 해").
+ */
+export interface ReturnHandover {
+  deliveryId: string;
+  deliveryNumber?: string | null;
+  /** CLAIM_RETURN · MISDELIVERY_RECOVERY · FAILED_DELIVERY_RETURN */
+  purpose?: string | null;
+  state: string;
+  riderId?: string | null;
+  /** 4자리 */
+  code: string;
+  failedAttempts: number;
+  /** 5번 틀려 잠김 — 직원이 새로 내야 풀림 */
+  locked: boolean;
+  issuedAt: string;
+}
+
 export interface EvidencePhoto {
   photoRef: string;
   contentType: 'image/jpeg' | 'image/png' | 'image/webp';

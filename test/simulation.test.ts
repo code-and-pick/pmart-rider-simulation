@@ -82,7 +82,7 @@ describe('가상 라이더 (MOCK, 화면 없이)', () => {
     expect(new Set(completedIds).size).toBe(completedIds.length);
   }, 60_000);
 
-  it('제안 판단: 일반·재발송·회수는 받고, 다시 배송은 주소 찾기 수단이 있을 때만, 반품은 거절(§3-1)', () => {
+  it('제안 판단: 일반·재발송·회수·고객 반품 회수는 받고, 다시 배송은 주소 찾기 수단이 있을 때만(§3-1)', () => {
     expect(decideOffer({ purpose: 'MISDELIVERY_RECOVERY', deliveryType: 'RETURN' }, 0.1, 0.9)).toEqual({ kind: 'ACCEPT' });
     expect(decideOffer({ purpose: 'MISDELIVERY_REDELIVERY', deliveryType: 'RESHIPMENT' }, 0.1, 0.9, true)).toEqual({ kind: 'ACCEPT' }); // MOCK(주소록)
     expect(decideOffer({ purpose: 'DELIVERY', deliveryType: 'FORWARD' }, 0.1, 0.9)).toEqual({ kind: 'ACCEPT' });
@@ -91,7 +91,7 @@ describe('가상 라이더 (MOCK, 화면 없이)', () => {
     // 재발송은 일반 흐름이라 받는다. 다시 배송은 전달지 핀이 없어 주소 찾기 수단이 없으면(실서버) 거절. 반품 거절. 목적이 없으면 FORWARD 만
     expect(decideOffer({ purpose: 'MISDELIVERY_RESHIPMENT', deliveryType: 'RESHIPMENT' }, 0.1, 0.9)).toEqual({ kind: 'ACCEPT' });
     expect(decideOffer({ purpose: 'MISDELIVERY_REDELIVERY', deliveryType: 'RESHIPMENT' }, 0, 1)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
-    expect(decideOffer({ purpose: 'CLAIM_RETURN', deliveryType: 'RETURN' }, 0, 1)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
+    expect(decideOffer({ purpose: 'CLAIM_RETURN', deliveryType: 'RETURN' }, 0, 1)).toEqual({ kind: 'ACCEPT' }); // 사용자 2026-11-20 "받게 해"
     expect(decideOffer({ deliveryType: 'RESHIPMENT' }, 0, 1)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
   });
 
@@ -103,7 +103,7 @@ describe('가상 라이더 (MOCK, 화면 없이)', () => {
     expect(decideOffer(far, 0, 1, false, null)).toEqual({ kind: 'ACCEPT' });
     expect(decideOffer({ purpose: 'DELIVERY', summary: { pickupEtaSeconds: 5000 } }, 0, 1, false, 2400)).toEqual({ kind: 'ACCEPT' });
     // 목적 거절이 먼저
-    expect(decideOffer({ ...far, purpose: 'CLAIM_RETURN' }, 0, 1, false, 2400)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
+    expect(decideOffer({ ...far, purpose: 'MISDELIVERY_REDELIVERY' }, 0, 1, false, 2400)).toEqual({ kind: 'REJECT', reason: 'OTHER' });
   });
 
   it('라이더 카드 주문 요약: 주문번호·품목 수·금액·예상 소요만', () => {
