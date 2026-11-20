@@ -1,6 +1,6 @@
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
-import { shortRiderId } from '../domain/riderId';
+import { riderName } from '../domain/riderId';
 import { OFFER_STATE_LABEL, type OfferRow } from '../sim/timeline';
 import { seoulTime } from './format';
 import { riderIndex } from './riderTable';
@@ -18,7 +18,7 @@ export function OfferList({ offers }: { offers: readonly OfferRow[] | undefined 
   if (!offers) return null;
   if (offers.length === 0) return <p className="c-muted of-empty">제안 기록이 아직 없습니다(배차 관점을 못 읽었거나 아직 안 보냄).</p>;
   const idx = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
-  const name = (id: string | null) => (id ? (idx.get(id)?.name ?? shortRiderId(id)) : '—');
+  const name = (id: string | null) => (id ? (idx.get(id)?.name ?? riderName(id)) : '—');
   const count = (s: OfferRow['state']) => offers.filter((o) => o.state === s).length;
   const rejected = count('REJECTED');
   const expired = count('EXPIRED');

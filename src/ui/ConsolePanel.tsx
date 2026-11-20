@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../app/App';
 import { displayStage, purposeLabel } from '../domain/displayStage';
-import { deliveryLabel, orderLabel, shortRiderId } from '../domain/riderId';
+import { deliveryLabel, orderLabel, shortRiderId, riderName } from '../domain/riderId';
 import { PHASE_COLOR } from '../render/colors';
 import { PHASE_LABEL, type RiderJob } from '../sim/rider';
 import type { RiderView } from '../sim/world';
@@ -283,7 +283,7 @@ function IdleRiders({ busyIds }: { busyIds: Set<string> }) {
               <span className="c-task-n idle">·</span>
               <span className="c-task-main">
                 <span className="c-task-1">
-                  <b>{row?.name ?? r.label ?? shortRiderId(r.id)}</b>
+                  <b>{row?.name ?? riderName(r.id, r.label)}</b>
                   {r.external && <span className="c-tag">앱</span>}
                 </span>
                 <span className="c-task-2">
@@ -310,7 +310,7 @@ function DeliveriesView() {
   const [sortBy, setSortBy] = useState<SortBy>('urgent');
   const needle = q.trim().toLowerCase();
   const riders = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
-  const nameOf = (id: string) => riders.get(id)?.name ?? shortRiderId(id);
+  const nameOf = (id: string) => riders.get(id)?.name ?? riderName(id);
   const byRider = b.rows.filter((r) => !sel || r.card.riderId === sel || r.card.riderIds.includes(sel));
   const matched = byRider
     .filter((r) => rowMatches(r, f === 'failedCalls' ? null : f))
@@ -410,7 +410,7 @@ function DeliveriesView() {
               // 단계별 — 한 줄씩(큰 카드면 한 묶음이 칸을 다 차지해 다음 단계가 안 보였다 — 사용자 2026-11-19 "보기 불편")
               <ol className="c-tasks">
                 {g.rows.map((r, i) => (
-                  <TaskRow key={r.card.deliveryId} r={r} n={i + 1} rider={r.card.riderId ? (riders.get(r.card.riderId)?.name ?? shortRiderId(r.card.riderId)) : '라이더 없음'} />
+                  <TaskRow key={r.card.deliveryId} r={r} n={i + 1} rider={r.card.riderId ? (riders.get(r.card.riderId)?.name ?? riderName(r.card.riderId)) : '라이더 없음'} />
                 ))}
               </ol>
             )}
@@ -461,7 +461,7 @@ function DeliveryItem({ r, sel, rider }: { r: OpsRow; sel: string | null; rider:
             <span className={`c-role ${roleOf(c, sel) === '배정' ? 'mine' : ''}`}>{roleOf(c, sel)}</span>
           ) : (
             <span className="c-rider" title={c.riderId ?? ''}>
-              {c.riderId ? `🛵 ${rider?.name ?? shortRiderId(c.riderId)}` : '라이더 없음'}
+              {c.riderId ? `🛵 ${rider?.name ?? riderName(c.riderId)}` : '라이더 없음'}
             </span>
           )}
           {/* 진행 중이면 라이더 위치 수신 상태(관제·본인 조회) — 끊기면 빨강 */}

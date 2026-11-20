@@ -17,7 +17,7 @@ import { VirtualRider } from './rider';
 import { straightRoutes, type RouteProvider } from './route';
 import { bearingDeg, distanceM, type LatLng } from '../util/geo';
 import type { RiderPhase } from './rider';
-import { shortRiderId } from '../domain/riderId';
+import { knownRiderName, setRiderDisplayName, shortRiderId } from '../domain/riderId';
 import type { DeliveryCard, DropLocationView, MetricsSummary, NoteRecord, OperatingTimeView, PhaseSegment, RiderInfo, RiderView, ScenarioKnobs, World } from './world';
 import type { AddressLocator } from './geocode';
 import { OrderLookup } from './orderLookup';
@@ -142,6 +142,8 @@ export class RealWorld implements World {
   /** 이 PC 개발 서버에 관제 계정 비밀번호 파일이 있나(/sim-auth/status) */
   private controlAvailable = false;
   private lastControlAt = -Infinity;
+  /** 화면 표기를 물어본 라이더 → 시뮬 시각(없는 ID·실패는 NAME_RETRY_SEC 뒤 다시) */
+  private nameAskedAt = new Map<string, number>();
   private lastControl: { items: ControlRider[]; asOf: string } | null = null;
 
   /** 직원용 전달지 — 배송마다 한 번(열람 기록이 남으므로 박자마다 부르지 않는다). 화면 메모리에만 */
@@ -533,6 +535,29 @@ export class RealWorld implements World {
 
     // 4. 라이더 관제(RR-08) — 운행 중 라이더 전원(라이더 앱 포함) 현재 위치. 이 PC 만(관제 계정 토큰은 개발 서버가 이 경로에만 붙인다)
     await this.pollControl();
+
+    // 5. 라이더 화면 표기(rider 0.18.0 display-names, ADR-0070) — 목록·흐름에 나오는 라이더를 "김*수 · 482913" 으로
+    await this.loadRiderNames();
+  }
+
+  /** 표기 다시 묻는 간격 [시뮬] — 없는 ID·실패한 묶음 */
+  private static readonly NAME_RETRY_SEC = 600;
+
+  private async loadRiderNames() {
+    const ids = new Set<string>();
+    for (const r of this.rows.values()) for (const id of involvedRiders(r)) ids.add(id);
+    for (const r of this.remote) ids.add(r.id);
+    const want = [...ids].filter((id) => !knownRiderName(id) && this.clock.now - (this.nameAskedAt.get(id) ?? -Infinity) >= RealWorld.NAME_RETRY_SEC);
+    for (let i = 0; i < want.length; i += 50) {
+      const batch = want.slice(i, i + 50);
+      for (const id of batch) this.nameAskedAt.set(id, this.clock.now);
+      try {
+        const res = await this.backend.observer.getRiderDisplayNames(batch);
+        for (const n of res.items ?? []) if (n.riderId) setRiderDisplayName(n.riderId, n.riderNumber, n.nameMasked);
+      } catch {
+        // 못 읽으면 지금처럼 짧은 ID 로(다음 간격에 다시)
+      }
+    }
   }
 
   /** 관제 조회 박자 [시뮬] — 계약 설명 "화면은 10초마다 다시 부른다" */
@@ -570,6 +595,7 @@ export class RealWorld implements World {
         r.setServerPos(p, this.clock.now);
         if (p) located++;
         // 화면 번호(ADR-0070) "김*수 · 482913" — 번호가 없으면 고유번호 앞 4자리
+        setRiderDisplayName(c.riderId, c.riderNumber, c.nameMasked);
         r.label = [c.nameMasked, c.riderNumber ?? shortRiderId(c.riderId)].filter(Boolean).join(" · ");
         const d = c.activeDeliveries?.[0];
         r.deliveryId = d?.deliveryId ?? null;

@@ -33,6 +33,7 @@ import {
   type RiderLocation,
   type RiderProfile,
   type ReturnHandover,
+  type RiderDisplayNames,
   type Shipment,
   type StaffDeliveryListResponse,
   type StaffOrderDetail,
@@ -271,6 +272,7 @@ export class HttpBackend implements RiderPort {
       getDispatch: (id) => r<Delivery>(`/deliveries/${enc(id)}/dispatch`),
       getShipment: (id) => r<Shipment>(`/shipments/${enc(id)}`),
       listReturnHandovers: (mfcId) => r<{ items: ReturnHandover[] }>('/return-handovers', { query: { mfcId } }),
+      getRiderDisplayNames: (ids) => r<RiderDisplayNames>('/riders/display-names', { query: { riderIds: ids.join(',') } }),
       getCenter: (id) => r<Center>(`/centers/${enc(id)}`),
     };
   }

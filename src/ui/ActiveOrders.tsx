@@ -1,7 +1,7 @@
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
 import { displayStage } from '../domain/displayStage';
-import { deliveryLabel, orderLabel, shortRiderId } from '../domain/riderId';
+import { deliveryLabel, orderLabel, riderName } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
 import { dur, seoulTime } from './format';
 import type { OpsRow } from './ops';
@@ -88,7 +88,7 @@ function OrderRow({ r, rider, nowMs, onOpen }: { r: OpsRow; rider: RiderRow | un
       <td>
         {c.riderId ? (
           <>
-            <b title={c.riderId}>{rider?.name ?? shortRiderId(c.riderId)}</b>
+            <b title={c.riderId}>{rider?.name ?? riderName(c.riderId)}</b>
             {rider?.external && <span className="c-tag">앱</span>}
             {rider?.sim && <span className="c-tag gray">시뮬</span>}
           </>

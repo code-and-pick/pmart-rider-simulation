@@ -70,6 +70,7 @@ import {
   type Shipment,
   type ShipmentState,
   type ReturnHandover,
+  type RiderDisplayNames,
   type StaffDeliveryListResponse,
   type StatusHistoryEntry,
   type TransitionRequest,
@@ -2371,6 +2372,9 @@ export class MockBackend implements RiderPort {
             });
           return { items };
         }),
+      // rider 0.18.0 화면 표기 — MOCK 라이더는 번호·이름이 없다(짧은 ID 로 보임)
+      getRiderDisplayNames: (riderIds: readonly string[]) =>
+        b.call(who, 'GET', `/riders/display-names`, (): RiderDisplayNames => ({ items: riderIds.map((riderId) => ({ riderId, riderNumber: null, nameMasked: null })) })),
       getCenter: (centerId: string) =>
         b.call(who, 'GET', `/centers/${centerId}`, (): Center => {
           if (centerId !== b.mfcId) fail(404, 'NOT_FOUND');

@@ -37,6 +37,7 @@ import type {
   RiderProfile,
   RiderSignupRequest,
   ReturnHandover,
+  RiderDisplayNames,
   Shipment,
   StaffDeliveryListResponse,
   TransitionRequest,
@@ -161,6 +162,8 @@ export interface ObserverApi {
   getShipment(shipmentId: string): Promise<Shipment>;
   /** 반납 인증번호(execution 0.28.0) — MFC 직원 화면 목록. 반납 때 라이더가 넣는다(RR-09) */
   listReturnHandovers(mfcId: string): Promise<{ items: ReturnHandover[] }>;
+  /** rider 0.18.0 라이더 화면 표기(번호·가린 이름) 묶음 — 50개까지(ADR-0070) */
+  getRiderDisplayNames(riderIds: readonly string[]): Promise<RiderDisplayNames>;
   /** center-master 센터 조회 — MFC 위치의 정본(배차 반경 기준) */
   getCenter(centerId: string): Promise<Center>;
 }

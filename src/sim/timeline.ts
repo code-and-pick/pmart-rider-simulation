@@ -2,7 +2,7 @@
 // 시각은 모두 서버가 남긴 값(배차·수행 기록)에서 읽는다. 엔진이 잰 값은 출처를 "라이더 엔진"으로 따로 붙인다.
 // React 에 의존하지 않는다.
 
-import { shortRiderId } from '../domain/riderId';
+import { riderName } from '../domain/riderId';
 import type { Delivery, DeliveryPurpose, DispatchAttempt, ExecutionState, OfferState, StaffDeliverySummary, StatusHistoryEntry } from '../domain/contract';
 
 /** 단계 하나. atMs = epoch ms */
@@ -127,7 +127,7 @@ export function dispatchSteps(d: Delivery | null, createdMs: number | null): Tim
     if (t !== null) out.push({ key: `reassign-${a.attemptId ?? t}`, label: '재배차 시작(배정 취소 뒤)', atMs: t, source: '배차', bad: true });
   }
   const assigned = ms(d.assignment?.assignedAt);
-  if (assigned !== null) out.push({ key: 'assigned', label: '배정(라이더 수락)', atMs: assigned, source: '배차', detail: d.assignment?.riderId ? shortRiderId(d.assignment.riderId) : undefined });
+  if (assigned !== null) out.push({ key: 'assigned', label: '배정(라이더 수락)', atMs: assigned, source: '배차', detail: d.assignment?.riderId ? riderName(d.assignment.riderId) : undefined });
   const updated = ms(d.updatedAt);
   if (d.state === 'DISPATCH_FAILED' && updated !== null) {
     const reason = (d.attempts ?? []).at(-1)?.failureReason;
@@ -156,7 +156,7 @@ export function executionSteps(history: readonly StatusHistoryEntry[]): Timeline
 export function summarySteps(s: StaffDeliverySummary, hasDispatchAssigned: boolean): TimelineStep[] {
   const out: TimelineStep[] = [];
   const a = ms(s.assignedAt);
-  if (a !== null && !hasDispatchAssigned) out.push({ key: 'assigned', label: '배정(라이더 수락)', atMs: a, source: '수행', detail: s.riderId ? shortRiderId(s.riderId) : undefined });
+  if (a !== null && !hasDispatchAssigned) out.push({ key: 'assigned', label: '배정(라이더 수락)', atMs: a, source: '수행', detail: s.riderId ? riderName(s.riderId) : undefined });
   const p = ms(s.pickedUpAt);
   if (p !== null) out.push({ key: 'x-PICKED_UP', label: '픽업 완료(QR 인계)', atMs: p, source: '수행' });
   const c = ms(s.completedAt);

@@ -13,6 +13,26 @@ export function shortRiderId(id: string): string {
   return id.replace(/^RD-/, '');
 }
 
+/**
+ * 라이더 화면 표기 "김*수 · 482913"(ADR-0070) — 서버 묶음 조회(rider 0.18.0 display-names·관제 목록)로 채운다.
+ * 화면은 시스템 ID(RD-…) 대신 이것을 먼저 보이고, 모르면 짧은 ID. 화면 메모리에만(저장소·로그에 안 남김).
+ */
+const displayNames = new Map<string, string>();
+
+export function setRiderDisplayName(riderId: string, riderNumber: string | null | undefined, nameMasked: string | null | undefined): void {
+  const label = [nameMasked, riderNumber].filter(Boolean).join(' · ');
+  if (label) displayNames.set(riderId, label);
+}
+
+export function knownRiderName(riderId: string): string | null {
+  return displayNames.get(riderId) ?? null;
+}
+
+/** 화면에 보일 라이더 이름 — 서버 표기 → 넘겨준 대체 → 짧은 ID */
+export function riderName(riderId: string, fallback?: string | null): string {
+  return displayNames.get(riderId) ?? fallback ?? shortRiderId(riderId);
+}
+
 /** `DLV-8704f124-3020-…` → `DLV-8704`, 출고 `ORD-4cd46d90-…-S1` → `ORD-4cd4-S1`. UUID 꼴이 아니면 그대로(MOCK `DL-m00005` 등) */
 export function shortId(id: string): string {
   const m = /^([A-Z]+)-([0-9a-f]{4})[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-[A-Za-z0-9]+)?$/i.exec(id);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../app/App';
 import { displayStage, purposeLabel } from '../domain/displayStage';
-import { deliveryLabel, orderLabel, shortId, shortRiderId } from '../domain/riderId';
+import { deliveryLabel, orderLabel, shortId, riderName } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
 import { dur, seoulTime } from './format';
 import { opsDeliveryUrl, opsRiderUrl } from './opsLinks';
@@ -117,7 +117,7 @@ export function MapDetail({ variant = 'overlay' }: { variant?: 'overlay' | 'pane
             <dd>
               {c.riderId ? (
                 <button className="link" title={c.riderId} onClick={() => app.select(c.riderId)}>
-                  🛵 {rider?.label ?? shortRiderId(c.riderId)}
+                  🛵 {riderName(c.riderId, rider?.label)}
                   {rider?.external ? ' (라이더 앱)' : ''}
                 </button>
               ) : (

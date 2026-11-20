@@ -496,6 +496,21 @@ export interface ReturnHandover {
   issuedAt: string;
 }
 
+/**
+ * (rider 0.18.0) GET /riders/display-names?riderIds= — 화면 표기 "김*수 · 482913"(ADR-0070) 묶음 조회.
+ * OPERATOR_ADMIN·RIDER_OPS·CS_AGENT·MFC_SUPERVISOR·MFC_WORKER — 시뮬레이터는 관찰 계정(MFC 작업자)으로 읽는다.
+ * 없는 ID 는 빠진다(순서 보장 없음), 탈퇴하면 nameMasked null. 50개까지.
+ */
+export interface RiderDisplayNames {
+  items: {
+    riderId: string;
+    /** 화면용 라이더 번호 6자리 — 가입 때 서버가 정함 */
+    riderNumber?: string | null;
+    /** 가린 이름(첫·끝 글자) */
+    nameMasked?: string | null;
+  }[];
+}
+
 export interface EvidencePhoto {
   photoRef: string;
   contentType: 'image/jpeg' | 'image/png' | 'image/webp';

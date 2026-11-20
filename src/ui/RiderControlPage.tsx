@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
 import { displayStage } from '../domain/displayStage';
-import { deliveryLabel, shortRiderId } from '../domain/riderId';
+import { deliveryLabel, shortRiderId, riderName } from '../domain/riderId';
 import { BUCKET_LABEL } from './buckets';
 import { dur, seoulTime } from './format';
 import { ActiveOrders } from './ActiveOrders';
@@ -182,7 +182,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
 }
 
 function shortRiderLabel(id: string, riders: readonly { id: string; label?: string }[]): string {
-  return riders.find((r) => r.id === id)?.label ?? shortRiderId(id);
+  return riders.find((r) => r.id === id)?.label ?? riderName(id);
 }
 
 

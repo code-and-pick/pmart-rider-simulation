@@ -694,12 +694,33 @@ i.k-other {
   position: absolute;
   top: 5px;
   height: 16px;
+  overflow: hidden;
   /* 이어진 배송끼리 붙어 한 막대로 보이지 않게 바탕색 2px 틈(dataviz 막대 사이 틈) */
   border: 0;
   box-shadow: 0 0 0 1px var(--c-soft);
   border-radius: 4px;
   padding: 0;
   cursor: pointer;
+}
+.c-tl-bar > span {
+  display: block;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  pointer-events: none;
+}
+.c-tl .c-an-ctl {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.c-tl .c-an-ctl .c-an-legend {
+  margin: 0;
 }
 .c-tl-bar:hover {
   filter: brightness(1.15);
@@ -748,16 +769,6 @@ i.k-other {
   background: transparent;
   outline: 2px solid var(--c-orange);
   outline-offset: -2px;
-}
-/* 읽는 법 — 보통 크기 글, 짧은 줄 셋 */
-.c-an-how {
-  margin: 0 0 12px;
-  padding: 10px 12px 10px 28px;
-  background: var(--c-soft);
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--c-ink);
 }
 .c-an-chart svg .tick.unit {
   font-size: 11px;
@@ -1349,4 +1360,9 @@ i.k-other {
 }
 .c-an-badge.k-other {
   background: var(--ch-other);
+}
+/* 기간 앞에서 시작해 잘린 막대 — 왼쪽 모서리를 각지게 */
+.c-tl-bar.cut {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
