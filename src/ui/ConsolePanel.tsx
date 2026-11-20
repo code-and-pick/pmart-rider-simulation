@@ -85,7 +85,7 @@ export function LogsPage() {
       <div className="c-page-head">
         <div>
           <h2>기록</h2>
-          <p>주문 흐름, 사건, API 요청, 가상 라이더 엔진 기록, 연결 상태, 구간 평균.</p>
+          <p>주문 흐름(맨 위 구간별 평균), 사건, API 요청, 가상 라이더 엔진 기록, 연결 상태.</p>
         </div>
       </div>
       <div className="c-logs-card">
@@ -640,7 +640,7 @@ function RiderItem({ r, row, done }: { r: RiderView; row: OpsRow | undefined; do
 /** 문제로 보이는 연결 상태 줄 — 실패·못 읽음·없음·거절·막음 */
 const DIAG_BAD = /실패|못 읽|못 봄|없음|거절|막음|잠김|403|5\d\d/;
 
-type LogTab = 'orders' | 'events' | 'api' | 'notes' | 'conn' | 'avg';
+type LogTab = 'orders' | 'events' | 'api' | 'notes' | 'conn';
 
 function LogsView() {
   const app = useApp();
@@ -663,7 +663,6 @@ function LogsView() {
             ['api', 'API'],
             ['notes', '엔진 기록'],
             ['conn', '연결 상태'],
-            ['avg', '구간 평균'],
           ] as const
         ).map(([k, l]) => (
           <button
@@ -680,7 +679,15 @@ function LogsView() {
           </button>
         ))}
       </div>
-      {cur === 'orders' && <OrdersTab cards={cards} />}
+      {/* 주문 흐름 맨 위에 구간별 평균(예전 따로 있던 탭 — 사용자 2026-11-20 "덩그러니 있는데 주문 흐름 맨 위에"), 아래 주문마다 흐름 */}
+      {cur === 'orders' && (
+        <>
+          <div className="c-logs-avg">
+            <PhaseSummary m={sim.metrics()} open />
+          </div>
+          <OrdersTab cards={cards} />
+        </>
+      )}
       {cur === 'events' && (
         <ul className="log">
           {eventsFor(sim.eventLog, cards, sel)
@@ -741,7 +748,6 @@ function LogsView() {
           {diag.length === 0 && <li>MOCK — 외부 연결 없음.</li>}
         </ul>
       )}
-      {cur === 'avg' && <PhaseSummary m={sim.metrics()} open />}
     </>
   );
 }

@@ -57,11 +57,11 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
       ? '이 기기에서는 관제 응답을 못 읽음(라이더 앱 위치는 개발 서버가 있는 PC 에서만) — 시뮬레이터 라이더만'
       : '가상(MOCK) 라이더';
   return (
-    <section className="c-page c-roomy" aria-label="라이더 관제">
+    <section className="c-page c-roomy" aria-label="운영 현황">
       <div className="c-page-head">
         <div>
-          <h2>라이더 관제</h2>
-          <p>진행 중 주문마다 라이더 현황, 그 아래 라이더 목록·상세. 라이더 백오피스 "라이더 관제"와 같은 내용입니다.</p>
+          <h2>운영 현황</h2>
+          <p>진행 중 주문 · 라이더 · 최근 배송을 한 화면에서 봅니다.</p>
         </div>
         <span className="c-page-src">{source}</span>
       </div>
@@ -212,7 +212,7 @@ export function recentMatches(r: OpsRow, needle: string, riderLabel: (id: string
 }
 
 /**
- * 최근 배송 표(백오피스 라이더 관제 "최근 배송"처럼) — 목록 관제·라이더 관제가 같이 쓴다.
+ * 최근 배송 표(백오피스 라이더 관제 "최근 배송"처럼) — 운영 현황·라이더 관제가 같이 쓴다.
  * 위에 찾기(번호·ID·라이더)와 상태 거르기(건수와 함께). 줄을 누르면 그 줄 아래로 상세가 펼쳐진다
  * (상세·주문·흐름·원래 상태 탭 — 배송 관제 상세 창과 같은 것, 사용자 2026-11-20 "넘어가도 나오는 정보는 짧거든 … 밑으로 탭이 펼쳐져서").
  * 지도로 가려면 펼친 칸의 "지도에서 보기"(onOpen).

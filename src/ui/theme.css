@@ -222,3 +222,101 @@
 .c-app .c-tag.red {
   color: var(--c-red);
 }
+
+/* ═════════ 화면 모드 고르기 — 왼쪽 메뉴 맨 아래 [다크 | 화이트] (사용자 2026-11-20) ═════════ */
+.c-rail-mode {
+  margin-top: auto;
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--c-line);
+}
+.c-rail-mode-l {
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--c-head-sub);
+}
+.c-rail .c-rail-mode button {
+  padding: 6px 2px;
+}
+.c-rail .c-rail-mode button .c-rail-i {
+  font-size: 16px;
+}
+
+/* ═════════ 화이트 모드 — 내용만이 아니라 머리 줄·왼쪽 메뉴까지 밝게 ═════════ */
+.c-app[data-theme='light'] {
+  --c-head: #ffffff;
+  --c-head-ink: #111827;
+  --c-head-sub: #6b7280;
+  --c-rail: #ffffff;
+  --c-panel: #ffffff;
+  --c-soft: #f3f4f6;
+  --c-ink: #111827;
+  --c-sub: #6b7280;
+  --marker-label-bg: rgba(255, 255, 255, 0.95);
+}
+.c-app[data-theme='light'] .c-head,
+.c-app[data-theme='light'] .c-rail {
+  border-color: var(--c-line);
+}
+.c-app[data-theme='light'] .c-rail button {
+  color: #6b7280 !important;
+}
+.c-app[data-theme='light'] .c-rail button:hover {
+  background: #f3f4f6;
+  color: #111827 !important;
+}
+.c-app[data-theme='light'] .c-rail button.on {
+  background: color-mix(in srgb, var(--c-blue) 10%, #fff);
+  color: var(--c-blue) !important;
+}
+.c-app[data-theme='light'] .c-head-stat b {
+  color: var(--c-head-ink);
+}
+.c-app[data-theme='light'] .c-center {
+  background: #f3f4f6;
+}
+.c-app[data-theme='light'] .c-seg,
+.c-app[data-theme='light'] .c-btn,
+.c-app[data-theme='light'] .c-sim {
+  border-color: var(--c-line);
+}
+.c-app[data-theme='light'] .c-seg button + button {
+  border-left-color: var(--c-line);
+}
+.c-app[data-theme='light'] .c-seg button.on {
+  background: var(--c-blue);
+  color: #fff;
+}
+.c-app[data-theme='light'] .c-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+.c-app[data-theme='light'] .c-src.real {
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+.c-app[data-theme='light'] .c-src.mock {
+  background: rgba(202, 138, 4, 0.12);
+  color: #a16207;
+}
+
+/* 기록 > 주문 흐름 맨 위 구간별 평균 */
+.c-logs-avg {
+  margin: 4px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-panel);
+}
+.c-logs-avg .phases-box {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.c-logs-avg .phases {
+  border: 0;
+  padding: 8px 0 0;
+  background: transparent;
+}

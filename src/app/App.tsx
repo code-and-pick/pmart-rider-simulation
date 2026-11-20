@@ -49,14 +49,14 @@ function useStored<T extends string>(key: string, fallback: T, allowed: readonly
 const RAIL: readonly (readonly [View, string, string])[] = [
   ['control', '🛵', '라이더 관제'],
   ['field', '🗺', '배송 관제'],
-  ['riders', '☰', '목록 관제'],
+  ['riders', '☰', '운영 현황'],
   ['analyze', '▥', '분석'],
   ['logs', '⧉', '기록'],
 ];
 
 /**
  * 관제 화면 뼈대(Onfleet 대시보드·바로고 허브컨트롤룸을 참고 — docs/worklog 2026-11-19):
- *   [왼쪽 아이콘 메뉴 | 머리 → (라이더 관제 — 기본) 숫자 카드 → [라이더 목록 | 지도 | 라이더 상세] / (배송 관제) 숫자 카드 → [지도 | 오른쪽 관제 패널] / 목록 관제 / 분석 / 기록]
+ *   [왼쪽 아이콘 메뉴 | 머리 → (라이더 관제 — 기본) 숫자 카드 → [라이더 목록 | 지도 | 라이더 상세] / (배송 관제) 숫자 카드 → [지도 | 오른쪽 관제 패널] / 운영 현황(예전 목록 관제) / 분석 / 기록]
  * 기본 어두운 테마(전환 가능). 패널은 ] 키나 지도 오른쪽 가장자리 버튼으로 접는다.
  */
 export function App({ controller }: { controller: AppController }) {
@@ -76,7 +76,7 @@ export function App({ controller }: { controller: AppController }) {
   return (
     <Ctx.Provider value={controller}>
       <div className="c-app" data-theme={theme}>
-        <Rail theme={theme} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+        <Rail theme={theme} onTheme={setTheme} />
         <div className="c-shell">
           <ConsoleHeader />
           <Views panelOpen={panelOpen} onPanel={togglePanel} />
@@ -87,7 +87,7 @@ export function App({ controller }: { controller: AppController }) {
 }
 
 /** 왼쪽 아이콘 메뉴(Onfleet) — 화면 바꾸기, 맨 아래 테마 */
-function Rail({ theme, onTheme }: { theme: 'dark' | 'light'; onTheme: () => void }) {
+function Rail({ theme, onTheme }: { theme: 'dark' | 'light'; onTheme: (t: 'dark' | 'light') => void }) {
   const app = useApp();
   const alerts = app.board().alerts.length;
   return (
@@ -104,12 +104,23 @@ function Rail({ theme, onTheme }: { theme: 'dark' | 'light'; onTheme: () => void
           {v === 'field' && alerts > 0 && <span className="c-rail-badge">{alerts}</span>}
         </button>
       ))}
-      <button className="c-rail-theme" onClick={onTheme} title={theme === 'dark' ? '밝은 화면으로' : '어두운 화면으로'}>
-        <span className="c-rail-i" aria-hidden>
-          {theme === 'dark' ? '☀' : '☾'}
-        </span>
-        <span className="c-rail-l">{theme === 'dark' ? '밝게' : '어둡게'}</span>
-      </button>
+      {/* 화면 모드 — 다크·화이트 중 고름(사용자 2026-11-20). 이 기기 브라우저에 기억(편의 설정 — 토큰·개인정보 아님) */}
+      <div className="c-rail-mode" role="radiogroup" aria-label="화면 모드">
+        <span className="c-rail-mode-l">화면</span>
+        {(
+          [
+            ['dark', '☾', '다크'],
+            ['light', '☀', '화이트'],
+          ] as const
+        ).map(([k, i, l]) => (
+          <button key={k} role="radio" aria-checked={theme === k} className={theme === k ? 'on' : ''} onClick={() => onTheme(k)} title={`${l} 모드`}>
+            <span className="c-rail-i" aria-hidden>
+              {i}
+            </span>
+            <span className="c-rail-l">{l}</span>
+          </button>
+        ))}
+      </div>
     </nav>
   );
 }
