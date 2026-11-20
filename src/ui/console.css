@@ -13,7 +13,7 @@
   --c-head-ink: #e5e9f2;
   --c-head-sub: #8a96ab;
   --c-blue: #2563eb;
-  --c-violet: #7c3aed;
+  --c-violet: #14b8a6;
   --c-green: #16a34a;
   --c-red: #dc2626;
   --c-orange: #ea580c;
@@ -118,7 +118,7 @@
   display: grid;
   place-items: center;
   font-weight: 800;
-  background: linear-gradient(135deg, #3b82f6, #7c3aed);
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
   color: #fff;
 }
 .c-title {

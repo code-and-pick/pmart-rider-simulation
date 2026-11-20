@@ -218,7 +218,7 @@ function StatusDonut({ counts, total }: { counts: Record<Kind, number>; total: n
 }
 
 /** 구간별 평균 — 배차 요청 → 전달 완료 한 줄 여정(조각 길이 = 걸린 시간 비율) + 구간마다 번호·이름·시간·비율 */
-const JOURNEY_COLOR: Record<string, string> = { findRider: '#8f7cff', toStore: '#4c8dff', atStore: '#d35cff', storeAll: '#4c8dff', toCustomer: '#ff8a3d' };
+const JOURNEY_COLOR: Record<string, string> = { findRider: '#2dd4bf', toStore: '#4c8dff', atStore: '#facc15', storeAll: '#4c8dff', toCustomer: '#ff8a3d' };
 function Journey({ segments, total }: { segments: readonly { key: string; label: string; sec: number; hint: string }[]; total: number }) {
   const sum = Math.max(1, segments.reduce((a, x) => a + x.sec, 0));
   return (

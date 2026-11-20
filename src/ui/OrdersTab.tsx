@@ -8,9 +8,9 @@ import type { DeliveryCard } from '../sim/world';
 
 /** 구간 색 — 지표 막대(Metrics)와 같게 */
 const SEG_COLOR: Record<SegKind, string> = {
-  findRider: '#8f7cff',
+  findRider: '#2dd4bf',
   toStore: '#4c8dff',
-  atStore: '#d35cff',
+  atStore: '#facc15',
   storeAll: '#4c8dff',
   toCustomer: '#ff8a3d',
   bad: '#c2410c',

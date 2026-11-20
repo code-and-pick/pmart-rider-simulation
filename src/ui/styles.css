@@ -957,7 +957,7 @@ code {
   --count-c: var(--accent);
 }
 .count.tone-wait {
-  --count-c: #8f7cff;
+  --count-c: #2dd4bf;
 }
 .count.tone-fail {
   --count-c: #9aa4b5;
@@ -1146,8 +1146,8 @@ code {
   padding: 0 6px;
   margin-left: 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, #8f7cff 18%, transparent);
-  color: #6b55e0;
+  background: color-mix(in srgb, #2dd4bf 18%, transparent);
+  color: #0f766e;
   font-weight: 600;
 }
 
@@ -1253,7 +1253,7 @@ code {
   background: color-mix(in srgb, var(--accent) 12%, var(--panel));
 }
 .kpi.tone-wait {
-  --kpi-c: #8f7cff;
+  --kpi-c: #2dd4bf;
 }
 .kpi.tone-active {
   --kpi-c: var(--accent);
@@ -1456,7 +1456,7 @@ button.link:hover {
   outline-offset: -1px;
 }
 .drow.b-searching {
-  --b-c: #8f7cff;
+  --b-c: #2dd4bf;
 }
 .drow.b-delivering {
   --b-c: var(--accent);
@@ -1568,7 +1568,7 @@ button.link:hover {
   background: #9aa4b5;
 }
 .md-status.b-searching {
-  background: #8f7cff;
+  background: #2dd4bf;
 }
 .md-status.b-delivering {
   background: var(--accent);

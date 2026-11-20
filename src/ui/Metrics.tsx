@@ -3,9 +3,9 @@ import { dur } from './format';
 
 /** 구간 색(막대·범례) */
 const SEG_COLOR: Record<string, string> = {
-  findRider: '#8f7cff',
+  findRider: '#2dd4bf',
   toStore: '#4c8dff',
-  atStore: '#d35cff',
+  atStore: '#facc15',
   storeAll: '#4c8dff',
   toCustomer: '#ff8a3d',
 };
