@@ -11,7 +11,7 @@ import { riderIndex, type RiderRow } from './riderTable';
 /**
  * 진행 중 주문 — 주문마다 "초점 카드"(사용자 2026-11-20 "진행 중 주문이 중요한 정보처럼 보이지 않아 … 현재 단계·지연 시간·도착 예정을 먼저").
  *   [주문번호 · 무슨 배송] [지금 단계(크게) · 몇 분째 · 단계 점] [지연(있을 때만 빨강·주황 알약)] [도착 예정(크게)] [라이더 · 위치]
- * 급한 것만 왼쪽 띠·알약으로 강조하고 나머지는 조용히(줄 전체 배경색 없음). 순서: 심각 → 주의 → 오래된 것. 누르면 지도에서.
+ * 급한 것만 왼쪽 띠·알약으로 강조하고 나머지는 조용히(줄 전체 배경색 없음). 순서: 심각 → 주의 → 오래된 것. 누르면 아래 최근 배송 표에서 펼침(화면 안 옮김).
  */
 export function ActiveOrders({ onOpen }: { onOpen: (deliveryId: string) => void }) {
   const app = useApp();
@@ -59,7 +59,7 @@ function OrderCard({ r, rider, nowMs, onOpen }: { r: OpsRow; rider: RiderRow | u
   const over = r.alert?.overSec !== undefined && r.alert.overSec > 0 ? Math.max(1, Math.round(r.alert.overSec / 60)) : null;
   return (
     <li>
-      <button className={`ao-card ${r.alert ? `al-${r.alert.level}` : ''}`} onClick={() => onOpen(c.deliveryId)} title={`${c.deliveryId} — 누르면 지도에서`}>
+      <button className={`ao-card ${r.alert ? `al-${r.alert.level}` : ''}`} onClick={() => onOpen(c.deliveryId)} title={`${c.deliveryId} — 누르면 아래 최근 배송에서 상세`}>
         <span className="ao-id">
           <span className="k">주문</span>
           <b>{orderLabel(c) ?? '—'}</b>

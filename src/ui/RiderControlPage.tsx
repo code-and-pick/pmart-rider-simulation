@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
 import { deliveryKindName, displayStage } from '../domain/displayStage';
@@ -29,7 +29,8 @@ const RECENT = 30;
  * 라이더 관제(표) — 라이더 백오피스 "라이더 관제" 화면과 같은 내용을 이 시뮬레이터에서(백오피스가 안 열릴 때도 본다).
  *   숫자 카드(운행 중·배송 중·위치 끊김·없음) → 거르기·찾기 → 라이더 표 → 최근 배송 표 → (접기) 백오피스에서 열기.
  * 실서버 이 PC 는 관제 응답(GET /rider-locations) 그대로, 그 밖은 화면 라이더로 채운다(모르는 칸은 —).
- * 배송 줄을 누르면 "관제" 지도로 가서 그 배송 상세를 연다.
+ * 이 화면 안에서 배송을 누르면 아래 최근 배송 표에서 그 줄이 펼쳐진다(화면을 옮기지 않음 — 사용자 2026-11-20 "정신 사납게 배송관제로 넘어갈게 아니라 바로 아래쪽에").
+ * 지도로 가는 것은 "지도에서 보기" 단추로만.
  */
 export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
   const app = useApp();
@@ -44,6 +45,9 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
   const cardOf = new Map(ops.rows.map((r) => [r.card.deliveryId, r]));
   const busy = rows.filter((r) => r.deliveries.length > 0).length;
   const stale = rows.filter((r) => rowMatchesRider(r, 'stale')).length;
+  // 아래 최근 배송 표에서 펼칠 배송 — n 은 같은 배송을 다시 눌러도 다시 펼치고 스크롤하려고
+  const [focus, setFocus] = useState<{ id: string; n: number } | null>(null);
+  const openBelow = (deliveryId: string) => setFocus((p) => ({ id: deliveryId, n: (p?.n ?? 0) + 1 }));
   const openOnMap = (deliveryId: string) => {
     onShowOnMap();
     app.setPanelTab('deliveries');
@@ -66,7 +70,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
         <span className="c-page-src">{source}</span>
       </div>
 
-      <ActiveOrders onOpen={openOnMap} />
+      <ActiveOrders onOpen={openBelow} />
 
       <h3 className="c-page-h3">
         라이더 <span className="c-muted">위치·끊김·진행 중 배송 · 줄을 누르면 오른쪽에 상세</span>
@@ -146,10 +150,10 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
                         <button
                           key={d.deliveryId}
                           className="c-dl"
-                          title={`${d.deliveryId} — 누르면 관제 지도에서`}
+                          title={`${d.deliveryId} — 누르면 아래 최근 배송에서 상세`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            openOnMap(d.deliveryId);
+                            openBelow(d.deliveryId);
                           }}
                         >
                           <b>{row ? deliveryName(row.card) : shortRiderId(d.deliveryId)}</b> {d.stage}
@@ -172,10 +176,10 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
           </tbody>
         </table>
       </div>
-      <RiderDetail row={rows.find((r) => r.id === app.selected)} onShowOnMap={openOnMap} />
+      <RiderDetail row={rows.find((r) => r.id === app.selected)} onShowOnMap={openOnMap} onOpenDelivery={openBelow} />
       </div>
 
-      <RecentDeliveries onOpen={openOnMap} />
+      <RecentDeliveries onOpen={openOnMap} focus={focus} />
 
       <details className="c-page-links">
         <summary>라이더 백오피스에서 열기(대시보드·라이더 찾기·배송 찾기·지원센터·수행료 …)</summary>
@@ -217,19 +221,40 @@ export function recentMatches(r: OpsRow, needle: string, riderLabel: (id: string
  * (상세·주문·흐름·원래 상태 탭 — 배송 관제 상세 창과 같은 것, 사용자 2026-11-20 "넘어가도 나오는 정보는 짧거든 … 밑으로 탭이 펼쳐져서").
  * 지도로 가려면 펼친 칸의 "지도에서 보기"(onOpen).
  */
-export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => void }) {
+export function RecentDeliveries({ onOpen, focus }: { onOpen: (deliveryId: string) => void; focus?: { id: string; n: number } | null }) {
   const app = useApp();
   const { sim } = app;
   const ops = app.board();
   const [q, setQ] = useState('');
   const [f, setF] = useState<RecentFilter>('all');
   const [open, setOpen] = useState<string | null>(null);
+  const wrap = useRef<HTMLDivElement>(null);
+  const scrollTo = useRef<string | null>(null);
+  // 위 칸(진행 중 주문·라이더 표·라이더 상세)에서 배송을 누르면 — 찾기·거르기를 풀고 그 줄을 펼친다
+  useEffect(() => {
+    if (!focus) return;
+    setQ('');
+    setF('all');
+    setOpen(focus.id);
+    scrollTo.current = focus.id;
+  }, [focus]);
+  // 펼친 줄이 그려진 뒤 그 자리로 스크롤
+  useEffect(() => {
+    const id = scrollTo.current;
+    if (!id || open !== id) return;
+    scrollTo.current = null;
+    const row = [...(wrap.current?.querySelectorAll<HTMLTableRowElement>('tr[data-did]') ?? [])].find((el) => el.dataset.did === id);
+    row?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   const needle = q.trim().toLowerCase();
   const label = (id: string) => shortRiderLabel(id, sim.riders);
   const sorted = [...ops.rows].sort((a, b) => b.card.createdAt - a.card.createdAt);
   const searched = sorted.filter((r) => recentMatches(r, needle, label));
   const countOf = (k: RecentFilter) => (k === 'all' ? searched.length : k === 'alert' ? searched.filter((r) => r.alert).length : searched.filter((r) => r.bucket === k).length);
-  const recent = searched.filter((r) => (f === 'all' ? true : f === 'alert' ? !!r.alert : r.bucket === f)).slice(0, RECENT);
+  const top = searched.filter((r) => (f === 'all' ? true : f === 'alert' ? !!r.alert : r.bucket === f)).slice(0, RECENT);
+  // 위에서 고른 배송이 최근 목록 밖이면 맨 아래에 붙여서라도 펼친다
+  const extra = open && !top.some((r) => r.card.deliveryId === open) ? searched.find((r) => r.card.deliveryId === open) : undefined;
+  const recent = extra ? [...top, extra] : top;
   return (
     <>
       <h3 className="c-page-h3">
@@ -246,7 +271,7 @@ export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => v
         allKey="all"
         warnKeys={['alert']}
       />
-      <div className="c-table-wrap">
+      <div className="c-table-wrap" ref={wrap}>
         <table className="c-table c-recent">
           <thead>
             <tr>
@@ -280,6 +305,7 @@ export function RecentDeliveries({ onOpen }: { onOpen: (deliveryId: string) => v
                     className={`${r.alert ? `al-${r.alert.level}` : ''} ${isOpen ? 'open' : ''}`}
                     onClick={() => setOpen(isOpen ? null : c.deliveryId)}
                     title={c.deliveryId}
+                    data-did={c.deliveryId}
                     aria-expanded={isOpen}
                   >
                     <td className="rd-id">

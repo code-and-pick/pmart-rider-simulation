@@ -18,7 +18,16 @@ const RECENT = 5;
  * 오늘 운행·접속·대기 합계(직원용 /rider-operating-time)는 넣었다가 뺐다(사용자 2026-11-18 "이거 없어도 될 것 같아").
  * 전달지 주소는 "전달지 보기"를 눌러야 읽는다(부를 때마다 백엔드 개인정보 열람 기록).
  */
-export function RiderDetail({ row, onShowOnMap }: { row: RiderRow | undefined; onShowOnMap: (deliveryId: string) => void }) {
+export function RiderDetail({
+  row,
+  onShowOnMap,
+  onOpenDelivery = onShowOnMap,
+}: {
+  row: RiderRow | undefined;
+  onShowOnMap: (deliveryId: string) => void;
+  /** 최근 배송 줄을 누를 때 — 운영 현황은 아래 최근 배송 표에서 펼친다(없으면 지도) */
+  onOpenDelivery?: (deliveryId: string) => void;
+}) {
   const app = useApp();
   const { sim } = app;
   if (!row) {
@@ -79,7 +88,7 @@ export function RiderDetail({ row, onShowOnMap }: { row: RiderRow | undefined; o
       <ul className="c-rd-list">
         {recent.map((r) => (
           <li key={r.card.deliveryId}>
-            <button onClick={() => onShowOnMap(r.card.deliveryId)} title={r.card.deliveryId}>
+            <button onClick={() => onOpenDelivery(r.card.deliveryId)} title={r.card.deliveryId}>
               <b>{deliveryName(r.card)}</b>
               <span className={`c-st b-${r.bucket}`}>{r.bucket === 'closed' ? '끝남' : BUCKET_LABEL[r.bucket]}</span>
               <span className="c-time">{r.totalSec === null ? '' : `총 ${dur(r.totalSec)}`}</span>
