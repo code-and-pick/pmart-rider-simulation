@@ -105,7 +105,12 @@ export function buildBoard(input: {
         const wait = (input.nowMs - last.atMs) / 1000;
         if (wait >= t.storeWaitWarnSec) push({ level: 'warn', kind: 'STORE_WAIT', title: '가게에서 대기 길어짐', detail: `${label} — 가게 도착 뒤 ${min(wait)}분째 픽업 전`, sec: wait, overSec: wait - t.storeWaitWarnSec });
       }
-      if (row.totalSec >= t.lateTotalSec) push({ level: 'warn', kind: 'LATE', title: '배송 지연', detail: `${label} — 배차 요청부터 ${min(row.totalSec)}분째 진행 중`, sec: row.totalSec, overSec: row.totalSec - t.lateTotalSec });
+      // 지연은 배정된 뒤에만 — 라이더 찾는 중이면 위 "라이더 못 찾음" 하나만(같은 원인 경보 두 개 안 띄움, 라이더 백엔드 세션 2026-11-20).
+      // 반납·회수(회수품을 MFC 로)는 고객 약속 시각이 없어 "반납 지연"으로 구분
+      if (bucket !== 'searching' && row.totalSec >= t.lateTotalSec) {
+        const back = card.purpose === 'MISDELIVERY_RECOVERY' || card.purpose === 'CLAIM_RETURN' || card.purpose === 'FAILED_DELIVERY_RETURN';
+        push({ level: 'warn', kind: 'LATE', title: back ? '반납 지연' : '배송 지연', detail: `${label} — 배차 요청부터 ${min(row.totalSec)}분째 진행 중`, sec: row.totalSec, overSec: row.totalSec - t.lateTotalSec });
+      }
     }
     return row;
   });

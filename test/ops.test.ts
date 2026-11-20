@@ -100,3 +100,22 @@ describe('관제판', () => {
     expect(b.alerts.slice(0, 2).every((a) => a.level === 'bad')).toBe(true);
   });
 });
+
+describe('관제판 — 같은 원인 경보 하나만(라이더 백엔드 세션 2026-11-20)', () => {
+  it('라이더 찾는 중이 오래되면 "라이더 못 찾음"만, "배송 지연"은 배정 뒤에만. 반납·회수는 "반납 지연"', () => {
+    const tls: Record<string, DeliveryTimeline> = {
+      S: tl('S', [['created', 1200 * 60]]),
+      R: tl('R', [['created', 50 * 60], ['assigned', 49 * 60]]),
+    };
+    const b = buildBoard({
+      cards: [card('S', 'DISPATCHING', null), { ...card('R', 'ASSIGNED', 'ASSIGNED', 'R1'), purpose: 'FAILED_DELIVERY_RETURN' }],
+      timelineOf: (id) => tls[id] ?? null,
+      riders: [],
+      calls: [],
+      epochOf: (s) => s * 1000,
+      nowMs: NOW,
+    });
+    expect(b.alerts.filter((a) => a.deliveryId === 'S').map((a) => a.kind)).toEqual(['SEARCH_LONG']);
+    expect(b.alerts.find((a) => a.deliveryId === 'R')).toMatchObject({ kind: 'LATE', title: '반납 지연' });
+  });
+});
