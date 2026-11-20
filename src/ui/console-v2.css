@@ -921,17 +921,6 @@ a.c-btn-s {
 }
 
 /* 최근 배송 — 찾기·상태 거르기·줄 아래 펼침(사용자 2026-11-20) */
-.c-recent-h {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 24px 0 10px;
-  flex-wrap: wrap;
-}
-.c-recent-h .c-page-h3 {
-  margin: 0;
-}
 .c-recent-q {
   width: min(360px, 100%);
   box-sizing: border-box;
@@ -946,40 +935,6 @@ a.c-btn-s {
 .c-recent-q:focus {
   outline: 2px solid color-mix(in srgb, var(--c-blue) 50%, transparent);
   outline-offset: 0;
-}
-.c-recent-f {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-.c-recent-f button {
-  border: 1px solid var(--c-line);
-  background: var(--c-panel);
-  color: var(--c-ink);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 5px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-}
-.c-recent-f button b {
-  margin-left: 4px;
-  color: var(--c-sub);
-  font-weight: 700;
-}
-.c-recent-f button.on {
-  background: var(--c-blue);
-  border-color: var(--c-blue);
-  color: #fff;
-}
-.c-recent-f button.on b {
-  color: #fff;
-}
-.c-recent-f button.warn:not(.on) {
-  border-color: var(--c-orange);
-  color: var(--c-orange);
 }
 .c-recent tbody tr {
   cursor: pointer;
@@ -1053,5 +1008,116 @@ a.c-btn-s {
 .c-caret {
   width: 18px;
   font-size: 12px;
+  color: var(--c-ink);
+}
+/* 최근 배송 — 왼쪽 [찾기][깔때기 → 팝업] [고른 상태 꼬리표] */
+.c-recent-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.c-recent-fwrap {
+  position: relative;
+}
+.c-recent-funnel {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-panel);
+  color: var(--c-sub);
+  cursor: pointer;
+}
+.c-recent-funnel:hover {
+  color: var(--c-ink);
+}
+.c-recent-funnel.on {
+  background: var(--c-blue);
+  border-color: var(--c-blue);
+  color: #fff;
+}
+.c-pop-back {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+.c-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 21;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  min-width: 220px;
+  border-radius: 10px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 30%);
+}
+.c-pop button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.c-pop button:hover:not(:disabled) {
+  background: var(--c-soft);
+}
+.c-pop button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.c-pop button.on {
+  font-weight: 700;
+}
+.c-pop button .ck {
+  color: var(--c-blue);
+  font-weight: 800;
+}
+.c-pop button b {
+  color: var(--c-sub);
+  font-variant-numeric: tabular-nums;
+}
+.c-pop button.warn .l {
+  color: var(--c-orange);
+}
+.c-recent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-blue) 15%, transparent);
+  color: var(--c-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.c-recent-chip button {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-sub);
+  cursor: pointer;
+}
+.c-recent-chip button:hover {
+  background: var(--c-line);
   color: var(--c-ink);
 }
