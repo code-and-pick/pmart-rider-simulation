@@ -827,3 +827,95 @@ a.c-btn-s {
   font-size: 13px !important;
   margin: 12px 0 2px !important;
 }
+
+/* 주문 내역(OrderTab) — 간격 넉넉히(사용자 2026-11-20 "너무 다닥다닥 붙어 있어서 보기 힘들다" → "응" 지도 상세 창도). 분석 상세·배송 관제 상세 창 공통 */
+.od {
+  gap: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.od .c-muted {
+  font-size: 12px;
+  white-space: normal;
+}
+.od-head {
+  gap: 8px 12px;
+  padding-bottom: 16px;
+}
+.od-status {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.od-sec {
+  padding: 16px 0;
+}
+.od-sec h4 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  gap: 8px;
+}
+.od-lines {
+  gap: 10px;
+}
+.od-lines li {
+  gap: 16px;
+}
+.od-lines .nm small {
+  font-size: 12px;
+}
+.od-lines .a {
+  min-width: 80px;
+}
+.od-tag {
+  font-size: 12px;
+  padding: 1px 8px;
+}
+.od-amt,
+.od-kv {
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px 16px;
+}
+.od-amt .tot {
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top-style: solid;
+}
+.od-open {
+  font-size: 12px;
+}
+.od-reveal {
+  margin-top: 16px;
+  padding: 14px 16px;
+  gap: 12px;
+  border-style: solid;
+  background: var(--c-panel);
+}
+.od-reveal-h .c-muted {
+  font-size: 12px;
+  margin-left: 8px;
+}
+.od-quick {
+  gap: 8px;
+}
+.od-quick button {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+.od-reveal input:not([type]) {
+  padding: 8px 10px;
+}
+.od-fields {
+  gap: 6px 18px;
+  font-size: 13px;
+}
+.od-fields label {
+  gap: 6px;
+}
+.od-issues li + li {
+  margin-top: 6px;
+}
+.od-foot {
+  padding-top: 14px;
+  border-top: 1px solid var(--c-line);
+  font-size: 12px;
+}
