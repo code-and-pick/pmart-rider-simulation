@@ -919,3 +919,139 @@ a.c-btn-s {
   border-top: 1px solid var(--c-line);
   font-size: 12px;
 }
+
+/* 최근 배송 — 찾기·상태 거르기·줄 아래 펼침(사용자 2026-11-20) */
+.c-recent-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 24px 0 10px;
+  flex-wrap: wrap;
+}
+.c-recent-h .c-page-h3 {
+  margin: 0;
+}
+.c-recent-q {
+  width: min(360px, 100%);
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-panel);
+  color: var(--c-ink);
+}
+.c-recent-q:focus {
+  outline: 2px solid color-mix(in srgb, var(--c-blue) 50%, transparent);
+  outline-offset: 0;
+}
+.c-recent-f {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.c-recent-f button {
+  border: 1px solid var(--c-line);
+  background: var(--c-panel);
+  color: var(--c-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.c-recent-f button b {
+  margin-left: 4px;
+  color: var(--c-sub);
+  font-weight: 700;
+}
+.c-recent-f button.on {
+  background: var(--c-blue);
+  border-color: var(--c-blue);
+  color: #fff;
+}
+.c-recent-f button.on b {
+  color: #fff;
+}
+.c-recent-f button.warn:not(.on) {
+  border-color: var(--c-orange);
+  color: var(--c-orange);
+}
+.c-recent tbody tr {
+  cursor: pointer;
+}
+.c-recent tbody tr.open td {
+  background: color-mix(in srgb, var(--c-blue) 10%, transparent);
+}
+.c-caret {
+  display: inline-block;
+  width: 14px;
+  color: var(--c-sub);
+}
+.c-recent tbody tr.c-recent-x {
+  cursor: default;
+}
+.c-recent tbody tr.c-recent-x > td {
+  padding: 0;
+  background: var(--c-soft);
+  border-bottom: 2px solid var(--c-blue);
+}
+.md2.md-inline {
+  display: block;
+  max-width: 920px;
+  padding: 16px 20px 18px 34px;
+  background: transparent;
+  color: var(--c-ink);
+  border: 0;
+  box-shadow: none;
+  white-space: normal;
+  font-size: 13px;
+}
+.md-inline .md-tabs {
+  margin-top: 4px;
+}
+.md-one,
+.md-one > .md-main {
+  display: contents;
+}
+.md2.md-inline {
+  max-width: none;
+}
+.md-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.md-side {
+  padding-left: 28px;
+  border-left: 1px solid var(--c-line);
+  min-width: 0;
+}
+.md-side h4 {
+  margin: 6px 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-sub);
+}
+@media (max-width: 1100px) {
+  .md-cols {
+    grid-template-columns: 1fr;
+  }
+  .md-side {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--c-line);
+    padding-top: 12px;
+  }
+}
+/* 펼침 줄 앞 화살표 — 잘 보이게 */
+.c-caret {
+  width: 18px;
+  font-size: 12px;
+  color: var(--c-ink);
+}

@@ -20,13 +20,20 @@ type Tab = 'detail' | 'order' | 'flow' | 'raw';
  *   조치 = 지도에서 따라가기 · 백오피스에서 배송/라이더 열기(쓰기 조치는 백오피스) · 번호 복사.
  */
 /**
- * variant: overlay = 지도 위 오른쪽 창(라이더 관제), panel = 배송 관제 오른쪽 칸에 크게(사용자 2026-11-19 "배송 상세가 오른쪽에 뜨게 해서 크게").
+ * variant: overlay = 지도 위 오른쪽 창(라이더 관제), panel = 배송 관제 오른쪽 칸에 크게(사용자 2026-11-19 "배송 상세가 오른쪽에 뜨게 해서 크게"),
+ * inline = 목록 표의 줄 아래 펼침(사용자 2026-11-20 "클릭하면 밑으로 탭이 펼쳐져서 정보 볼 수 있게") — deliveryId·onClose 를 받고, 조치에 "지도에서 보기".
  */
-export function MapDetail({ variant = 'overlay' }: { variant?: 'overlay' | 'panel' } = {}) {
+export function MapDetail({
+  variant = 'overlay',
+  deliveryId,
+  onClose,
+  onShowOnMap,
+}: { variant?: 'overlay' | 'panel' | 'inline'; deliveryId?: string; onClose?: () => void; onShowOnMap?: (deliveryId: string) => void } = {}) {
   const app = useApp();
   const [tab, setTab] = useState<Tab>('detail');
   const [copied, setCopied] = useState(false);
-  const id = app.selectedDelivery;
+  const id = deliveryId ?? app.selectedDelivery;
+  const inline = variant === 'inline';
   const orderIdOfSel = id ? (app.board().rows.find((r) => r.card.deliveryId === id)?.card.orderId ?? null) : null;
   // 열어 본 원문은 다른 배송을 고르거나 창을 닫으면 화면 메모리에서 지운다
   useEffect(() => {
@@ -55,7 +62,7 @@ export function MapDetail({ variant = 'overlay' }: { variant?: 'overlay' | 'pane
     );
   };
   return (
-    <aside className={variant === 'panel' ? 'md2 dd-panel' : 'map-detail md2'} aria-label="고른 배송 상세">
+    <aside className={variant === 'panel' ? 'md2 dd-panel' : variant === 'inline' ? 'md2 md-inline' : 'map-detail md2'} aria-label="고른 배송 상세">
       <div className="md-head">
         <div>
           <span className="md-kicker">주문 {orderLabel(c) ?? '—'}</span>
@@ -67,11 +74,14 @@ export function MapDetail({ variant = 'overlay' }: { variant?: 'overlay' | 'pane
             <span className={`md-status b-${row.bucket}`}>{row.bucket === 'closed' ? stage.text : BUCKET_LABEL[row.bucket]}</span>
           </div>
         </div>
-        <button className="chip-x" aria-label="상세 닫기" title="닫기" onClick={() => app.selectDelivery(null)}>
+        <button className="chip-x" aria-label="상세 닫기" title="닫기" onClick={() => (onClose ? onClose() : app.selectDelivery(null))}>
           ✕
         </button>
       </div>
 
+      {/* inline = 왼쪽 탭(상세·주문·원래 상태) | 오른쪽 흐름 늘 보임 — 넓은 줄 아래 펼침에서 빈 칸 없게. 그 밖은 한 줄(md-one·md-main 은 display: contents) */}
+      <div className={inline ? 'md-cols' : 'md-one'}>
+      <div className="md-main">
       <div className="md-tabs" role="tablist">
         {(
           [
@@ -80,7 +90,7 @@ export function MapDetail({ variant = 'overlay' }: { variant?: 'overlay' | 'pane
             ['flow', '흐름'],
             ['raw', '원래 상태'],
           ] as const
-        ).map(([k, l]) => (
+        ).filter(([k]) => !(inline && k === 'flow')).map(([k, l]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
             {l}
           </button>
@@ -135,7 +145,7 @@ export function MapDetail({ variant = 'overlay' }: { variant?: 'overlay' | 'pane
         </>
       )}
       {tab === 'order' && <OrderTab orderId={c.orderId} />}
-      {tab === 'flow' &&
+      {tab === 'flow' && !inline &&
         (tl ? (
           <>
             <Timeline t={tl} nowMs={app.sim.clock.epochMs()} />
@@ -174,7 +184,12 @@ export function MapDetail({ variant = 'overlay' }: { variant?: 'overlay' | 'pane
       )}
 
       <div className="md-actions" aria-label="조치">
-        {c.riderId && (
+        {onShowOnMap && (
+          <button className="c-btn-s" onClick={() => onShowOnMap(c.deliveryId)} title="배송 관제 지도에서 이 배송(라이더 위치·MFC·전달지)">
+            지도에서 보기
+          </button>
+        )}
+        {c.riderId && !inline && (
           <button
             className={`c-btn-s ${app.follow && app.mapRider === c.riderId ? 'on' : ''}`}
             onClick={() => app.toggleFollow()}
@@ -197,6 +212,21 @@ export function MapDetail({ variant = 'overlay' }: { variant?: 'overlay' | 'pane
         <button className="c-btn-s" onClick={copy} disabled={!c.orderNumber} title={c.orderNumber ? `주문번호 ${c.orderNumber} 복사` : '주문번호가 없는 배송(다시 배송·회수 등)'}>
           {copied ? '복사됨' : '주문번호 복사'}
         </button>
+      </div>
+      </div>
+      {inline && (
+        <section className="md-side" aria-label="흐름">
+          <h4>흐름</h4>
+          {tl ? (
+            <>
+              <Timeline t={tl} nowMs={app.sim.clock.epochMs()} />
+              <OfferList offers={tl.offers} />
+            </>
+          ) : (
+            <p className="c-muted">흐름을 아직 못 읽었습니다.</p>
+          )}
+        </section>
+      )}
       </div>
       {mode !== 'http' && <p className="md-note">배송 조치·라이더 상세(백오피스)는 실서버 화면에서 — 가상 배송은 백오피스에 없습니다.</p>}
     </aside>
