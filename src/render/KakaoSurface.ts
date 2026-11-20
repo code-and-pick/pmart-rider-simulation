@@ -3,7 +3,7 @@
 
 import { ROUTE_COLOR } from './colors';
 import type { KakaoMaps, KCircle, KCustomOverlay, KMap, KPolyline } from './kakao';
-import { createClusterEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl } from './markers';
+import { clusterClick, createClusterEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl , type ClusterMember } from './markers';
 import type { CustomerPinState, MapSurface, RiderMarkerState, RouteKind } from './surface';
 import type { LatLng } from '../util/geo';
 
@@ -78,7 +78,7 @@ export class KakaoSurface implements MapSurface {
       m.lat = s.pos.lat;
       m.lng = s.pos.lng;
     }
-    m.ov.setZIndex(s.selected ? 20 : 10);
+    m.ov.setZIndex(s.selected ? 30 : 10); // 고른 라이더는 같은 자리 묶음(25) 위에
     updateRiderEl(m.el, s.color, s.label, s.heading, s.selected, s.title, s.offline, s.vehicle, s.offset, s.hidden);
   }
 
@@ -99,13 +99,20 @@ export class KakaoSurface implements MapSurface {
     m.ov.setZIndex(s.highlight ? 15 : 5);
   }
 
-  upsertCluster(id: string, pos: LatLng, count: number, title: string): void {
+  upsertCluster(id: string, pos: LatLng, count: number, title: string, members: readonly ClusterMember[] = [], aside = false): void {
     let m = this.clusters.get(id);
     if (!m) {
       const el = createClusterEl();
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
         const cur = this.clusters.get(id);
-        if (cur && !this.onClusterClick(id)) this.zoomInAt(cur.pos);
+        if (!cur) return;
+        // 이름 목록이 없으면(많이 모임 등) 예전처럼 확대
+        if (!el.querySelector('[data-rid]')) {
+          if (!this.onClusterClick(id)) this.zoomInAt(cur.pos);
+          return;
+        }
+        const rid = clusterClick(el, e.target);
+        if (rid) this.onRiderClick(rid);
       });
       const ov = new this.k.CustomOverlay({ position: this.ll(pos), content: el, xAnchor: 0.5, yAnchor: 0.5, zIndex: 25, map: this.map, clickable: true });
       m = { ov, el, lat: pos.lat, lng: pos.lng, pos };
@@ -117,7 +124,7 @@ export class KakaoSurface implements MapSurface {
       m.lng = pos.lng;
       m.pos = pos;
     }
-    updateClusterEl(m.el, count, title);
+    updateClusterEl(m.el, count, title, members, aside);
   }
 
   removeCluster(id: string): void {

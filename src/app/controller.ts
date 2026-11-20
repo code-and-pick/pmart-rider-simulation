@@ -8,7 +8,7 @@ import { KakaoSurface } from '../render/KakaoSurface';
 import { PlaneSurface } from '../render/PlaneSurface';
 import type { MapSurface } from '../render/surface';
 import { PHASE_LABEL } from '../sim/rider';
-import type { DeliveryCard, ScenarioKnobs, World } from '../sim/world';
+import type { DeliveryCard, RiderView, ScenarioKnobs, World } from '../sim/world';
 import type { LatLng } from '../util/geo';
 import { buildBoard, rowMatches, type OpsBoard, type OpsFilter } from '../ui/ops';
 import { deliveryLabel } from '../domain/riderId';
@@ -88,27 +88,16 @@ export class AppController {
     const center = this.sim.mfcLocation;
     // 지도에서 라이더를 누르면 선택(오른쪽 탭이 그 라이더로 걸러짐), 다시 누르면 풀림
     const onClick = (id: string) => this.select(this.selected === id ? null : id);
-    // 묶음 "n명"을 누르면 그 무리를 펼친다(SPREAD_MAX 넘으면 false → 지도가 확대)
-    const onCluster = (key: string) => {
-      const ids = this.clusterMembers.get(key);
-      if (!ids || ids.length > SPREAD_MAX) return false;
-      this.spider = new Set(ids);
-      return true;
-    };
-    // 지도 빈 곳을 누르면 펼친 무리를 접는다
-    container.addEventListener('click', (e) => {
-      if (!(e.target as HTMLElement | null)?.closest?.('.mk-rider, .mk-cluster')) this.spider = null;
-    });
     let surface: MapSurface;
     try {
       const k = await loadKakaoMaps(import.meta.env.VITE_KAKAO_JS_KEY);
       if (gen !== this.mapGen) return;
-      surface = new KakaoSurface(k, container, center, onClick, onCluster);
+      surface = new KakaoSurface(k, container, center, onClick);
       this.mapStatus = { kind: 'kakao' };
     } catch (e) {
       if (gen !== this.mapGen) return;
       container.innerHTML = '';
-      surface = new PlaneSurface(container, center, onClick, onCluster);
+      surface = new PlaneSurface(container, center, onClick);
       this.mapStatus = { kind: 'plane', reason: e instanceof Error ? e.message : String(e) };
     }
     surface.setMfc(center, this.sim.params.mfcId, CONTRACT.radiusStepsKm);
@@ -207,10 +196,6 @@ export class AppController {
   private drawnMfc: { lat: number; lng: number } | null = null;
   private drawnMfcLabel = '';
   private drawnClusters = new Set<string>();
-  /** 펼친 무리(묶음을 누른 것) — 지도 빈 곳을 누르거나 흩어지면 null */
-  private spider: Set<string> | null = null;
-  /** 지금 그린 묶음 키 → 그 안 라이더(묶음 누르기에 씀) */
-  private readonly clusterMembers = new Map<string, string[]>();
   private lastStep = 0;
 
   select(id: string | null) {
@@ -367,6 +352,11 @@ export class AppController {
     this.ticker.emit();
   }
 
+  /** 라이더 그림 색 — 라이더 관제는 끊김·쉬는 중·배송 중·대기, 배송 관제는 엔진 단계 */
+  private riderColor(r: RiderView, control: boolean): string {
+    return control ? (isAlarmOffline(r) ? CONTROL_COLOR.stale : r.locationOffline ? CONTROL_COLOR.rest : r.deliveryId ? CONTROL_COLOR.delivering : CONTROL_COLOR.waiting) : PHASE_COLOR[r.phase];
+  }
+
   /** 지도 위 물체를 시뮬레이션 상태에 맞춘다 — 매 프레임. */
   private syncMap() {
     const s = this.surface;
@@ -393,11 +383,9 @@ export class AppController {
       if (this.selectedDelivery) focusDeliveries.add(this.selectedDelivery);
     }
     // 같은 자리(화면에서 가까이)에 겹친 라이더는 둥글게 벌려 그린다 — 눌러 고르기 쉽게(사용자 2026-11-19 "같은 장소에 겹쳐 있으니까 클릭이 애매")
-    // 펼칠 무리 = 묶음을 눌렀거나(spider) 그중 한 명을 고른 무리. 확대해서 흩어지면 접힘 상태도 푼다
-    const open = (ids: readonly string[]) => ids.some((id) => this.spider?.has(id) || id === this.selected || id === this.mapRider);
-    const layout = riderLayout(this.sim.riders.flatMap((r) => (r.pos && !isResting(r) ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])), open);
-    if (this.spider && !layout.groups.some((g) => g.some((id) => this.spider?.has(id)))) this.spider = null;
-    this.clusterMembers.clear();
+    // 같은 자리 라이더는 벌리지 않는다 — 실제 자리에 "n명" 묶음, 누르면 이름 목록에서 고름(사용자 2026-11-20 "펼쳐도 위치가 다 다른 곳에 표시").
+    // 고른 라이더는 묶음에서 빠져 실제 자리에 낱개로 보인다(아래)
+    const layout = riderLayout(this.sim.riders.flatMap((r) => (r.pos && !isResting(r) ? [{ id: r.id, p: s.screenPoint(r.pos) }] : [])), () => false);
     const offsets = layout.offsets;
     const hidden = new Set(layout.clusters.flat());
     // 묶음 "n명" — 고른 라이더가 있으면 그 라이더는 묶음에서 빼고 낱개로 보인다
@@ -412,9 +400,12 @@ export class AppController {
       }
       const key = `cl:${members[0]}`;
       seenClusters.add(key);
-      this.clusterMembers.set(key, members);
       const center = { lat: ps.reduce((acc, p) => acc + p.lat, 0) / ps.length, lng: ps.reduce((acc, p) => acc + p.lng, 0) / ps.length };
-      s.upsertCluster(key, center, ps.length, ps.length <= SPREAD_MAX ? `같은 자리 라이더 ${ps.length}명 — 누르면 펼쳐서 고르기` : `라이더 ${ps.length}명이 이 근처에 모여 있어요 — 누르면 확대`);
+      const list = members.flatMap((id) => {
+        const r = this.sim.riders.find((x) => x.id === id);
+        return r ? [{ id, label: r.label ?? id.replace(/^RD-/, ''), color: this.riderColor(r, control) }] : [];
+      });
+      s.upsertCluster(key, center, ps.length, `같은 자리 라이더 ${ps.length}명 — 누르면 이름 목록에서 고르기`, list, members.length < ids.length);
     }
     for (const key of this.drawnClusters) if (!seenClusters.has(key)) s.removeCluster(key);
     this.drawnClusters = seenClusters;
@@ -428,7 +419,7 @@ export class AppController {
       s.upsertRider(r.id, {
         pos: r.pos,
         heading: r.heading,
-        color: control ? (isAlarmOffline(r) ? CONTROL_COLOR.stale : r.locationOffline ? CONTROL_COLOR.rest : r.deliveryId ? CONTROL_COLOR.delivering : CONTROL_COLOR.waiting) : PHASE_COLOR[r.phase],
+        color: this.riderColor(r, control),
         label: r.label ?? r.id.replace(/^RD-/, ''),
         selected: r.id === this.mapRider || r.id === this.selected,
         title: `${r.external ? '라이더 앱 ' : ''}${r.id} · ${PHASE_LABEL[r.phase]}${r.deliveryId ? ` · ${r.deliveryId}` : ''}${r.locationOffline ? ' · 위치 전송 끊김(백엔드가 위치를 못 받는 중)' : ''}`,

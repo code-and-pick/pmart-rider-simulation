@@ -58,7 +58,6 @@ export function createRiderEl(vehicle?: string | null): HTMLElement {
   el.className = 'mk-rider';
   el.dataset.vehicle = vehicle ?? 'MOTORCYCLE';
   el.innerHTML = `
-    <i class="mk-leg"></i><i class="mk-origin"></i>
     <div class="mk-rider-shadow"></div>
     <div class="mk-rider-ring"></div>
     ${vehicleSvg(vehicle)}
@@ -92,18 +91,6 @@ export function updateRiderEl(
   const tr = offset && (offset.x || offset.y) ? `${Math.round(offset.x)}px ${Math.round(offset.y)}px` : '';
   if (el.style.translate !== tr) el.style.translate = tr;
   el.classList.toggle('mk-spread', !!tr);
-  // 벌린 라이더 — 그림 가운데(22,20)에서 실제 자리(기준점 22,35 를 비킨 만큼 되돌린 곳)까지 가는 선 + 자리 점(사용자 2026-11-20 "위치가 너무 동떨어지게")
-  if (tr && offset) {
-    const dx = -offset.x;
-    const dy = 15 - offset.y;
-    const leg = el.querySelector('.mk-leg') as HTMLElement | null;
-    const org = el.querySelector('.mk-origin') as HTMLElement | null;
-    if (leg) {
-      leg.style.width = `${Math.hypot(dx, dy).toFixed(1)}px`;
-      leg.style.transform = `rotate(${Math.atan2(dy, dx).toFixed(3)}rad)`;
-    }
-    if (org) org.style.translate = `${(dx).toFixed(1)}px ${(dy).toFixed(1)}px`;
-  }
   el.style.setProperty('--rider-color', color);
   el.classList.toggle('offline', offline);
   if (el.title !== title) el.title = title;
@@ -114,18 +101,58 @@ export function updateRiderEl(
   if (lab.textContent !== label) lab.textContent = label;
 }
 
-/** 라이더 묶음(한 자리에 많이 모임) — "n명" 원. 누르면 그 자리로 확대(surface.zoomInAt) */
+/** 묶음 안 라이더 한 명(목록 줄) */
+export interface ClusterMember {
+  id: string;
+  label: string;
+  color: string;
+}
+
+/**
+ * 같은 자리 라이더 묶음 — 실제 자리에 작은 점 + 바로 위 "n명" 말풍선. 누르면 이름 목록이 펼쳐지고 이름을 누르면 그 라이더를 고른다.
+ * 라이더를 실제 자리에서 옮겨 그리지 않는다(사용자 2026-11-20 "펼쳐도 라이더 위치가 다 다른 곳에 표시되는 건 똑같잖아").
+ */
 export function createClusterEl(): HTMLElement {
   const el = document.createElement('div');
   el.className = 'mk-cluster';
-  el.innerHTML = '<b></b><span>명</span>';
+  el.innerHTML = '<i class="mk-cl-dot"></i><span class="mk-cl-badge"><b></b>명</span><div class="mk-cl-pop" hidden></div>';
   return el;
 }
 
-export function updateClusterEl(el: HTMLElement, count: number, title: string): void {
-  const b = el.querySelector('b') as HTMLElement;
+/** aside = 같은 자리의 고른 라이더 그림이 위를 덮으니 말풍선을 오른쪽으로 비킴 */
+export function updateClusterEl(el: HTMLElement, count: number, title: string, members: readonly ClusterMember[] = [], aside = false): void {
+  el.classList.toggle('aside', aside);
+  const b = el.querySelector('.mk-cl-badge b') as HTMLElement;
   if (b.textContent !== String(count)) b.textContent = String(count);
-  if (el.title !== title) el.title = title;
+  const badge = el.querySelector('.mk-cl-badge') as HTMLElement;
+  if (badge.title !== title) badge.title = title;
+  const sig = members.map((m) => `${m.id}|${m.label}|${m.color}`).join(';');
+  const pop = el.querySelector('.mk-cl-pop') as HTMLElement;
+  if (pop.dataset.sig !== sig) {
+    pop.dataset.sig = sig;
+    pop.innerHTML = '';
+    for (const m of members) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.dataset.rid = m.id;
+      row.innerHTML = '<i></i><span></span>';
+      (row.querySelector('i') as HTMLElement).style.background = m.color;
+      (row.querySelector('span') as HTMLElement).textContent = m.label;
+      pop.appendChild(row);
+    }
+  }
+}
+
+/** 묶음을 누름 — 이름 줄이면 그 라이더 id, 말풍선이면 목록 열기/닫기 */
+export function clusterClick(el: HTMLElement, target: EventTarget | null): string | null {
+  const row = (target as HTMLElement | null)?.closest?.('[data-rid]') as HTMLElement | null;
+  const pop = el.querySelector('.mk-cl-pop') as HTMLElement;
+  if (row?.dataset.rid) {
+    pop.hidden = true;
+    return row.dataset.rid;
+  }
+  pop.hidden = !pop.hidden;
+  return null;
 }
 
 export function createMfcEl(label: string): HTMLElement {

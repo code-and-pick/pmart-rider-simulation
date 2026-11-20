@@ -2,7 +2,7 @@
 // MFC 를 원점으로 한 미터 격자(캔버스) 위에 카카오 화면과 같은 HTML 마커를 올린다. 휠 = 확대, 끌기 = 이동.
 
 import { ROUTE_COLOR } from './colors';
-import { createClusterEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl } from './markers';
+import { clusterClick, createClusterEl, createCustomerEl, createMfcEl, createRiderEl, updateClusterEl, updateCustomerEl, updateRiderEl, type ClusterMember } from './markers';
 import type { CustomerPinState, MapSurface, RiderMarkerState, RouteKind } from './surface';
 import type { LatLng } from '../util/geo';
 
@@ -131,21 +131,27 @@ export class PlaneSurface implements MapSurface {
     c.el.style.zIndex = s.highlight ? '15' : '5';
   }
 
-  upsertCluster(id: string, pos: LatLng, count: number, title: string): void {
+  upsertCluster(id: string, pos: LatLng, count: number, title: string, members: readonly ClusterMember[] = [], aside = false): void {
     let c = this.clusters.get(id);
     if (!c) {
       const el = createClusterEl();
       el.classList.add('plane-anchor');
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
         const cur = this.clusters.get(id);
-        if (cur && !this.onClusterClick(id)) this.zoomInAt(cur.pos);
+        if (!cur) return;
+        if (!el.querySelector('[data-rid]')) {
+          if (!this.onClusterClick(id)) this.zoomInAt(cur.pos);
+          return;
+        }
+        const rid = clusterClick(el, e.target);
+        if (rid) this.onRiderClick(rid);
       });
       this.layer.appendChild(el);
       c = { el, pos };
       this.clusters.set(id, c);
     }
     c.pos = pos;
-    updateClusterEl(c.el, count, title);
+    updateClusterEl(c.el, count, title, members, aside);
   }
 
   removeCluster(id: string): void {
