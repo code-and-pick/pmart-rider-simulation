@@ -50,6 +50,8 @@ export interface OfferRow {
   trigger: DispatchAttempt['trigger'] | null;
   /** 배달리스트에서 직접 잡은 것(제안이 아님) */
   fromList: boolean;
+  /** 전달 실패 반납을 원래 라이더에게 바로 배정(제안이 아님, source FAILED_RETURN) */
+  failedReturn: boolean;
 }
 
 export const OFFER_STATE_LABEL: Record<OfferState, string> = {
@@ -77,6 +79,7 @@ export function offerRows(d: Delivery | null): OfferRow[] {
         attempt: i + 1,
         trigger: a.trigger ?? null,
         fromList: o.source === 'DELIVERY_LIST',
+        failedReturn: o.source === 'FAILED_RETURN',
       });
     }
   });

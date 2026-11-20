@@ -56,6 +56,7 @@ export function OfferList({ offers }: { offers: readonly OfferRow[] | undefined 
                 <td title={o.riderId ?? ''}>
                   {name(o.riderId)}
                   {o.fromList && <small className="c-muted"> · 배달리스트</small>}
+                  {o.failedReturn && <small className="c-muted"> · 원래 라이더 바로 배정</small>}
                 </td>
                 <td className="num">{o.radiusKm !== null ? `${o.radiusKm}km` : '—'}</td>
                 <td>

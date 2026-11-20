@@ -111,7 +111,8 @@ export type DeliveryPurpose =
   | 'FAILED_DELIVERY_RETURN';
 
 export type OfferState = 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'LATE' | 'SEND_FAILED' | 'SUPERSEDED';
-export type OfferSource = 'AI_RECOMMENDED' | 'DELIVERY_LIST';
+/** FAILED_RETURN = 전달 실패 반납을 원래 라이더에게 바로 배정한 기록(dispatch 0.13.2 — 백엔드 PR #299, 2026-11-20 배포 대기. 그 전엔 이 값이 있는 배송의 배차 상세가 500) */
+export type OfferSource = 'AI_RECOMMENDED' | 'DELIVERY_LIST' | 'FAILED_RETURN';
 export type DeliveryMode = 'SINGLE' | 'BUNDLED' | 'SCHEDULED';
 export type OfferResponseKind = 'ACCEPT' | 'REJECT';
 export type RejectReason = 'TOO_FAR' | 'OVER_CAPACITY' | 'PERSONAL' | 'OTHER';
