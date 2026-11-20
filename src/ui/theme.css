@@ -323,17 +323,17 @@
 }
 
 /* ═════════ 라이더 그림 작게 + 같은 자리 라이더는 실제 자리에 묶음·이름 목록(사용자 2026-11-20 "라이더 핀 크기를 줄여야 하나?") ═════════ */
-/* 그림을 72% 로 — 기준점(아래 가운데 80%)을 중심으로 줄여 실제 자리는 그대로. 이름표 글자는 줄인 만큼 키워 11px 쯤 유지 */
+/* 그림을 80% 로(2026-11-20 72% → "아주 조금만 더 키워") — 기준점(아래 가운데 80%)을 중심으로 줄여 실제 자리는 그대로. 이름표 글자는 줄인 만큼 키워 11px 쯤 유지 */
 .mk-rider {
-  transform: scale(0.72);
+  transform: scale(0.8);
   transform-origin: 50% 80%;
 }
 .mk-rider .mk-rider-label {
-  font-size: 15px;
+  font-size: 14px;
   padding: 1px 6px;
 }
 .mk-rider.mk-selected {
-  transform: scale(0.85);
+  transform: scale(0.92);
 }
 /* 묶음 — 실제 자리에 점, 그 위에 "n명" 말풍선, 누르면 이름 목록 */
 .mk-cluster {

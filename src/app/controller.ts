@@ -495,8 +495,8 @@ export class AppController {
  */
 const SPREAD_NEAR_PX = 40;
 
-/** 라이더 그림(72% — 약 32px)이 겹쳐 보이는 거리 — 이 안이면 누를 때 고르기 창 [시뮬] */
-const OVERLAP_PX = 26;
+/** 라이더 그림(80% — 약 35px)이 겹쳐 보이는 거리 — 이 안이면 누를 때 고르기 창 [시뮬] */
+const OVERLAP_PX = 28;
 
 /** 이보다 많이 모이면 벌리지 않고 "n명" 묶음 하나로(50명을 벌리면 원이 바다·전국까지 커졌다 — 사용자 2026-11-19) [시뮬] */
 export const SPREAD_MAX = 8;
