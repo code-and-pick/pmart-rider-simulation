@@ -7,7 +7,8 @@ import type { OpsAlert } from './ops';
 /*
  * "확인할 일" 바 — 라이더 관제·배송 관제 맨 위 전체 폭(사용자 2026-11-19 "이상 상황이 눈에 덜 띄게, 직관적이지 않게 보이는 것 같아").
  * 예전엔 배송 관제 왼쪽 목록 위 작은 칸에만 있어 라이더 관제에서는 안 보였고, 문장 한 줄이라 무엇을 해야 할지 읽어야 했다.
- *   없음 = 얇은 초록 줄. 있음 = 심각이면 빨강·주의면 주황 띠 + 알림마다 카드(무엇 · 어느 배송/라이더 · 얼마나 · 기준 초과), 카드를 누르면 그 상세.
+ *   없음 = 얇은 초록 줄. 있음 = 심각이면 빨강·주의면 주황 한 줄 띠(2026-11-20 MFC 시뮬레이터처럼 얇게 — 큰 상자가 화면 위를 다 차지했다)
+ *   + 알림마다 알약(무엇 · 어느 배송 · 기준 초과), 누르면 그 상세. 4건 넘으면 "n건 더"로 펼침.
  * 알림 규칙·기준은 ui/ops(config OPS_THRESHOLDS [가정]) 그대로.
  */
 
@@ -57,45 +58,38 @@ export function IssueBar() {
     }
   };
   return (
-    <section className={`ib ${bad ? 'ib-bad' : 'ib-warn'}`} aria-label="확인할 일" aria-live="polite">
-      <div className="ib-head">
-        <span className="ib-icon" aria-hidden>
-          ⚠
-        </span>
-        <div className="ib-count">
-          <b>확인할 일 {alerts.length}건</b>
-          <span>
-            {bad > 0 && <em className="bad">심각 {bad}</em>}
-            {warn > 0 && <em className="warn">주의 {warn}</em>}
-          </span>
-        </div>
-      </div>
-      <ul className="ib-cards">
+    <section className={`ib ib-line ${bad ? 'ib-bad' : 'ib-warn'} ${open ? 'open' : ''}`} aria-label="확인할 일" aria-live="polite">
+      <span className="ib-sum">
+        <span className="ib-dot" aria-hidden />
+        <b>확인할 일 {alerts.length}건</b>
+        {bad > 0 && <em className="bad">심각 {bad}</em>}
+        {warn > 0 && <em className="warn">주의 {warn}</em>}
+      </span>
+      <ul className="ib-chips">
         {shown.map((a) => {
           const [target, ...rest] = a.detail.split(' — ');
           const over = a.overSec !== undefined && a.overSec > 0 ? Math.max(1, Math.round(a.overSec / 60)) : null;
           return (
             <li key={a.key}>
-              <button className={`ib-card ${a.level}`} onClick={() => go(a)} title={`${a.title} — ${a.detail} · 누르면 상세`}>
-                <span className="ib-card-1">
+              <button className={`ib-chip ${a.level}`} onClick={() => go(a)} title={`${a.title} — ${a.detail}${rest.length ? '' : a.sec ? ` · ${dur(a.sec)}째` : ''} · 누르면 상세`}>
+                <span className="t">
                   <span aria-hidden>{ICON[a.kind]}</span> {a.title}
-                  {over !== null && <span className="ib-over">+{over}분</span>}
                 </span>
-                <b className="ib-card-2">{target}</b>
-                <span className="ib-card-3">{rest.join(' — ') || (a.sec ? `${dur(a.sec)}째` : '')}</span>
+                <b>{target}</b>
+                {over !== null && <span className="ib-over">+{over}분</span>}
               </button>
             </li>
           );
         })}
       </ul>
-      <div className="ib-side">
+      <span className="ib-side">
         {alerts.length > SHOWN && (
           <button className="ib-more" onClick={() => setOpen(!open)}>
             {open ? '접기' : `${alerts.length - SHOWN}건 더`}
           </button>
         )}
         <SoundButton on={sound} toggle={toggleSound} />
-      </div>
+      </span>
     </section>
   );
 }

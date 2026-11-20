@@ -1012,3 +1012,114 @@
 .mk-cluster:hover {
   background: #1d4ed8;
 }
+
+/* 확인할 일 — 한 줄 띠(2026-11-20, MFC 시뮬레이터 이슈 바처럼 얇게). 위 .ib-bad/.ib-warn 의 큰 상자 규칙을 덮는다 */
+.ib.ib-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px 6px 14px;
+  min-height: 44px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--ib-c) 55%, transparent);
+  border-left: 4px solid var(--ib-c);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ib-c) 10%, var(--c-panel));
+}
+.ib-sum {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.ib-sum b {
+  font-weight: 800;
+  color: var(--ib-c);
+  white-space: nowrap;
+}
+.ib-sum em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #fff;
+}
+.ib-sum em.bad {
+  background: var(--c-red);
+}
+.ib-sum em.warn {
+  background: var(--c-orange);
+}
+.ib-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ib-c);
+  animation: ib-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ib-dot {
+    animation: none;
+  }
+}
+.ib-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 12px;
+  border-left: 1px solid color-mix(in srgb, var(--ib-c) 35%, transparent);
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+}
+.ib-line.open {
+  align-items: flex-start;
+}
+.ib-line.open .ib-chips {
+  flex-wrap: wrap;
+}
+.ib-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--c-ink);
+  background: var(--c-panel);
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ib-chip:hover {
+  border-color: var(--ib-c);
+}
+.ib-chip .t {
+  font-weight: 700;
+  color: var(--c-orange);
+}
+.ib-chip.bad .t {
+  color: var(--c-red);
+}
+.ib-chip b {
+  font-weight: 800;
+}
+.ib-chip .ib-over {
+  margin-left: 0;
+  font-size: 12px;
+  padding: 1px 7px;
+}
+.ib-line .ib-side {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.ib-ok {
+  min-height: 36px;
+  box-sizing: border-box;
+  font-size: 13px;
+}

@@ -38,7 +38,7 @@ export function FlowBar() {
       <button key={key} className={`fb-step ${f === key ? 'on' : ''} ${n === 0 ? 'zero' : ''}`} aria-pressed={f === key} onClick={() => pick(key)} title={`${STEP_LABEL[key]} — 누르면 목록·지도가 그것만`}>
         <span className="fb-l">{STEP_LABEL[key]}</span>
         <b className="fb-n">{n}</b>
-        {lateN > 0 ? <span className="fb-late">지연 {lateN}</span> : sub ? <span className="fb-sub">{sub}</span> : null}
+        {lateN > 0 ? <span className="fb-late" title="이 단계 배송 중 확인할 일(못 찾음·지연 등)">확인 {lateN}</span> : sub ? <span className="fb-sub">{sub}</span> : null}
       </button>
     );
   };

@@ -88,7 +88,8 @@ export function buildBoard(input: {
       if (!row.alert || (row.alert.level === 'warn' && full.level === 'bad')) row.alert = full;
     };
     if (bucket === 'dispatchFailed') push({ level: 'bad', kind: 'DISPATCH_FAILED', title: '배차 실패', detail: `${label} — 라이더를 못 찾음`, sec: row.totalSec ?? 0 });
-    if (bucket === 'deliveryFailed') push({ level: 'bad', kind: 'DELIVERY_FAILED', title: '전달 실패', detail: `${label} — 확정·회수 확인 필요`, sec: row.totalSec ?? 0 });
+    // 전달 실패는 확정 전(FAILURE_REPORTED — 직원이 확정·반려해야 함)만 경보. 확정(FAILED)된 것은 끝난 배송이라 경보 없음(라이더 백엔드 세션 2026-11-20 — 28767701-1)
+    if (bucket === 'deliveryFailed' && card.executionState === 'FAILURE_REPORTED') push({ level: 'bad', kind: 'DELIVERY_FAILED', title: '전달 실패', detail: `${label} — 확정·회수 확인 필요`, sec: row.totalSec ?? 0 });
     if (active && row.totalSec !== null) {
       if (bucket === 'searching' && row.totalSec >= t.searchWarnSec) {
         push({

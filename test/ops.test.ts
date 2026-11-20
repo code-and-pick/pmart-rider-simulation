@@ -119,3 +119,17 @@ describe('관제판 — 같은 원인 경보 하나만(라이더 백엔드 세�
     expect(b.alerts.find((a) => a.deliveryId === 'R')).toMatchObject({ kind: 'LATE', title: '반납 지연' });
   });
 });
+
+describe('관제판 — 전달 실패 경보는 확정 전만', () => {
+  it('FAILURE_REPORTED = "전달 실패" 경보, FAILED(확정 — 끝난 배송) = 경보 없음', () => {
+    const b = buildBoard({
+      cards: [card('P', 'ASSIGNED', 'FAILURE_REPORTED', 'R1'), card('F', 'CLOSED', 'FAILED', 'R1')],
+      timelineOf: (id) => tl(id, [['created', 30 * 60]]),
+      riders: [],
+      calls: [],
+      epochOf: (s) => s * 1000,
+      nowMs: NOW,
+    });
+    expect(b.alerts.map((a) => [a.deliveryId, a.kind])).toEqual([['P', 'DELIVERY_FAILED']]);
+  });
+});

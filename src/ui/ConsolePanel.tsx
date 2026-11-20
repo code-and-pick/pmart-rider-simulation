@@ -178,7 +178,7 @@ function TreeHead({ g, rider }: { g: RowGroup; rider: RiderRow | undefined }) {
           <b>배차 대기</b>
           <span className="c-tree-sub">라이더 찾는 중 · {g.rows.length}건</span>
         </span>
-        {g.alerts > 0 && <span className="c-pill red">지연 {g.alerts}</span>}
+        {g.alerts > 0 && <span className="c-pill red" title="확인할 일(못 찾음·지연·실패 등) — 줄마다 무엇인지 보임">확인 {g.alerts}</span>}
       </>
     );
   }
@@ -202,7 +202,7 @@ function TreeHead({ g, rider }: { g: RowGroup; rider: RiderRow | undefined }) {
           )}
         </span>
       </span>
-      {g.alerts > 0 && <span className="c-pill red">지연 {g.alerts}</span>}
+      {g.alerts > 0 && <span className="c-pill red" title="확인할 일(못 찾음·지연·실패 등) — 줄마다 무엇인지 보임">확인 {g.alerts}</span>}
       <button
         className="c-link"
         onClick={(e) => {
@@ -396,7 +396,7 @@ function DeliveriesView() {
                 <>
                   <span className="c-group-l">{g.label}</span>
                   <span className="c-n">{g.rows.length}</span>
-                  {g.alerts > 0 && <span className="c-pill red">지연 {g.alerts}</span>}
+                  {g.alerts > 0 && <span className="c-pill red" title="확인할 일(못 찾음·지연·실패 등) — 줄마다 무엇인지 보임">확인 {g.alerts}</span>}
                 </>
               )}
             </summary>
