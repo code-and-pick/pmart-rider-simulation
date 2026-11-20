@@ -625,6 +625,11 @@
   color: var(--ch-active);
   cursor: pointer;
 }
+/* 막대 아래 목록에서 펼친 배송 — 왼쪽 띠 */
+.an-table tr.on td:first-child {
+  box-shadow: inset 3px 0 0 var(--ch-active);
+  padding-left: 8px;
+}
 .an-link:hover {
   text-decoration: underline;
 }

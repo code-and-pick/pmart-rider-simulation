@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
 import { deliveryName, orderLabel, riderName } from '../domain/riderId';
@@ -291,6 +291,12 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
   const [chosen, setChosen] = useState<ChartView | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const [pick, setPick] = useState<number | null>(null);
+  // 막대 아래 목록에서 누른 배송 — 화면을 옮기지 않고 목록 바로 아래에 상세(사용자 2026-11-20 "굳이 다른 페이지인 배송관제로 넘어간다")
+  const [openId, setOpenId] = useState<string | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (openId) detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [openId]);
   const idx = riderIndex(app.sim.controlBoard?.()?.items ?? null, app.sim.riders, isSimRiderId);
   const items = rows.map((r) => ({ at: r.startMs as number, kind: kindOf(r), r }));
   const v = chosen ?? defaultView(items.map((i) => i.at), nowMs);
@@ -303,6 +309,7 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
   const go = (n: ChartView) => {
     setHover(null);
     setPick(null);
+    setOpenId(null);
     setChosen(n);
   };
   const yStep = niceStep(peak?.total ?? 0);
@@ -393,7 +400,7 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
                   key={b.from}
                   className={`an-col ${isNow ? 'now' : ''} ${future ? 'future' : ''} ${pick === b.from ? 'picked' : ''} ${clickable ? 'click' : ''}`}
                   onMouseEnter={() => setHover(i)}
-                  onClick={f.mode === 'week' ? () => go({ mode: 'day', anchor: b.from }) : b.total ? () => setPick(pick === b.from ? null : b.from) : undefined}
+                  onClick={f.mode === 'week' ? () => go({ mode: 'day', anchor: b.from }) : b.total ? () => { setPick(pick === b.from ? null : b.from); setOpenId(null); } : undefined}
                 >
                   <div className="stack" style={{ height: `${(b.total / max) * 100}%` }}>
                     {b.total > 0 && <span className="val">{b.total}</span>}
@@ -436,7 +443,7 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
             <b>
               {binRange(f.mode, pb)} · {picked.length}건
             </b>
-            <button className="an-x" aria-label="닫기" onClick={() => setPick(null)}>
+            <button className="an-x" aria-label="닫기" onClick={() => { setPick(null); setOpenId(null); }}>
               ✕
             </button>
           </div>
@@ -452,10 +459,10 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
             </thead>
             <tbody>
               {picked.map(({ r, at, kind }) => (
-                <tr key={r.card.deliveryId}>
+                <tr key={r.card.deliveryId} className={openId === r.card.deliveryId ? 'on' : ''}>
                   <td className="num">{seoulTime(at).slice(0, 5)}</td>
                   <td>
-                    <button className="an-link" title="배송 관제 지도에서 열기" onClick={() => openOnMap(app, r.card.deliveryId)}>
+                    <button className="an-link" title="누르면 아래에 배송 상세" aria-expanded={openId === r.card.deliveryId} onClick={() => setOpenId(openId === r.card.deliveryId ? null : r.card.deliveryId)}>
                       {deliveryName(r.card)}
                     </button>
                   </td>
@@ -473,6 +480,18 @@ function TimeChart({ rows }: { rows: readonly OpsRow[] }) {
           </table>
         </div>
       )}
+      {pb &&
+        openId &&
+        (() => {
+          const it = picked.find((x) => x.r.card.deliveryId === openId);
+          if (!it) return null;
+          const rid = it.r.card.riderId;
+          return (
+            <div ref={detailRef}>
+              <DeliveryDetail r={it.r} name={rid ? (idx.get(rid)?.name ?? riderName(rid)) : null} onClose={() => setOpenId(null)} />
+            </div>
+          );
+        })()}
     </>
   );
 }
@@ -618,7 +637,7 @@ function RiderTable({ rows }: { rows: readonly OpsRow[] }) {
           </tbody>
         </table>
       )}
-      {pick && <DeliveryDetail span={pick} name={pick.r.card.riderId ? (idx.get(pick.r.card.riderId)?.name ?? riderName(pick.r.card.riderId)) : null} onClose={() => setPicked(null)} />}
+      {pick && <DeliveryDetail r={pick.r} name={pick.r.card.riderId ? (idx.get(pick.r.card.riderId)?.name ?? riderName(pick.r.card.riderId)) : null} onClose={() => setPicked(null)} />}
     </>
   );
 }
@@ -627,9 +646,8 @@ function RiderTable({ rows }: { rows: readonly OpsRow[] }) {
  * 누른 배송 한 건 — 왼쪽 단계별 시각(서버 기록), 오른쪽 주문 내역(배송 관제 상세 창 "주문" 탭과 같은 것 — 사용자 2026-11-20 "옆에 주문 내역도").
  * 원문 열람을 했으면 닫거나 다른 배송을 고를 때 화면 메모리에서 지운다(CLAUDE.md 예외 2 — MapDetail 과 같게).
  */
-function DeliveryDetail({ span, name, onClose }: { span: Span; name: string | null; onClose: () => void }) {
+function DeliveryDetail({ r, name, onClose }: { r: OpsRow; name: string | null; onClose: () => void }) {
   const app = useApp();
-  const { r } = span;
   const kind = kindOf(r);
   const tl = app.sim.deliveryTimeline(r.card.deliveryId);
   const orderId = r.card.orderId;
