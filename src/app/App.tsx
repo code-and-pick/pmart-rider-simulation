@@ -8,6 +8,7 @@ import { FILTER_LABEL, type OpsFilter } from '../ui/ops';
 import { MapDetail } from '../ui/MapDetail';
 import { RiderHead, RiderList, RiderPanel } from '../ui/RiderBoard';
 import { RecentDeliveries, RiderControlPage } from '../ui/RiderControlPage';
+import { Icon, type IconName } from '../ui/Icon';
 import { ScenarioBar } from '../ui/ScenarioBar';
 import { PHASE_COLOR } from '../render/colors';
 import type { AppController, AppView } from './controller';
@@ -46,12 +47,13 @@ function useStored<T extends string>(key: string, fallback: T, allowed: readonly
   return [v, set];
 }
 
-const RAIL: readonly (readonly [View, string, string])[] = [
-  ['control', '🛵', '라이더 관제'],
-  ['field', '🗺', '배송 관제'],
-  ['riders', '☰', '목록 관제'],
-  ['analyze', '▥', '분석'],
-  ['logs', '⧉', '기록'],
+/** 왼쪽 메뉴 — 이름은 사용자 2026-11-20 시안 그대로(실시간 관제·배송 관리·목록 관리·분석·기록) */
+export const RAIL: readonly (readonly [View, IconName, string])[] = [
+  ['control', 'live', '실시간 관제'],
+  ['field', 'truck', '배송 관리'],
+  ['riders', 'list', '목록 관리'],
+  ['analyze', 'chart', '분석'],
+  ['logs', 'log', '기록'],
 ];
 
 /**
@@ -92,13 +94,19 @@ function Rail({ theme, onTheme }: { theme: 'dark' | 'light'; onTheme: () => void
   const alerts = app.board().alerts.length;
   return (
     <nav className="c-rail" aria-label="화면">
-      <span className="c-logo" aria-hidden>
-        P
-      </span>
+      <div className="c-brandmark">
+        <span className="c-logo" aria-hidden>
+          P
+        </span>
+        <span className="c-brandmark-t">
+          <b>PMart</b>
+          <span>라이더관제</span>
+        </span>
+      </div>
       {RAIL.map(([v, icon, label]) => (
         <button key={v} className={app.view === v ? 'on' : ''} aria-current={app.view === v ? 'page' : undefined} onClick={() => app.setView(v)} title={label}>
           <span className="c-rail-i" aria-hidden>
-            {icon}
+            <Icon name={icon} />
           </span>
           <span className="c-rail-l">{label}</span>
           {v === 'field' && alerts > 0 && <span className="c-rail-badge">{alerts}</span>}
@@ -106,9 +114,9 @@ function Rail({ theme, onTheme }: { theme: 'dark' | 'light'; onTheme: () => void
       ))}
       <button className="c-rail-theme" onClick={onTheme} title={theme === 'dark' ? '밝은 화면으로' : '어두운 화면으로'}>
         <span className="c-rail-i" aria-hidden>
-          {theme === 'dark' ? '☀' : '☾'}
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
         </span>
-        <span className="c-rail-l">{theme === 'dark' ? '밝게' : '어둡게'}</span>
+        <span className="c-rail-l">{theme === 'dark' ? '밝은 화면' : '어두운 화면'}</span>
       </button>
     </nav>
   );

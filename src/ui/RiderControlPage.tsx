@@ -60,7 +60,7 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
     <section className="c-page c-roomy" aria-label="라이더 관제">
       <div className="c-page-head">
         <div>
-          <h2>라이더 관제</h2>
+          <h2>목록 관리</h2>
           <p>진행 중 주문마다 라이더 현황, 그 아래 라이더 목록·상세. 라이더 백오피스 "라이더 관제"와 같은 내용입니다.</p>
         </div>
         <span className="c-page-src">{source}</span>

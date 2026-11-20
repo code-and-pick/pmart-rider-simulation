@@ -1,5 +1,6 @@
 import { useApp, type View } from '../app/App';
 import { seoulTime } from './format';
+import { Icon } from './Icon';
 
 const SPEEDS = [1, 5, 20, 60];
 
@@ -12,7 +13,7 @@ function switchMode(mode: 'mock' | 'http') {
   window.location.search = s ? `?${s}` : '';
 }
 
-const TITLE: Record<View, string> = { control: '라이더 관제', field: '배송 관제', riders: '목록 관제', analyze: '분석', logs: '기록' };
+const TITLE: Record<View, string> = { control: '실시간 관제', field: '배송 관리', riders: '목록 관리', analyze: '분석', logs: '기록' };
 
 /**
  * 관제 머리 — 왼쪽 지금 화면 이름·센터·데이터 출처·라이더 수(바로고 리뷰 "전체 라이더 숫자"), 오른쪽 실시간 시각.
@@ -28,6 +29,9 @@ export function ConsoleHeader() {
     <header className="c-head">
       <div className="c-brand">
         <span className="c-title">{TITLE[app.view]}</span>
+        <span className="c-crumb" aria-hidden>
+          ›
+        </span>
         <span className="c-center" title={`센터 ${sim.params.mfcId}`}>
           부산진구 MFC
         </span>
@@ -98,6 +102,7 @@ export function ConsoleHeader() {
           )}
         </div>
         <span className={`c-map ${st.kind}`} title={st.kind === 'plane' ? `좌표 평면 대체 화면(${st.reason})` : undefined}>
+          <Icon name="map" size={15} />
           {st.kind === 'kakao' ? '카카오 지도' : st.kind === 'plane' ? '좌표 평면' : '지도 불러오는 중'}
         </span>
       </div>

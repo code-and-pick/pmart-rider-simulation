@@ -85,7 +85,7 @@ export function RiderHead() {
     <>
       <div className="rb-head">
         <div>
-          <h2>라이더 관제</h2>
+          <h2>실시간 관제</h2>
           <p>운행 중인 라이더의 지금 위치예요(이동 이력은 보이지 않아요). {sim.mode === 'http' ? '10초마다 새로 불러와요.' : '가상(MOCK) 라이더예요.'}</p>
         </div>
         <form
