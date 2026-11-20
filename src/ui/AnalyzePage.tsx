@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
-import { deliveryLabel, riderName } from '../domain/riderId';
+import { deliveryLabel, orderLabel, riderName } from '../domain/riderId';
 import { dur, seoulTime } from './format';
 import type { OpsRow } from './ops';
 import { riderIndex } from './riderTable';
 import { binCount, binLabel, binRange, dayStart, defaultView, frame, frameTitle, niceStep, seoulDay, shift, type Bin, type ChartView } from './timeChart';
+import { OrderTab } from './OrderTab';
+import { groupOrders } from './orders';
 import './analyze.css';
 
 /*
@@ -519,12 +521,20 @@ function RiderTable({ rows }: { rows: readonly OpsRow[] }) {
   );
 }
 
-/** 누른 배송 한 건 — 단계별 시각(서버 기록) + 지도에서 보기 */
+/**
+ * 누른 배송 한 건 — 왼쪽 단계별 시각(서버 기록), 오른쪽 주문 내역(배송 관제 상세 창 "주문" 탭과 같은 것 — 사용자 2026-11-20 "옆에 주문 내역도").
+ * 원문 열람을 했으면 닫거나 다른 배송을 고를 때 화면 메모리에서 지운다(CLAUDE.md 예외 2 — MapDetail 과 같게).
+ */
 function DeliveryDetail({ span, name, onClose }: { span: Span; name: string | null; onClose: () => void }) {
   const app = useApp();
   const { r } = span;
   const kind = kindOf(r);
   const tl = app.sim.deliveryTimeline(r.card.deliveryId);
+  const orderId = r.card.orderId;
+  useEffect(() => {
+    if (!orderId) return;
+    return () => app.sim.orders?.hide(orderId);
+  }, [app, orderId]);
   return (
     <div className="an-detail">
       <div className="an-detail-h">
@@ -541,6 +551,9 @@ function DeliveryDetail({ span, name, onClose }: { span: Span; name: string | nu
           </button>
         </span>
       </div>
+      <div className="an-detail-cols">
+      <section aria-label="배송 단계">
+      <h4 className="an-sub">배송 흐름</h4>
       <dl className="an-facts">
         <div>
           <dt>라이더</dt>
@@ -567,7 +580,43 @@ function DeliveryDetail({ span, name, onClose }: { span: Span; name: string | nu
           })}
         </ol>
       )}
+      <SameOrder orderId={orderId} current={r.card.deliveryId} />
+      </section>
+      <section aria-label="주문 내역">
+        <h4 className="an-sub">주문 내역{orderLabel(r.card) ? ` · ${orderLabel(r.card)}` : ''}</h4>
+        <OrderTab orderId={orderId} />
+      </section>
+      </div>
     </div>
+  );
+}
+
+/** 같은 주문의 배송들(1차 첫 배송 · 2차 재배송 …) — 기록 탭 주문 흐름과 같은 줄. 배송이 하나면 그리지 않는다 */
+function SameOrder({ orderId, current }: { orderId: string | null; current: string }) {
+  const app = useApp();
+  if (!orderId) return null;
+  const cards = app.board().rows.filter((x) => x.card.orderId === orderId).map((x) => x.card);
+  const row = groupOrders(cards, (id) => app.sim.deliveryTimeline(id), app.sim.clock.epochMs())[0];
+  if (!row || row.deliveries.length < 2) return null;
+  return (
+    <>
+      <h4 className="an-sub an-sub-gap">이 주문의 배송 {row.deliveries.length}건</h4>
+      <ol className="ord-dlv">
+        {row.deliveries.map((d) => (
+          <li key={d.deliveryId} className={`tone-${d.tone} ${d.deliveryId === current ? 'cur' : ''}`}>
+            <span className="n">{d.n}차</span>
+            <span className="kind">{d.kind}</span>
+            <span className="dots">
+              {d.labels.map((l, i) => (
+                <i key={i} className={i < d.index ? 'past' : i === d.index ? 'now' : ''} title={l} />
+              ))}
+            </span>
+            <span className="state">{d.stateText}</span>
+            <span className="no">{d.deliveryNumber ?? ''}</span>
+          </li>
+        ))}
+      </ol>
+    </>
   );
 }
 

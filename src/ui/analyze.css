@@ -685,3 +685,43 @@
 .an-stack i.k-other {
   color: var(--c-ink);
 }
+/* 상세 — 왼쪽 배송 흐름 | 오른쪽 주문 내역 */
+.an-detail-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.an-detail-cols > section + section {
+  padding-left: 24px;
+  border-left: 1px solid var(--c-line);
+}
+.an-sub {
+  margin: 0 0 10px;
+  font-size: var(--an-t2);
+  font-weight: 700;
+  color: var(--c-sub);
+}
+@media (max-width: 1100px) {
+  .an-detail-cols {
+    grid-template-columns: 1fr;
+  }
+  .an-detail-cols > section + section {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--c-line);
+    padding-top: 16px;
+  }
+}
+.an-sub-gap {
+  margin-top: 20px;
+}
+.an .ord-dlv li.cur {
+  outline: 1px solid var(--c-line);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.an .ord-dlv .no {
+  color: var(--c-sub);
+  font-size: var(--an-t3);
+}
