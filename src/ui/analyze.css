@@ -564,17 +564,12 @@
 .an-strip .mk:hover {
   filter: brightness(1.2);
 }
-/* 확인할 일(지연·실패 등)이 있는 배송 — 테두리 대신 오른쪽 끝 작은 주황 점 */
-.an-strip .mk.al::after {
-  content: '';
-  position: absolute;
-  right: -3px;
-  top: -3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--c-orange);
-  box-shadow: 0 0 0 1.5px var(--c-soft);
+/* 확인할 일(라이더 못 찾음·지연 등)이 있는 배송 — 막대 자체를 주황으로(범례 "확인 필요"). 실패 막대는 빨강 그대로 */
+.an-strip .mk.al:not(.k-failed),
+.an-legend .k-alert {
+  --k: var(--c-orange);
+  --k2: var(--c-orange);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--k) 78%, #fff), var(--k2));
 }
 .an-strip .mk.on {
   box-shadow: 0 0 0 2px var(--c-ink);

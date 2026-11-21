@@ -266,7 +266,7 @@ function Journey({ segments, total }: { segments: readonly { key: string; label:
   );
 }
 
-function Legend({ kinds }: { kinds: readonly Kind[] }) {
+function Legend({ kinds, alert }: { kinds: readonly Kind[]; alert?: boolean }) {
   return (
     <span className="an-legend" aria-label="범례">
       {kinds.map((k) => (
@@ -275,6 +275,12 @@ function Legend({ kinds }: { kinds: readonly Kind[] }) {
           {KIND_LABEL[k]}
         </span>
       ))}
+      {alert && (
+        <span>
+          <i className="k-alert" />
+          확인 필요
+        </span>
+      )}
     </span>
   );
 }
@@ -571,7 +577,7 @@ function RiderTable({ rows }: { rows: readonly OpsRow[] }) {
       <div className="an-card-h">
         <h3>라이더별 배송</h3>
         <div className="an-ctl">
-          <Legend kinds={['done', 'active', 'failed', 'other']} />
+          <Legend kinds={['done', 'active', 'failed', 'other']} alert />
           <Seg
             label="보는 기간"
             value={range}
@@ -634,7 +640,7 @@ function RiderTable({ rows }: { rows: readonly OpsRow[] }) {
                           key={r.card.deliveryId}
                           className={`mk k-${kindOf(r)} ${r.alert ? 'al' : ''} ${picked === r.card.deliveryId ? 'on' : ''}`}
                           style={{ left: `${pct(s)}%`, width: `max(6px, ${pct(e) - pct(s)}%)`, top: `${4 + line * 10}px` }}
-                          title={`배송 ${deliveryName(r.card)} · ${KIND_LABEL[kindOf(r)]} · ${dur((e - s) / 1000)}${r.alert ? " · 확인할 일 있음" : ""}`}
+                          title={`배송 ${deliveryName(r.card)} · ${KIND_LABEL[kindOf(r)]} · ${dur((e - s) / 1000)}${r.alert ? ` · ${r.alert.title}` : ""}`}
                           aria-label={`배송 ${deliveryName(r.card)} 자세히`}
                           onClick={() => setPicked(picked === r.card.deliveryId ? null : r.card.deliveryId)}
                         />
