@@ -951,8 +951,8 @@
   font-size: var(--an-t3);
   font-weight: 800;
   color: #fff;
-  /* 구간 색 → 옆 색(journeyVars) */
-  background: linear-gradient(90deg, var(--k), var(--k2, var(--k)));
+  /* 구간별 평균은 그라데이션 없이 구간 색을 또렷하게(사용자 2026-11-21) — 위쪽 빛만 */
+  background: linear-gradient(180deg, rgb(255 255 255 / 18%), rgb(255 255 255 / 0%)), var(--k);
 }
 .an-journey-bar i:first-child {
   border-radius: 15px 6px 6px 15px;
@@ -991,7 +991,7 @@
   display: block;
   height: 100%;
   border-radius: 4px;
-  background: linear-gradient(90deg, var(--k), var(--k2, var(--k)));
+  background: var(--k);
 }
 .an-journey-legs .n {
   width: 22px;

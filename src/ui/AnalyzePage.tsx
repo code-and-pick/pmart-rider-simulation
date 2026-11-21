@@ -219,19 +219,16 @@ function StatusDonut({ counts, total }: { counts: Record<Kind, number>; total: n
 
 /** 구간별 평균 — 배차 요청 → 전달 완료 한 줄 여정(조각 길이 = 걸린 시간 비율) + 구간마다 번호·이름·시간·비율 */
 const JOURNEY_COLOR: Record<string, string> = { findRider: '#2dd4bf', toStore: '#4c8dff', atStore: '#facc15', storeAll: '#4c8dff', toCustomer: '#ff8a3d' };
-/** 막대 그라데이션 끝 색 — 구간 색마다 옆 색(청록→하늘·파랑→보라·노랑→주황·주황→장미). 사용자 2026-11-21 "보라 섞어줘도 돼" */
-const JOURNEY_END: Record<string, string> = { findRider: '#38bdf8', toStore: 'var(--ch-violet)', atStore: '#fb923c', storeAll: 'var(--ch-violet)', toCustomer: '#f4516c' };
-const journeyVars = (key: string) => ({ '--k': JOURNEY_COLOR[key] ?? 'var(--ch-active)', '--k2': JOURNEY_END[key] ?? 'var(--ch-violet)' }) as CSSProperties;
+/** 구간 색(단색 — 구간별 평균은 그라데이션 없이 색으로 또렷하게 나눔, 사용자 2026-11-21) */
+const journeyVars = (key: string) => ({ '--k': JOURNEY_COLOR[key] ?? 'var(--ch-active)' }) as CSSProperties;
 function Journey({ segments, total }: { segments: readonly { key: string; label: string; sec: number; hint: string }[]; total: number }) {
   const sum = Math.max(1, segments.reduce((a, x) => a + x.sec, 0));
   const longest = Math.max(1, ...segments.map((x) => x.sec));
   return (
     <div className="an-journey">
       <div className="an-journey-bar" role="img" aria-label={segments.map((x) => `${PHASE_SHORT[x.key] ?? x.label} ${dur(x.sec)}`).join(', ')}>
-        {segments.map((x, i) => (
-          <i key={x.key} style={{ flexGrow: Math.max(x.sec, sum * 0.05), ...journeyVars(x.key) }} title={`${x.label} — ${x.hint}`}>
-            {i + 1}
-          </i>
+        {segments.map((x) => (
+          <i key={x.key} style={{ flexGrow: Math.max(x.sec, sum * 0.05), ...journeyVars(x.key) }} title={`${x.label} — ${x.hint}`} />
         ))}
       </div>
       <div className="an-journey-ends">
