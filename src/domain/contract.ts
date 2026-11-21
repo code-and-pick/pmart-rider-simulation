@@ -1,15 +1,19 @@
 // 백엔드 계약의 부분 사본 — 이 시뮬레이터(가상 라이더)가 부르거나 읽는 부분만.
 // 이름·상태값·필드는 계약을 그대로 따른다. 계약이 바뀌면 여기를 먼저 맞추고 docs/design.md §3 표를 고친다.
 //
-// 기준: pmart-backend origin/main 3817f9bc (2026-11-20 전체 다시 읽음 — c475ff94 뒤 부르는 길이 없어지거나 필수 필드가 생긴 것은 없음. 새 값·새 흐름은 아래)
-//   contracts/openapi/delivery-dispatch-service.yaml   0.13.1 (0.6.0 purpose FAILED_DELIVERY_RETURN — 실패 확정 뒤 같은 라이더에게 제안 없이 반납 배송, 0.12.1 recovery.pickup.source RIDER_LOCATION,
+// 기준: pmart-backend origin/main 527dff2b (2026-11-21 바뀐 배송·라이더·인계 계약만 다시 읽음 — 3817f9bc 뒤 모두 선택 필드·직원용 조회 추가, 부르는 길·필수 필드 변화 없음.
+//        이전 전체 읽기 3817f9bc 2026-11-20 — c475ff94 뒤 부르는 길이 없어지거나 필수 필드가 생긴 것은 없음. 새 값·새 흐름은 아래)
+//   contracts/openapi/delivery-dispatch-service.yaml   0.13.2 (0.13.2 Offer.source FAILED_RETURN 이 계약 enum 에 들어감 — 이미 받고 있었음,0.6.0 purpose FAILED_DELIVERY_RETURN — 실패 확정 뒤 같은 라이더에게 제안 없이 반납 배송, 0.12.1 recovery.pickup.source RIDER_LOCATION,
 //                                                              0.12.2 GET /offers pollAfterSec 은 더 이상 null 아님 — 못 받으면 30초, 0.5.2 order.mfcPhone, 0.13.1 Delivery.dropAreaLabel, 0.11.1 Assignment.vehicleType nullable)
-//   contracts/openapi/delivery-execution-service.yaml  0.33.0 (0.14.0 실패 등록 = DELIVERY_FAILURE 도움요청 대화도 같이 열림(따로 보내지 않음), 0.15.0 실패 확정(custody RIDER) → 반납 배송 ASSIGNED 에서 바로 returns/store-deliveries,
+//   contracts/openapi/delivery-execution-service.yaml  0.34.0 (0.34.0 직원 배송 목록 firstAssignedAt·arrivedAtStoreAt·arrivedAtCustomerAt·promisedAt·completionMethod — 선택 칸, 시뮬레이터는 아직 안 읽음,
+//                                                              DeliveryAssigned.promisedAt 선택 칸 추가,
+//0.14.0 실패 등록 = DELIVERY_FAILURE 도움요청 대화도 같이 열림(따로 보내지 않음), 0.15.0 실패 확정(custody RIDER) → 반납 배송 ASSIGNED 에서 바로 returns/store-deliveries,
 //                                                              0.20.0 고객 "받았어요"·픽업 5시간 자동 완료(CUSTOMER_CONFIRMED·AUTO_COMPLETED — 라이더 완료가 409 일 수 있음), 0.28.0 반납 인증번호 handoverCode(설정 꺼짐이면 선택),
 //                                                              0.32.0 실패 확정 30분 안 되돌리기, 0.31.0 직원용 운행시간)
 //   contracts/openapi/delivery-tracking-service.yaml   0.12.0 (0.12.0: ControlRider.locationShared — 쉬는 라이더(신규배차 끔·배송 0건)는 location null·stale false, 백엔드 4c8748fd.0.10.0: ControlRider.riderNumber 화면 번호 — 백엔드 c902fb2f. 0.8.0: 라이더 관제 GET /rider-locations — RIDER_OPS·OPERATOR_ADMIN, 실서버 화면이 관제 계정으로 읽음 RR-08. 백엔드 aaa2ff8c)
-//   contracts/openapi/rider-service.yaml               0.18.0 (0.17.0 가입 휴대폰 확인 phoneVerificationId — 설정 꺼짐이면 선택, 0.7.0 가입 주소·은행 코드 검사. 부르는 길 그대로) — 0.16.0 직원용 라이더 찾기 GET /riders?riderIds= 만 추가로 읽음(2026-11-19 백엔드 a767ad5f, 관제 계정 — 기본 화면 라이더 상세). (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
-//   contracts/openapi/mfc-fulfillment-service.yaml     0.26.0 (출고 조회·포장 인계 부분만 — 0.13.0/0.23.0 번호로 인계, 0.24.0 Shipment.deliveryId 채움. 인계 API 그대로)
+//   contracts/openapi/rider-service.yaml               0.20.0 (0.19.0 직원 탈퇴 신청 목록 GET /riders/withdrawals, 0.20.0 탈퇴 라이더 보기 withdrawn·includeWithdrawn·withdrawnAt — 직원용, 안 부름.0.17.0 가입 휴대폰 확인 phoneVerificationId — 설정 꺼짐이면 선택, 0.7.0 가입 주소·은행 코드 검사. 부르는 길 그대로) — 0.16.0 직원용 라이더 찾기 GET /riders?riderIds= 만 추가로 읽음(2026-11-19 백엔드 a767ad5f, 관제 계정 — 기본 화면 라이더 상세). (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
+//   contracts/openapi/mfc-fulfillment-service.yaml     0.34.0 (출고 조회·포장 인계 부분만 — 0.13.0/0.23.0 번호로 인계, 0.24.0 Shipment.deliveryId 채움, 0.31.1 번호 인계에 이미 인계된 포장 숫자면 409 ALREADY_HANDED_OVER(틀린 횟수에 안 셈).
+//                                                              0.27~0.34 는 MFC 작업 쪽(관리자 중지·부분 종료·결품 지표) — 인계 API 그대로)
 //   contracts/openapi/rider-auth-service.yaml          0.2.0 (카카오·네이버 로그인 — 시뮬레이터는 안 부름)
 //   contracts/openapi/center-master-service.yaml       0.2.0 (MFC 위치: 라이더용 GET /mfc-pickup-points 먼저, 실패하면 관찰 계정 GET /centers/{centerId})
 //   contracts/openapi/order-service.yaml               0.13.1 (직원용 주문 상세 GET /orders/lookups/{id}·원문 열람 POST …/pii-reveals 만 — 주문 창 "주문" 탭, 관제 계정, 2026-11-19 백엔드 637abcb5 에서 읽음)
@@ -1009,7 +1013,8 @@ export interface HandoverAuthorization {
 /**
  * POST /packages/handover-code-authorizations 본문(fulfillment 0.13.0 F-8, 0.23.0 R-26) — 라벨 숫자로 QR 과 같은 허가.
  * 201 HandoverAuthorization. 틀리면 409 HANDOVER_CODE_MISMATCH(details attemptsLeft), 같은 라이더·배송 5번 틀리면 409 HANDOVER_CODE_LOCKED(맞는 번호도 거절),
- * 다른 배송 포장 409 DELIVERY_MISMATCH, 옛 6자리 번호가 겹치면 409 HANDOVER_CODE_AMBIGUOUS.
+ * 다른 배송 포장 409 DELIVERY_MISMATCH, 옛 6자리 번호가 겹치면 409 HANDOVER_CODE_AMBIGUOUS,
+ * 이미 인계된 포장의 숫자면 409 ALREADY_HANDED_OVER(0.31.1 — 틀린 횟수에 넣지 않음).
  */
 export interface HandoverCodeAuthorizationRequest {
   riderId: string;
