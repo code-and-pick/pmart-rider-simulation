@@ -554,8 +554,8 @@
   border: 0;
   border-radius: 4px;
   box-shadow: 0 0 0 2px var(--c-soft);
-  /* 가로 막대 — 왼쪽 옅게 → 오른쪽 진하게(진행 중 파랑은 끝이 보라) */
-  background: linear-gradient(90deg, color-mix(in srgb, var(--k) 45%, transparent), var(--k2, var(--k)));
+  /* 가로 막대 — 왼쪽 밝게 → 오른쪽 제 색(진행 중 파랑은 끝이 보라) */
+  background: linear-gradient(90deg, color-mix(in srgb, var(--k) 78%, #fff), var(--k2, var(--k)));
   cursor: pointer;
 }
 .an-strip .mk.k-active {
@@ -955,8 +955,8 @@
   font-size: var(--an-t3);
   font-weight: 800;
   color: #fff;
-  /* 구간 색 그대로 왼쪽 옅게 → 오른쪽 진하게(파랑 구간은 끝이 보라 — journeyVars) */
-  background: linear-gradient(90deg, color-mix(in srgb, var(--k) 60%, transparent), var(--k2, var(--k)));
+  /* 구간 색 그대로 왼쪽 밝게 → 오른쪽 제 색(파랑 구간은 끝이 보라 — journeyVars) */
+  background: linear-gradient(90deg, color-mix(in srgb, var(--k) 78%, #fff), var(--k2, var(--k)));
 }
 .an-journey-bar i:first-child {
   border-radius: 15px 6px 6px 15px;
@@ -995,7 +995,7 @@
   display: block;
   height: 100%;
   border-radius: 4px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--k) 45%, transparent), var(--k2, var(--k)));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--k) 78%, #fff), var(--k2, var(--k)));
 }
 .an-journey-legs .n {
   width: 22px;
