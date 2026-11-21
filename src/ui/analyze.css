@@ -253,6 +253,8 @@
   grid-template-columns: 28px minmax(0, 1fr);
   gap: 6px;
   height: 230px;
+  /* 위 26px — 가장 높은 막대 위 숫자 칸이 위 요약 글자와 겹치지 않게 */
+  padding-top: 26px;
   padding-bottom: 34px;
 }
 .an-yaxis {
