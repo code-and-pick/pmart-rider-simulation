@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
 import { deliveryName, orderLabel, riderName } from '../domain/riderId';
@@ -219,13 +219,19 @@ function StatusDonut({ counts, total }: { counts: Record<Kind, number>; total: n
 
 /** 구간별 평균 — 배차 요청 → 전달 완료 한 줄 여정(조각 길이 = 걸린 시간 비율) + 구간마다 번호·이름·시간·비율 */
 const JOURNEY_COLOR: Record<string, string> = { findRider: '#2dd4bf', toStore: '#4c8dff', atStore: '#facc15', storeAll: '#4c8dff', toCustomer: '#ff8a3d' };
+/** 막대 그라데이션 색 — 왼쪽 --k(옅게) → 오른쪽 --k2. 파랑 구간만 끝을 보라로(사용자 2026-11-21 "보라 섞어줘도 돼") */
+const journeyVars = (key: string) => {
+  const k = JOURNEY_COLOR[key] ?? 'var(--ch-active)';
+  return { '--k': k, '--k2': k === '#4c8dff' ? 'var(--ch-violet)' : k } as CSSProperties;
+};
 function Journey({ segments, total }: { segments: readonly { key: string; label: string; sec: number; hint: string }[]; total: number }) {
   const sum = Math.max(1, segments.reduce((a, x) => a + x.sec, 0));
+  const longest = Math.max(1, ...segments.map((x) => x.sec));
   return (
     <div className="an-journey">
       <div className="an-journey-bar" role="img" aria-label={segments.map((x) => `${PHASE_SHORT[x.key] ?? x.label} ${dur(x.sec)}`).join(', ')}>
         {segments.map((x, i) => (
-          <i key={x.key} style={{ flexGrow: Math.max(x.sec, sum * 0.05), background: JOURNEY_COLOR[x.key] ?? 'var(--ch-active)' }} title={`${x.label} — ${x.hint}`}>
+          <i key={x.key} style={{ flexGrow: Math.max(x.sec, sum * 0.05), ...journeyVars(x.key) }} title={`${x.label} — ${x.hint}`}>
             {i + 1}
           </i>
         ))}
@@ -241,6 +247,9 @@ function Journey({ segments, total }: { segments: readonly { key: string; label:
               {i + 1}
             </span>
             <span className="l">{PHASE_SHORT[x.key] ?? x.label}</span>
+            <span className="track">
+              <i style={{ width: `${Math.max(3, (x.sec / longest) * 100)}%`, ...journeyVars(x.key) }} />
+            </span>
             <b>{dur(x.sec)}</b>
             <em>{Math.round((x.sec / sum) * 100)}%</em>
           </li>
@@ -248,6 +257,7 @@ function Journey({ segments, total }: { segments: readonly { key: string; label:
         <li className="tot">
           <span className="n" />
           <span className="l">합계(한 건 평균)</span>
+          <span />
           <b>{dur(total)}</b>
           <em />
         </li>
@@ -624,7 +634,7 @@ function RiderTable({ rows }: { rows: readonly OpsRow[] }) {
                           key={r.card.deliveryId}
                           className={`mk k-${kindOf(r)} ${r.alert ? 'al' : ''} ${picked === r.card.deliveryId ? 'on' : ''}`}
                           style={{ left: `${pct(s)}%`, width: `max(6px, ${pct(e) - pct(s)}%)`, top: `${4 + line * 10}px` }}
-                          title={`배송 ${deliveryName(r.card)} · ${KIND_LABEL[kindOf(r)]} · ${dur((e - s) / 1000)}`}
+                          title={`배송 ${deliveryName(r.card)} · ${KIND_LABEL[kindOf(r)]} · ${dur((e - s) / 1000)}${r.alert ? " · 확인할 일 있음" : ""}`}
                           aria-label={`배송 ${deliveryName(r.card)} 자세히`}
                           onClick={() => setPicked(picked === r.card.deliveryId ? null : r.card.deliveryId)}
                         />

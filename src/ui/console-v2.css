@@ -12,8 +12,11 @@
   --ch-other: #9aa3b2;
   --ch-grid: #e1e0d9;
   --ch-axis: #c3c2b7;
+  /* 가로 막대 그라데이션 끝(파랑 → 보라)에만 — 사용자 2026-11-21 "보라 섞어줘도 돼". 상태 색으로는 쓰지 않음 */
+  --ch-violet: #7a5cf0;
 }
 .c-app[data-theme='dark'] {
+  --ch-violet: #9b87ff;
   --ch-active: #3987e5;
   --ch-other: #5d6573;
   --ch-grid: #2c2c2a;
