@@ -124,9 +124,9 @@ export class AppController {
       surface = new PlaneSurface(container, center, onClick);
       this.mapStatus = { kind: 'plane', reason: e instanceof Error ? e.message : String(e) };
     }
-    surface.setMfc(center, this.sim.params.mfcId, CONTRACT.radiusStepsKm);
+    surface.setMfc(center, this.sim.params.mfcName, CONTRACT.radiusStepsKm);
     this.drawnMfc = { ...center };
-    this.drawnMfcLabel = this.sim.params.mfcId;
+    this.drawnMfcLabel = this.sim.params.mfcName;
     this.drawnClusters = new Set();
     this.surface = surface;
     this.mapEl = container;
@@ -404,7 +404,7 @@ export class AppController {
     // 라이더 관제(기본 화면)는 백오피스 라이더 관제처럼 그린다(사용자 2026-11-19 "똑같이"): MFC = "픽업 센터" 이름표(반경 원 없음),
     // 라이더 = 상태 색 이름표(끊김 주황·배송 중 파랑·대기 초록), 전달지·경로는 고른 라이더 것만. 모양은 지도 칸 class(rb-map)의 CSS 가 바꾼다
     const control = this.view === 'control';
-    const mfcLabel = control ? '픽업 센터' : this.sim.params.mfcId;
+    const mfcLabel = control ? '픽업 센터' : this.sim.params.mfcName;
     const moved = !this.drawnMfc || this.drawnMfc.lat !== mfc.lat || this.drawnMfc.lng !== mfc.lng;
     if (moved || this.drawnMfcLabel !== mfcLabel) {
       s.setMfc(mfc, mfcLabel, control ? [] : CONTRACT.radiusStepsKm);
