@@ -153,6 +153,9 @@ export interface RiderHooks {
 }
 
 /** 시뮬 시각 기준 대기·이동 약속을 tick 이 풀어 준다(MFC 시뮬레이터 Agent 와 같은 방식). */
+/** 가입 때 운전면허 번호가 필수인 수단(rider 0.5.0 RiderSignupRequest.licenseNumber) */
+const LICENSE_VEHICLES: readonly VehicleType[] = ['MOTORCYCLE', 'CAR', 'KICKBOARD'];
+
 export class VirtualRider {
   readonly id: string;
   /** 가입할 때 등록하는 운송수단(지도 그림). 실서버 RD-sim-01·02 는 오토바이로 가입돼 있다 */
@@ -398,6 +401,8 @@ export class VirtualRider {
       if (!(e instanceof ApiProblem && e.status === 404)) throw e;
       if (!this.options.allowSignup) throw new SignupNotAllowedError();
       this.say('미가입 → 가입');
+      // 오토바이·자동차·킥보드는 운전면허 번호가 필수(rider 0.5.0 422 LICENSE_REQUIRED) — 시뮬레이터는 면허 번호를 지어내지 않고 면허가 필요 없는 전기자전거로 가입(실서버만 — MOCK 은 여러 수단 그림을 그대로)
+      if (this.params.mode === 'http' && LICENSE_VEHICLES.includes(this.vehicle)) this.vehicle = 'E_BIKE';
       await this.write(this.opts('signup'), (o) =>
         this.api.signup(
           {

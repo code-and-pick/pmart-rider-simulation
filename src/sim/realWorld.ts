@@ -10,7 +10,7 @@
 
 import { HttpBackend } from '../backend/http/HttpBackend';
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
-import { CONTRACT, DEFAULT_PARAMS, isSimRiderId, REAL_RIDER_GATE, simRiderId, type SimParams } from '../config';
+import { CONTRACT, DEFAULT_PARAMS, isSimRiderId, REAL_RIDER_GATE, riderSite, simRiderId, siteRealRiderIndexes, type SimParams } from '../config';
 import { ApiProblem, type ControlRider, type Delivery, type DomainEventType, type StaffDeliverySummary } from '../domain/contract';
 import { SimClock } from './clock';
 import { VirtualRider } from './rider';
@@ -135,6 +135,8 @@ export class RealWorld implements World {
   readonly clock: SimClock;
   readonly backend: HttpBackend;
   private readonly remote: RemoteRider[] = [];
+  /** remote 와 같은 순서의 시뮬레이터 라이더 번호(0 부터 — 가입 전화번호 010-0000-00NN 에 씀) */
+  private readonly remoteIndexes: number[] = [];
   /** 라이더 관제(RR-08)로 읽은 시뮬레이터 밖 라이더(라이더 앱) — 운행 중인 라이더만, 이 PC 만 */
   private readonly appRiders = new Map<string, AppRider>();
   /** 관제 조회 상태 — null 이면 아직 안 부름 */
@@ -306,8 +308,11 @@ export class RealWorld implements World {
       push(this.apiLog, r);
       if (r.status === 'ERR' || (typeof r.status === 'number' && r.status >= 500)) this.apiErrors++;
     });
-    // 실서버 시뮬레이터 라이더 수는 사용자가 정한 값(REAL_RIDER_GATE.riderCount) — MOCK 의 riderCount 와 따로
-    for (let i = 0; i < this.gate.riderCount; i++) this.remote.push(new RemoteRider(simRiderId(i)));
+    // 실서버 시뮬레이터 라이더는 사용자가 정한 인원(REAL_RIDER_GATE.riderCount) 안에서 지점 몫만 — 1호점 01·02, 2호점 목포 03·04(RIDER_SITES)
+    for (const i of siteRealRiderIndexes(riderSite(params.mfcId), this.gate.riderCount)) {
+      this.remote.push(new RemoteRider(simRiderId(i)));
+      this.remoteIndexes.push(i);
+    }
     void this.checkAuth();
     void this.loadCenter();
   }
@@ -327,7 +332,8 @@ export class RealWorld implements World {
       p?.lat !== undefined && p?.lng !== undefined;
     let listError: string;
     try {
-      const list = await this.backend.asRider(simRiderId(0)).listMfcPickupPoints();
+      // 라이더용 목록은 라이더 토큰으로 — 이 지점의 첫 시뮬레이터 라이더(없으면 01)
+      const list = await this.backend.asRider(this.remote[0]?.id ?? simRiderId(0)).listMfcPickupPoints();
       const pp = (list.items ?? []).find((x) => x.centerId === this.params.mfcId);
       if (!pp) throw new Error(`목록에 ${this.params.mfcId} 없음`);
       const hp = pp.handoverPoint?.coordinates;
@@ -383,7 +389,7 @@ export class RealWorld implements World {
     this.driven.clear();
     this.remote.forEach((r, i) => {
       const v = new VirtualRider(
-        i,
+        this.remoteIndexes[i] ?? i,
         this.backend.asRider(r.id),
         this.backend.observer,
         this.clock,

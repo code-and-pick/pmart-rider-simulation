@@ -1,7 +1,17 @@
 import { useApp, type View } from '../app/App';
+import { RIDER_SITES } from '../config';
 import { seoulTime } from './format';
 
 const SPEEDS = [1, 5, 20, 60];
+
+/** 지점(?mfc=) — 1호점이면 주소에서 뺀다. 바꾸면 페이지를 새로 연다(실서버 운행 중이면 브라우저가 닫기 전에 묻는다) */
+function switchSite(id: string) {
+  const q = new URLSearchParams(window.location.search);
+  if (id === RIDER_SITES[0]?.id) q.delete('mfc');
+  else q.set('mfc', id);
+  const s = q.toString();
+  window.location.search = s ? `?${s}` : '';
+}
 
 /** 모드는 주소(?mode=http)로 고른다 — 바꾸면 페이지를 새로 연다(브라우저 저장소에 두지 않음). */
 function switchMode(mode: 'mock' | 'http') {
@@ -29,7 +39,7 @@ export function ConsoleHeader() {
       <div className="c-brand">
         <span className="c-title">{TITLE[app.view]}</span>
         <span className="c-center" title={`센터 ${sim.params.mfcId}`}>
-          부산진구 MFC
+          {sim.params.mfcName}
         </span>
         <span className={`c-src ${real ? 'real' : 'mock'}`} title={real ? '실서버(LAN 백엔드)에서 읽은 값' : '가상(MOCK) — 시뮬레이터가 흉내 낸 값'}>
           {real ? '실서버' : '가상(MOCK)'}
@@ -46,6 +56,13 @@ export function ConsoleHeader() {
           {!real && sim.speed !== 1 && <span className="c-speed">{sim.speed}×</span>}
         </span>
         <div className="c-sim" role="group" aria-label="시뮬레이터 조작">
+          <div className="c-seg" role="group" aria-label="지점">
+            {RIDER_SITES.map((s) => (
+              <button key={s.id} className={sim.params.mfcId === s.id ? 'on' : ''} aria-pressed={sim.params.mfcId === s.id} onClick={() => sim.params.mfcId !== s.id && switchSite(s.id)} title={`${s.name} (${s.id})`}>
+                {s.short}
+              </button>
+            ))}
+          </div>
           <div className="c-seg" role="group" aria-label="모드">
             <button className={real ? '' : 'on'} aria-pressed={!real} onClick={() => real && switchMode('mock')} title="가상 현장(MOCK)">
               MOCK

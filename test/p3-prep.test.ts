@@ -1,7 +1,7 @@
 // P3 준비(가입 없이): RR-01 조건 7, 가입 잠금, 탈퇴(계약 흉내), 실서버 운행 잠금.
 import { describe, expect, it } from 'vitest';
 import type { RiderApi } from '../src/backend/port';
-import { DEFAULT_PARAMS, REAL_RIDER_GATE, simRiderPhone } from '../src/config';
+import { DEFAULT_PARAMS, REAL_RIDER_GATE, riderSite, simRiderPhone } from '../src/config';
 import { ApiProblem, type RiderProfile } from '../src/domain/contract';
 import { RiderRestrictedError, withAuthRecovery } from '../src/sim/authGuard';
 import { mockStartEpochMs } from '../src/sim/clock';
@@ -143,9 +143,14 @@ describe('탈퇴 — 산정 불가 조정 대기(EARNING_ADJUSTMENT_PENDING)', (
   });
 });
 describe('실서버 운행 잠금(REAL_RIDER_GATE)', () => {
-  it('사용자 결정(2026-11-16 "시험 번호로 시작") — 2명, 시험 번호 010-0000-00NN', () => {
-    expect(REAL_RIDER_GATE).toEqual({ operationAllowed: true, signupAllowed: true, riderCount: 2 });
+  it('사용자 결정(2026-11-16 "시험 번호로 시작" 2명 → 2026-11-22 목포용 03·04 더해 4명) — 지점마다 2명, 시험 번호 010-0000-00NN', () => {
+    expect(REAL_RIDER_GATE).toEqual({ operationAllowed: true, signupAllowed: true, riderCount: 4 });
     expect(new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }).riders.map((r) => r.id)).toEqual(['RD-sim-01', 'RD-sim-02']);
+    const mokpo = riderSite('MFC-MOKPO-01');
+    expect(new RealWorld({ ...DEFAULT_PARAMS, mode: 'http', mfcId: mokpo.id, mfcName: mokpo.name, mfcLocation: mokpo.mfcLocation }).riders.map((r) => r.id)).toEqual(['RD-sim-03', 'RD-sim-04']);
+    expect(riderSite('없는 센터').id).toBe('MFC-SEED-01');
+    // 인원 잠금이 2명이면 목포 라이더는 없음(잠금 밖 번호는 쓰지 않음)
+    expect(new RealWorld({ ...DEFAULT_PARAMS, mode: 'http', mfcId: mokpo.id }, { operationAllowed: true, signupAllowed: true, riderCount: 2 }).riders).toEqual([]);
     expect(simRiderPhone(0)).toBe('01000000001');
     expect(simRiderPhone(1)).toBe('01000000002');
     expect(/^01[0-9]{8,9}$/.test(simRiderPhone(19))).toBe(true);

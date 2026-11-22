@@ -119,7 +119,7 @@ export function MapDetail({
               <span className="md-dot" />
               <div>
                 <span className="md-route-l">픽업 · {c.pickup ? '잘못 둔 곳(회수·다시 배송)' : 'MFC'}</span>
-                <b>{c.pickup ? '회수지' : '부산진구 MFC'}</b>
+                <b>{c.pickup ? '회수지' : app.sim.params.mfcName}</b>
                 <span className="c-muted">{stage.index >= 3 ? '픽업 완료' : stage.index === 2 ? '가게 도착 — 인계 기다림' : '아직 안 감'}</span>
               </div>
             </li>

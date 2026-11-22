@@ -108,8 +108,8 @@ export function RiderHead() {
           </label>
           <label>
             <span>센터</span>
-            <select disabled value={sim.params.mfcId}>
-              <option value={sim.params.mfcId}>부산진구 MFC ({sim.params.mfcId})</option>
+            <select disabled value={sim.params.mfcId} title="지점은 머리줄 1호점·2호점 단추로 바꿈">
+              <option value={sim.params.mfcId}>{sim.params.mfcName} ({sim.params.mfcId})</option>
             </select>
           </label>
         </form>
@@ -221,7 +221,7 @@ export function RiderList() {
                         <b>{op ? deliveryName(op.card) : d.deliveryId.slice(-8)}</b>
                         <span className="rb-stage">{d.stageKey ? (STAGE_LABEL[d.stageKey] ?? d.stage) : d.stage}</span>
                       </span>
-                      <span className="rb-item-del-2">{[op?.card.orderNumber ? `#${op.card.orderNumber}` : null, '픽업 부산진구 MFC'].filter(Boolean).join(' · ')}</span>
+                      <span className="rb-item-del-2">{[op?.card.orderNumber ? `#${op.card.orderNumber}` : null, `픽업 ${sim.params.mfcName}`].filter(Boolean).join(' · ')}</span>
                       {eta && <span className="rb-item-del-2">도착 예정 {eta.split(' · ')[0]}</span>}
                     </span>
                   );
@@ -364,7 +364,7 @@ function DeliveryCard({ d, op, nowMs }: { d: RiderRow['deliveries'][number]; op:
       </dl>
       <ul className="rb-route">
         <li className="p">
-          <b>픽업 · 부산진구 MFC</b>
+          <b>픽업 · {app.sim.params.mfcName}</b>
         </li>
         <li className="d">
           <DropAddress deliveryId={d.deliveryId} open />

@@ -47,8 +47,10 @@ export interface SimParams {
   apiBase: string;
   /** X-Source-System [시뮬] (docs/backend-requests.md 연결 방식) */
   sourceSystem: string;
-  /** 대상 MFC — 백엔드 LAN 시험 센터(deploy/lan/seed/seed-data.json "[시험] 부산진구 MFC") */
+  /** 대상 MFC — 백엔드 LAN 시험 센터(deploy/lan/seed/seed-data.json "[시험] 부산진구 MFC"). 지점을 고르면 RIDER_SITES 값(main.tsx) */
   mfcId: string;
+  /** 화면 지점 이름(RIDER_SITES.name) */
+  mfcName: string;
   /**
    * MOCK MFC 좌표 = 부산진구지점 실제 주소 "부산 부산진구 동천로 109 삼한골든게이트"(지번 부전동 112-3)
    * [확정 — 사용자 지점 목록 2026-11-16, 좌표는 카카오 주소 검색]. 실서버는 이 값을 쓰지 않고 center-master 에서 읽는다(RealWorld).
@@ -165,6 +167,7 @@ export const DEFAULT_PARAMS: SimParams = {
   apiBase: '/api/v1',
   sourceSystem: 'rider-simulator',
   mfcId: 'MFC-SEED-01',
+  mfcName: '부산진구 MFC',
   mfcLocation: { lat: 35.158501, lng: 129.062021 },
   riderCount: 5,
   riderSpeedMps: 7,
@@ -228,8 +231,42 @@ export const DEFAULT_PARAMS: SimParams = {
 export const REAL_RIDER_GATE: { operationAllowed: boolean; signupAllowed: boolean; riderCount: number } = {
   operationAllowed: true,
   signupAllowed: true,
-  riderCount: 2,
+  // 2026-11-22 사용자 "RD-sim-03·04 새로 가입" — 2호점 목포용 2명을 더해 4명(01·02 = 1호점, 03·04 = 2호점, RIDER_SITES)
+  riderCount: 4,
 };
+
+/**
+ * 라이더 시뮬레이터 지점(MFC) — 1호점 부산·2호점 목포(사용자 2026-11-22, mfc 시뮬레이터 R-39 와 같은 센터 ID).
+ * 주소 `?mfc=MFC-MOKPO-01` 로 고르고, 머리줄 단추로 바꾼다(바꾸면 페이지를 새로 연다 — 브라우저 저장소에 두지 않음).
+ * 배차 규칙은 두 지점이 같다(운행 중·신규배차 켬·NORMAL·배달지역에 그 mfcId — 백엔드 변경 없음).
+ */
+export interface RiderSite {
+  id: string;
+  /** 화면 이름 */
+  name: string;
+  /** 단추 글 */
+  short: string;
+  /** MOCK MFC 좌표·실서버 센터를 읽기 전 지도 자리. 실서버는 center-master 값이 정본 */
+  mfcLocation: { lat: number; lng: number };
+  /** 실서버에서 이 지점에 쓰는 시뮬레이터 라이더 번호(0 부터 — simRiderId·simRiderPhone). REAL_RIDER_GATE.riderCount 안에서만 */
+  realRiderIndexes: readonly number[];
+}
+export const RIDER_SITES: readonly RiderSite[] = [
+  // 부산진구지점 '부산 부산진구 동천로 109' [확정 — 사용자 지점 목록 2026-11-16, 카카오 주소 검색]
+  { id: 'MFC-SEED-01', name: '부산진구 MFC', short: '1호점 부산', mfcLocation: { lat: 35.158501, lng: 129.062021 }, realRiderIndexes: [0, 1] },
+  // 목포 평화광장 부근 [가정 — 라이더 백엔드 세션 2026-11-22 예시 좌표. 센터 좌표는 mfc 백엔드(PC 3)가 등록 중]
+  { id: 'MFC-MOKPO-01', name: '목포 MFC', short: '2호점 목포', mfcLocation: { lat: 34.7985, lng: 126.4334 }, realRiderIndexes: [2, 3] },
+];
+
+/** 주소 ?mfc= 의 지점(모르면 1호점) */
+export function riderSite(id: string | null | undefined): RiderSite {
+  return RIDER_SITES.find((s) => s.id === id) ?? (RIDER_SITES[0] as RiderSite);
+}
+
+/** 이 지점의 실서버 시뮬레이터 라이더 번호 — 사용자가 정한 인원(REAL_RIDER_GATE.riderCount) 밖은 뺀다 */
+export function siteRealRiderIndexes(site: RiderSite, riderCount: number): number[] {
+  return site.realRiderIndexes.filter((i) => i >= 0 && i < riderCount);
+}
 
 /** 시뮬레이터 라이더 시험 전화번호 `010-0000-00NN` [확정 — 사용자 2026-11-16 "시험 번호로", RR-02]. 실제 배정 번호인지는 확인 안 함. */
 export function simRiderPhone(index: number): string {

@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { AppController } from './app/controller';
-import { DEFAULT_PARAMS, REAL_RIDER_GATE } from './config';
+import { DEFAULT_PARAMS, REAL_RIDER_GATE, riderSite } from './config';
 import { RealWorld } from './sim/realWorld';
 import { DevServerGeocoder } from './sim/geocode';
 import { DevServerRoutes } from './sim/route';
@@ -25,6 +25,9 @@ const mode = query.get('mode') === 'http' ? 'http' : 'mock';
 const codeRateRaw = query.get('codeRate');
 const codeRate = codeRateRaw === null || codeRateRaw.trim() === '' ? NaN : Number(codeRateRaw);
 const codeParams = Number.isFinite(codeRate) && codeRate >= 0 && codeRate <= 1 ? { handoverByCodeRate: codeRate } : {};
+// 지점은 주소로: ?mfc=MFC-MOKPO-01 (기본 1호점 부산 — config RIDER_SITES, 사용자 2026-11-22)
+const site = riderSite(query.get('mfc'));
+const siteParams = { mfcId: site.id, mfcName: site.name, mfcLocation: site.mfcLocation };
 // 이동 경로 = 개발 서버 /sim-route(카카오모빌리티 도로 경로 — 키는 서버에만). 못 받으면 직선.
 const routes = new DevServerRoutes();
 let world: World;
@@ -32,9 +35,9 @@ if (mode === 'http') {
   // 다시 배송 전달지(핀 없음)는 개발 서버 카카오 주소 검색으로 찾는다(이 PC 만 — 다른 기기는 운행하지 않음)
   const geocoder = new DevServerGeocoder();
   void geocoder.refresh();
-  world = new RealWorld({ ...DEFAULT_PARAMS, ...codeParams, mode: 'http' }, REAL_RIDER_GATE, routes, { locator: geocoder });
+  world = new RealWorld({ ...DEFAULT_PARAMS, ...siteParams, ...codeParams, mode: 'http' }, REAL_RIDER_GATE, routes, { locator: geocoder });
 } else {
-  const sim = new Simulation({ ...DEFAULT_PARAMS, ...codeParams }, { routes });
+  const sim = new Simulation({ ...DEFAULT_PARAMS, ...siteParams, ...codeParams }, { routes });
   sim.startRiders();
   world = sim;
 }
