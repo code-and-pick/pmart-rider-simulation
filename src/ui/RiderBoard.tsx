@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useApp } from '../app/App';
 import { isSimRiderId } from '../config';
-import { deliveryName } from '../domain/riderId';
+import { deliveryName, riderDisplayLabel } from '../domain/riderId';
 import type { OpsRow } from './ops';
 import { dur, seoulTime } from './format';
 import { DropAddress } from './MapDetail';
@@ -28,7 +28,7 @@ function useRiderRows(): RiderRow[] {
   return rows.map((r) => {
     const info = sim.riderInfo?.(r.id);
     if (!info || (!info.nameMasked && !info.riderNumber)) return r;
-    return { ...r, name: [info.nameMasked, info.riderNumber].filter(Boolean).join(' · ') };
+    return { ...r, name: riderDisplayLabel(info.riderNumber, info.nameMasked), nameMasked: info.nameMasked ?? r.nameMasked ?? null };
   });
 }
 
@@ -98,7 +98,7 @@ export function RiderHead() {
           <label>
             <span>주문번호·라이더 찾기</span>
             <span className="rb-find-row">
-              <input value={q} onChange={(e) => (setQ(e.target.value), setMiss(false), setHint(null))} placeholder="주문번호 8자리 · 라이더 번호 6자리 · 라이더 ID" />
+              <input value={q} onChange={(e) => (setQ(e.target.value), setMiss(false), setHint(null))} placeholder="주문번호 8자리 · 배송 D번호 · 라이더 R번호 · 라이더 ID" />
               <button type="submit" disabled={!q.trim()}>
                 찾기
               </button>
@@ -258,19 +258,21 @@ export function RiderPanel() {
   const sum = (v: number | null | undefined) => (!op || op.state === 'none' ? '—' : op.state === 'loading' ? '…' : v == null ? '못 불러옴' : hm(v));
   const opsRows = app.board().rows;
   const restriction = row?.restriction ?? info?.restriction ?? 'NORMAL';
-  const name = row?.name ?? ([info?.nameMasked, info?.riderNumber].filter(Boolean).join(' · ') || id);
+  const name = row?.name ?? (riderDisplayLabel(info?.riderNumber, info?.nameMasked) || id);
+  const masked = info?.nameMasked ?? row?.nameMasked ?? null;
   const onDuty = ago(row?.onDutySince ?? null);
   const waiting = ago(row?.waitingSince ?? null);
   return (
     <aside className="rb-panel" aria-label="라이더 상세">
       <div className="rb-panel-head">
         <div>
-          <div className="rb-name" title={id}>
+          <div className="rb-name" title={[masked, id].filter(Boolean).join(' · ')}>
             {name}
           </div>
           {row && <div className="rb-sub">{[vehicleName(row.vehicle), row.dispatchOn === null ? null : `신규배차 ${row.dispatchOn ? '켬' : '끔'}`].filter(Boolean).join(' · ')}</div>}
           <div className="rb-info">
             <span className={`rb-badge ${restriction === 'NORMAL' ? 'plain' : 'bad'}`}>{RESTRICTION[restriction] ?? restriction}</span>
+            {masked && masked !== name && <span>{masked}</span>}
             {info?.phoneMasked && <span className="rb-mono">{info.phoneMasked}</span>}
             {info?.joinedAt && <span>가입 {stamp(info.joinedAt)}</span>}
           </div>
@@ -408,7 +410,7 @@ function stamp(iso: string): string {
   return `${d.getUTCMonth() + 1}. ${d.getUTCDate()}. ${h < 12 ? '오전' : '오후'} ${h % 12 || 12}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
-/** 찾기 비교용 — 대소문자·공백·하이픈·가운뎃점·가림 별표를 뺀다("RD-sim-01" = "rdsim01", "이* · 478597" = "이478597") */
+/** 찾기 비교용 — 대소문자·공백·하이픈·가운뎃점·가림 별표를 뺀다("RD-sim-01" = "rdsim01", "이* · R4785" = "이r4785") */
 export function normKey(x: string | null | undefined): string {
   return (x ?? '').toLowerCase().replace(/[\s\-·*]/g, '');
 }
@@ -418,15 +420,20 @@ export type FindResult =
   | { kind: 'one' | 'many'; riderId: string | null; deliveryId: string | null; count: number };
 
 /**
- * 주문번호·라이더 찾기(백오피스 "주문번호 8자리 · 라이더 번호 6자리 · 라이더 ID") — 지금 화면의 운행 라이더·배송 목록 안에서.
+ * 주문번호·라이더 찾기(백오피스 "주문번호 8자리 · 라이더 번호 R4785 · 라이더 ID") — 지금 화면의 운행 라이더·배송 목록 안에서.
+ * 번호 모양(ADR-0085): 라이더 R4785 = r4785 = 4785, 배송 D74939255 = 74939255-1(순번 없음 = 1), D74939255-2 = 74939255-2.
  * 정확히 같은 것을 먼저, 없으면 들어 있는 것(4자 이상 — 번호 끝자리 등). 배송이 맞으면 그 라이더도 고른다.
  * (예전엔 적은 쪽만 하이픈을 빼서 sim-01·RD-…·DLV-… 가 안 찾아졌다 — 사용자 2026-11-19 "원활하지 않은 것 같아")
  */
 export function findTarget(q: string, riders: readonly RiderRow[], deliveries: readonly OpsRow[]): FindResult {
   const n = normKey(q);
   if (!n) return { kind: 'none' };
-  const riderKeys = (r: RiderRow) => [r.id, r.name, ...r.name.split('·')];
-  const delKeys = (d: OpsRow) => [d.card.orderNumber, d.card.deliveryNumber, d.card.deliveryId, d.card.orderId];
+  const riderKeys = (r: RiderRow) => [r.id, r.name, ...r.name.split('·'), r.nameMasked, /^R\d{4,5}$/i.test(r.name) ? r.name.slice(1) : null];
+  const delNo = (no: string | null) => {
+    const m = no ? /^D?(\d{8})(?:-(\d+))?$/i.exec(no) : null;
+    return m ? [`D${m[1]}-${m[2] ?? 1}`, `${m[1]}-${m[2] ?? 1}`] : [];
+  };
+  const delKeys = (d: OpsRow) => [d.card.orderNumber, d.card.deliveryNumber, ...delNo(d.card.deliveryNumber), d.card.deliveryId, d.card.orderId];
   const exact = (keys: (string | null | undefined)[]) => keys.some((k) => k && normKey(k) === n);
   const part = (keys: (string | null | undefined)[]) => n.length >= 4 && keys.some((k) => k && normKey(k).includes(n));
   for (const test of [exact, part]) {

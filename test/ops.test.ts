@@ -9,7 +9,7 @@ const card = (id: string, d: DeliveryCard['dispatchState'], x: DeliveryCard['exe
   deliveryId: id,
   orderId: null,
   orderNumber: null,
-  deliveryNumber: `${id}-1`,
+  deliveryNumber: `D${id}`,
   shipmentId: null,
   dispatchState: d,
   executionState: x,

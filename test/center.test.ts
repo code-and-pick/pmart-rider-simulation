@@ -193,7 +193,7 @@ describe('라이더 앱 라이더 표시', () => {
     expect(shortRiderId('RD-claude-97fb21e37325')).toBe('claude-97fb21e37325');
   });
 
-  it('관제 단계로 색(단계)을 정하고, 새 위치로는 10초 동안 미끄러지듯 옮긴다', async () => {
+  it('(번호 없는 옛 기록은 "가린 이름 · 앞 4자리") 관제 단계로 색(단계)을 정하고, 새 위치로는 10초 동안 미끄러지듯 옮긴다', async () => {
     let lat = 35.16;
     let stage = 'TO_STORE';
     const fake = (async (url: string) => {

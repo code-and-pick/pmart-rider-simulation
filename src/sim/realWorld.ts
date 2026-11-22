@@ -536,7 +536,7 @@ export class RealWorld implements World {
     // 4. 라이더 관제(RR-08) — 운행 중 라이더 전원(라이더 앱 포함) 현재 위치. 이 PC 만(관제 계정 토큰은 개발 서버가 이 경로에만 붙인다)
     await this.pollControl();
 
-    // 5. 라이더 화면 표기(rider 0.18.0 display-names, ADR-0070) — 목록·흐름에 나오는 라이더를 "김*수 · 482913" 으로
+    // 5. 라이더 화면 표기(rider 0.18.0 display-names, ADR-0070) — 목록·흐름에 나오는 라이더를 "R4785" 로
     await this.loadRiderNames();
   }
 
@@ -594,9 +594,9 @@ export class RealWorld implements World {
         const p = loc?.lat !== undefined && loc?.lng !== undefined ? { lat: loc.lat, lng: loc.lng } : null;
         r.setServerPos(p, this.clock.now);
         if (p) located++;
-        // 화면 번호(ADR-0070) "김*수 · 482913" — 번호가 없으면 고유번호 앞 4자리
+        // 화면 번호(ADR-0085) "R4785" 만 — 번호가 없으면(옛 기록) ADR-0070 대체 그대로 "김*수 · 5c41"(가린 이름 + 고유번호 앞 4자리)
         setRiderDisplayName(c.riderId, c.riderNumber, c.nameMasked);
-        r.label = [c.nameMasked, c.riderNumber ?? shortRiderId(c.riderId)].filter(Boolean).join(" · ");
+        r.label = c.riderNumber || [c.nameMasked, shortRiderId(c.riderId)].filter(Boolean).join(" · ");
         const d = c.activeDeliveries?.[0];
         r.deliveryId = d?.deliveryId ?? null;
         r.vehicle = c.vehicleType ?? null;

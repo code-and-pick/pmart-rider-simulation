@@ -2,7 +2,7 @@
 // 실서버 이 PC = 관제 응답(ControlRider) 그대로, 그 밖(MOCK·다른 기기) = 화면 라이더(RiderView)로 채운다(모르는 칸은 null). React 에 의존하지 않는다(시험).
 
 import type { ControlRider } from "../domain/contract";
-import { riderName } from "../domain/riderId";
+import { riderDisplayLabel, riderName } from "../domain/riderId";
 import { PHASE_LABEL } from "../sim/rider";
 import type { RiderView } from "../sim/world";
 
@@ -10,8 +10,10 @@ export type LocState = "ok" | "stale" | "none";
 
 export interface RiderRow {
   id: string;
-  /** "김*수 · 482913" — 이름·번호가 없으면 짧은 번호 */
+  /** "R4785"(ADR-0085 — 번호만) — 번호가 없으면 가린 이름, 그것도 없으면 짧은 번호 */
   name: string;
+  /** 가린 이름(김*수) — 마우스 설명·상세에만. 모르면 null */
+  nameMasked?: string | null;
   external: boolean;
   sim: boolean;
   vehicle: string | null;
@@ -79,9 +81,8 @@ export function rowsFromControl(
 ): RiderRow[] {
   return items.map((c) => ({
     id: c.riderId,
-    name:
-      [c.nameMasked, c.riderNumber].filter(Boolean).join(" · ") ||
-      riderName(c.riderId),
+    name: riderDisplayLabel(c.riderNumber, c.nameMasked) || riderName(c.riderId),
+    nameMasked: c.nameMasked ?? null,
     external: !isSim(c.riderId),
     sim: isSim(c.riderId),
     vehicle: c.vehicleType ?? null,

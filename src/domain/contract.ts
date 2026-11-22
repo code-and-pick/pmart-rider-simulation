@@ -1,17 +1,17 @@
 // 백엔드 계약의 부분 사본 — 이 시뮬레이터(가상 라이더)가 부르거나 읽는 부분만.
 // 이름·상태값·필드는 계약을 그대로 따른다. 계약이 바뀌면 여기를 먼저 맞추고 docs/design.md §3 표를 고친다.
 //
-// 기준: pmart-backend origin/main 527dff2b (2026-11-21 바뀐 배송·라이더·인계 계약만 다시 읽음 — 3817f9bc 뒤 모두 선택 필드·직원용 조회 추가, 부르는 길·필수 필드 변화 없음.
+// 기준: pmart-backend origin/main 527dff2b + PR #350(ADR-0085 짧은 화면 번호, 2026-11-22 병합 전 — 값 모양만: riderNumber R4785, deliveryNumber D74939255·D74939255-2) (2026-11-21 바뀐 배송·라이더·인계 계약만 다시 읽음 — 3817f9bc 뒤 모두 선택 필드·직원용 조회 추가, 부르는 길·필수 필드 변화 없음.
 //        이전 전체 읽기 3817f9bc 2026-11-20 — c475ff94 뒤 부르는 길이 없어지거나 필수 필드가 생긴 것은 없음. 새 값·새 흐름은 아래)
-//   contracts/openapi/delivery-dispatch-service.yaml   0.13.2 (0.13.2 Offer.source FAILED_RETURN 이 계약 enum 에 들어감 — 이미 받고 있었음,0.6.0 purpose FAILED_DELIVERY_RETURN — 실패 확정 뒤 같은 라이더에게 제안 없이 반납 배송, 0.12.1 recovery.pickup.source RIDER_LOCATION,
+//   contracts/openapi/delivery-dispatch-service.yaml   0.14.0 (0.14.0 배정 이력 deliveryNumber D+주문번호, 0.13.2 Offer.source FAILED_RETURN 이 계약 enum 에 들어감 — 이미 받고 있었음,0.6.0 purpose FAILED_DELIVERY_RETURN — 실패 확정 뒤 같은 라이더에게 제안 없이 반납 배송, 0.12.1 recovery.pickup.source RIDER_LOCATION,
 //                                                              0.12.2 GET /offers pollAfterSec 은 더 이상 null 아님 — 못 받으면 30초, 0.5.2 order.mfcPhone, 0.13.1 Delivery.dropAreaLabel, 0.11.1 Assignment.vehicleType nullable)
-//   contracts/openapi/delivery-execution-service.yaml  0.34.0 (0.34.0 직원 배송 목록 firstAssignedAt·arrivedAtStoreAt·arrivedAtCustomerAt·promisedAt·completionMethod — 선택 칸, 시뮬레이터는 아직 안 읽음,
+//   contracts/openapi/delivery-execution-service.yaml  0.36.0 (0.36.0 deliveryNumber D+주문번호·두 번째부터 -순번, 0.35.0 직원 도움요청 목록 state=ALL — 안 부름, 0.34.0 직원 배송 목록 firstAssignedAt·arrivedAtStoreAt·arrivedAtCustomerAt·promisedAt·completionMethod — 선택 칸, 시뮬레이터는 아직 안 읽음,
 //                                                              DeliveryAssigned.promisedAt 선택 칸 추가,
 //0.14.0 실패 등록 = DELIVERY_FAILURE 도움요청 대화도 같이 열림(따로 보내지 않음), 0.15.0 실패 확정(custody RIDER) → 반납 배송 ASSIGNED 에서 바로 returns/store-deliveries,
 //                                                              0.20.0 고객 "받았어요"·픽업 5시간 자동 완료(CUSTOMER_CONFIRMED·AUTO_COMPLETED — 라이더 완료가 409 일 수 있음), 0.28.0 반납 인증번호 handoverCode(설정 꺼짐이면 선택),
 //                                                              0.32.0 실패 확정 30분 안 되돌리기, 0.31.0 직원용 운행시간)
-//   contracts/openapi/delivery-tracking-service.yaml   0.12.0 (0.12.0: ControlRider.locationShared — 쉬는 라이더(신규배차 끔·배송 0건)는 location null·stale false, 백엔드 4c8748fd.0.10.0: ControlRider.riderNumber 화면 번호 — 백엔드 c902fb2f. 0.8.0: 라이더 관제 GET /rider-locations — RIDER_OPS·OPERATOR_ADMIN, 실서버 화면이 관제 계정으로 읽음 RR-08. 백엔드 aaa2ff8c)
-//   contracts/openapi/rider-service.yaml               0.20.0 (0.19.0 직원 탈퇴 신청 목록 GET /riders/withdrawals, 0.20.0 탈퇴 라이더 보기 withdrawn·includeWithdrawn·withdrawnAt — 직원용, 안 부름.0.17.0 가입 휴대폰 확인 phoneVerificationId — 설정 꺼짐이면 선택, 0.7.0 가입 주소·은행 코드 검사. 부르는 길 그대로) — 0.16.0 직원용 라이더 찾기 GET /riders?riderIds= 만 추가로 읽음(2026-11-19 백엔드 a767ad5f, 관제 계정 — 기본 화면 라이더 상세). (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
+//   contracts/openapi/delivery-tracking-service.yaml   0.13.0 (0.13.0 설명만 — 번호 새 모양. 0.12.0: ControlRider.locationShared — 쉬는 라이더(신규배차 끔·배송 0건)는 location null·stale false, 백엔드 4c8748fd.0.10.0: ControlRider.riderNumber 화면 번호 — 백엔드 c902fb2f. 0.8.0: 라이더 관제 GET /rider-locations — RIDER_OPS·OPERATOR_ADMIN, 실서버 화면이 관제 계정으로 읽음 RR-08. 백엔드 aaa2ff8c)
+//   contracts/openapi/rider-service.yaml               0.21.0 (0.21.0 riderNumber R+4자리·찾기 R4785=4785, 0.19.0 직원 탈퇴 신청 목록 GET /riders/withdrawals, 0.20.0 탈퇴 라이더 보기 withdrawn·includeWithdrawn·withdrawnAt — 직원용, 안 부름.0.17.0 가입 휴대폰 확인 phoneVerificationId — 설정 꺼짐이면 선택, 0.7.0 가입 주소·은행 코드 검사. 부르는 길 그대로) — 0.16.0 직원용 라이더 찾기 GET /riders?riderIds= 만 추가로 읽음(2026-11-19 백엔드 a767ad5f, 관제 계정 — 기본 화면 라이더 상세). (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
 //   contracts/openapi/mfc-fulfillment-service.yaml     0.34.0 (출고 조회·포장 인계 부분만 — 0.13.0/0.23.0 번호로 인계, 0.24.0 Shipment.deliveryId 채움, 0.31.1 번호 인계에 이미 인계된 포장 숫자면 409 ALREADY_HANDED_OVER(틀린 횟수에 안 셈).
 //                                                              0.27~0.34 는 MFC 작업 쪽(관리자 중지·부분 종료·결품 지표) — 인계 API 그대로)
 //   contracts/openapi/rider-auth-service.yaml          0.2.0 (카카오·네이버 로그인 — 시뮬레이터는 안 부름)
@@ -502,14 +502,14 @@ export interface ReturnHandover {
 }
 
 /**
- * (rider 0.18.0) GET /riders/display-names?riderIds= — 화면 표기 "김*수 · 482913"(ADR-0070) 묶음 조회.
+ * (rider 0.18.0) GET /riders/display-names?riderIds= — 화면 표기 묶음 조회. 화면은 번호만 "R4785"(ADR-0085, rider 0.21.0).
  * OPERATOR_ADMIN·RIDER_OPS·CS_AGENT·MFC_SUPERVISOR·MFC_WORKER — 시뮬레이터는 관찰 계정(MFC 작업자)으로 읽는다.
  * 없는 ID 는 빠진다(순서 보장 없음), 탈퇴하면 nameMasked null. 50개까지.
  */
 export interface RiderDisplayNames {
   items: {
     riderId: string;
-    /** 화면용 라이더 번호 6자리 — 가입 때 서버가 정함 */
+    /** 화면용 라이더 번호 R4785(ADR-0085, rider 0.21.0 — 드물게 5자리) */
     riderNumber?: string | null;
     /** 가린 이름(첫·끝 글자) */
     nameMasked?: string | null;
@@ -730,7 +730,7 @@ export interface StaffDeliverySummary {
   createdAt?: string;
   /** (2026-11-18) 화면용 주문번호 8자리 — 배정 사건이 실어 준 값(배정 전 null). 백엔드 9c5fdddc execution 0.26.0 */
   orderNumber?: string | null;
-  /** (2026-11-18, ADR-0070) 화면 배송 번호 = 화면용 주문번호-순번(예 74939255-1). 모르면 null */
+  /** (ADR-0085, execution 0.36.0) 화면 배송 번호 = D + 주문번호, 같은 주문 두 번째부터 -순번(D74939255·D74939255-2). 모르면 null */
   deliveryNumber?: string | null;
   purpose?: DeliveryPurpose | null;
   resumeRequestedAt?: string | null;
@@ -779,7 +779,7 @@ export interface RiderLocation {
 export interface ControlRider {
   riderId: string;
   nameMasked?: string | null;
-  /** (0.10.0) 화면용 라이더 번호 6자리(ADR-0070 — 가입 때 정해지고 바뀌지 않음). 화면은 "김*수 · 482913" */
+  /** (0.10.0) 화면용 라이더 번호(ADR-0085 — R + 4자리, 드물게 5자리, 예 R4785. 2026-11-22 기존 라이더도 바뀜). 화면은 번호만 */
   riderNumber?: string | null;
   vehicleType?: string | null;
   /** (0.9.0) 지금 운행 구간 시작 — 신규배차 켜고 끄기로는 안 바뀜 */
@@ -874,7 +874,7 @@ export interface DispatchSettings {
 
 export interface RiderProfile {
   riderId?: string;
-  /** 화면 라이더 번호 6자리 */
+  /** 화면 라이더 번호 R4785(ADR-0085) */
   riderNumber?: string | null;
   version?: number;
   name?: string;

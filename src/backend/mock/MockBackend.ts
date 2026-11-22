@@ -1566,14 +1566,15 @@ export class MockBackend implements RiderPort {
 
   /** showPickup: 회수지 좌표는 배정 라이더·직원만(제안만 받은 라이더에게는 비움 — dispatch DispatchViews.recovery) */
   /**
-   * 화면용 번호(직원 배송 목록 orderNumber·deliveryNumber 흉내 — execution 0.26.0, ADR-0070):
-   * 주문번호 8자리, 배송 번호 = 주문번호-순번(같은 주문의 몇 번째 배송, 생성 순).
+   * 화면용 번호(직원 배송 목록 orderNumber·deliveryNumber 흉내 — execution 0.26.0·0.36.0, ADR-0085):
+   * 주문번호 8자리, 배송 번호 = D + 주문번호, 같은 주문의 두 번째 배송부터 -순번(생성 순) — D74939255·D74939255-2.
    */
   displayNumbers(del: MDelivery): { orderNumber: string | null; deliveryNumber: string | null } {
     const orderNumber = this.orderSummaries.get(del.orderId)?.orderNumber ?? null;
     if (!orderNumber) return { orderNumber: null, deliveryNumber: null };
     const same = [...this.deliveries.values()].filter((x) => x.orderId === del.orderId).sort((a, b) => a.createdAt - b.createdAt);
-    return { orderNumber, deliveryNumber: `${orderNumber}-${same.indexOf(del) + 1}` };
+    const seq = same.indexOf(del) + 1;
+    return { orderNumber, deliveryNumber: seq > 1 ? `D${orderNumber}-${seq}` : `D${orderNumber}` };
   }
 
   /** 화면 흐름·시간용(직원 관점) — 배차 관점 + 시도별 제안 시각 + 수행 기록. 없는 배송이면 null */

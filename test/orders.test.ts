@@ -99,11 +99,11 @@ describe('화면용 번호', () => {
     expect(shortId('ORD-4cd46d90-7b62-3934-a35f-f53fe0d6ee99-S1')).toBe('ORD-4cd4-S1');
     expect(orderLabel({ orderNumber: '43505165', orderId: 'ORD-4cd46d90-7b62-3934-a35f-f53fe0d6ee99' })).toBe('43505165');
     expect(orderLabel({ orderNumber: null, orderId: 'ORD-4cd46d90-7b62-3934-a35f-f53fe0d6ee99' })).toBe('ORD-4cd4');
-    expect(deliveryLabel({ deliveryNumber: '74939255-1', deliveryId: 'DLV-x' })).toBe('74939255-1');
+    expect(deliveryLabel({ deliveryNumber: 'D74939255', deliveryId: 'DLV-x' })).toBe('D74939255');
     expect(deliveryLabel({ deliveryNumber: null, deliveryId: 'DLV-8704f124-3020-4e1c-8781-dedd07dffef1' })).toBe('DLV-8704');
   });
 
-  it('MOCK 카드 — 주문번호 8자리, 배송 번호 = 주문번호-1', async () => {
+  it('MOCK 카드 — 주문번호 8자리, 배송 번호 = D + 주문번호(첫 배송은 순번 없음, ADR-0085)', async () => {
     const { Simulation } = await import('../src/sim/simulation');
     const { DEFAULT_PARAMS } = await import('../src/config');
     const sim = new Simulation({ ...DEFAULT_PARAMS, mock: { ...DEFAULT_PARAMS.mock } }, { startEpochMs: Date.UTC(2026, 10, 16, 1, 0, 0) });
@@ -112,7 +112,7 @@ describe('화면용 번호', () => {
     await sim.runFor(10); // 점원 배차 요청(pickSec 뒤)에 배송이 생긴다
     const [c] = sim.deliveryCards();
     expect(c!.orderNumber).toMatch(/^\d{8}$/);
-    expect(c!.deliveryNumber).toBe(`${c!.orderNumber}-1`);
+    expect(c!.deliveryNumber).toBe(`D${c!.orderNumber}`);
   });
 });
 

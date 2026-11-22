@@ -186,8 +186,8 @@ function TreeHead({ g, rider }: { g: RowGroup; rider: RiderRow | undefined }) {
   return (
     <>
       <span className={`c-ava ${tone}`} aria-hidden>
-        {/* 시뮬레이터 라이더는 번호(sim-01 → 01), 그 밖은 이름 첫 글자("김*수 · 482913" → 김) */}
-        {/^sim-\d+$/.test(g.label) ? g.label.slice(4) : (g.label.trim()[0] ?? '?').toUpperCase()}
+        {/* 시뮬레이터 라이더는 번호(sim-01 → 01), 라이더 번호는 끝 두 자리(R4785 → 85), 그 밖은 첫 글자 */}
+        {/^sim-\d+$/.test(g.label) ? g.label.slice(4) : /^R\d{4,5}$/.test(g.label) ? g.label.slice(-2) : (g.label.trim()[0] ?? '?').toUpperCase()}
       </span>
       <span className="c-tree-txt">
         <b title={g.riderId}>{g.label}</b>
@@ -318,7 +318,7 @@ function DeliveriesView() {
     .filter((r) => {
       if (!needle) return true;
       const c = r.card;
-      // 배송·주문 번호, 라이더 ID·짧은 번호, 라이더 이름("김*수 · 482913" — 화면 번호 6자리 포함)
+      // 배송·주문 번호, 라이더 ID·짧은 번호, 라이더 화면 번호(R4785 — ADR-0085)
       return [c.deliveryId, c.deliveryNumber, c.orderNumber, c.orderId, c.riderId, c.riderId ? shortRiderId(c.riderId) : null, c.riderId ? nameOf(c.riderId) : null].some((x) =>
         x?.toLowerCase().includes(needle),
       );
@@ -536,7 +536,7 @@ function RidersView() {
     .filter((r) => {
       if (!needle) return true;
       const row = r.deliveryId ? rowOf.get(r.deliveryId) : undefined;
-      // ID·이름·화면 번호(6자리)·진행 중 배송·주문 번호
+      // ID·이름·화면 번호(R4785)·진행 중 배송·주문 번호
       return [r.id, name(r), r.deliveryId ?? '', row?.card.deliveryNumber ?? '', row?.card.orderNumber ?? ''].some((x) => x.toLowerCase().includes(needle));
     })
     .sort((x, y) => {

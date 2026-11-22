@@ -5,7 +5,7 @@ import { recentMatches } from '../src/ui/RiderControlPage';
 
 const row = (over: Partial<OpsRow['card']>) =>
   ({
-    card: { deliveryId: 'DLV-aaa', deliveryNumber: '28767701-2', orderId: 'ORD-bbb', orderNumber: '28767701', shipmentId: 'ORD-bbb-S1', riderId: 'RD-xyz', ...over },
+    card: { deliveryId: 'DLV-aaa', deliveryNumber: 'D28767701-2', orderId: 'ORD-bbb', orderNumber: '28767701', shipmentId: 'ORD-bbb-S1', riderId: 'RD-xyz', ...over },
   }) as unknown as OpsRow;
 const label = () => '이* · 478597';
 

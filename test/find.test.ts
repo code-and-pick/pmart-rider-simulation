@@ -8,13 +8,13 @@ const rider = (id: string, name: string) => ({ id, name }) as RiderRow;
 const del = (deliveryId: string, orderNumber: string | null, deliveryNumber: string | null, riderId: string | null) =>
   ({ card: { deliveryId, orderNumber, deliveryNumber, orderId: null, riderId } }) as unknown as OpsRow;
 
-const riders = [rider('RD-sim-01', 'sim-01'), rider('RD-5c41a0e7-2ac3', '이* · 478597'), rider('RD-d573', '배*지 · 958685')];
-const dels = [del('DLV-969d9b82', '44081126', '44081126-1', 'RD-5c41a0e7-2ac3'), del('DL-m0005', '74939255', '74939255-1', null)];
+const riders = [rider('RD-sim-01', 'sim-01'), rider('RD-5c41a0e7-2ac3', 'R4785'), rider('RD-d573', 'R48251')];
+const dels = [del('DLV-969d9b82', '44081126', 'D44081126', 'RD-5c41a0e7-2ac3'), del('DL-m0005', '74939255', 'D74939255', null)];
 
 describe('주문번호·라이더 찾기', () => {
   it('하이픈·별표·가운뎃점 무시', () => {
     expect(normKey('RD-sim-01')).toBe('rdsim01');
-    expect(normKey('이* · 478597')).toBe('이478597');
+    expect(normKey('이* · R4785')).toBe('이r4785');
   });
 
   it('예전에 안 되던 것 — sim-01, 라이더 ID, 배송 ID', () => {
@@ -23,14 +23,18 @@ describe('주문번호·라이더 찾기', () => {
     expect(findTarget('DLV-969d9b82', riders, dels)).toMatchObject({ kind: 'one', deliveryId: 'DLV-969d9b82', riderId: 'RD-5c41a0e7-2ac3' });
   });
 
-  it('라이더 번호 6자리 · 주문번호 8자리 · 배송번호', () => {
-    expect(findTarget('958685', riders, dels)).toMatchObject({ riderId: 'RD-d573' });
+  it('라이더 번호 R4785(R 없이도) · 주문번호 8자리 · 배송번호 D74939255(-1 = 첫 배송)', () => {
+    expect(findTarget('R48251', riders, dels)).toMatchObject({ kind: 'one', riderId: 'RD-d573' });
+    expect(findTarget('4785', riders, dels)).toMatchObject({ kind: 'one', riderId: 'RD-5c41a0e7-2ac3' });
+    expect(findTarget('r4785', riders, dels)).toMatchObject({ kind: 'one', riderId: 'RD-5c41a0e7-2ac3' });
+    expect(findTarget('D74939255', riders, dels)).toMatchObject({ kind: 'one', deliveryId: 'DL-m0005' });
+    expect(findTarget('d44081126', riders, dels)).toMatchObject({ kind: 'one', deliveryId: 'DLV-969d9b82' });
     expect(findTarget('44081126', riders, dels)).toMatchObject({ deliveryId: 'DLV-969d9b82', riderId: 'RD-5c41a0e7-2ac3' });
     expect(findTarget('74939255-1', riders, dels)).toMatchObject({ deliveryId: 'DL-m0005', riderId: null });
   });
 
   it('정확히 같은 게 없으면 들어 있는 것(4자 이상), 여럿이면 many', () => {
-    expect(findTarget('8597', riders, dels)).toMatchObject({ kind: 'one', riderId: 'RD-5c41a0e7-2ac3' });
+    expect(findTarget('4825', riders, dels)).toMatchObject({ kind: 'one', riderId: 'RD-d573' });
     expect(findTarget('sim', riders, dels)).toEqual({ kind: 'none' }); // 3자는 부분 일치 안 함
     expect(findTarget('없는번호', riders, dels)).toEqual({ kind: 'none' });
     expect(findTarget('9', riders, dels).kind).toBe('none');
