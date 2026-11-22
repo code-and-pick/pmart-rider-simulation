@@ -232,7 +232,8 @@ export class VirtualRider {
     this.api = withAuthRecovery(api, (t) => this.say(t));
     this.pos = { ...start };
     this.rng = new Rng(params.seed * 7919 + index * 104729);
-    this.keys = new IdGen(`${this.id}-`);
+    // 실서버는 운행을 켤 때마다 키 앞부분을 새로 — 페이지를 다시 열면 순번이 1부터라 지난 요청 키와 겹쳐 409 IDEMPOTENCY_CONFLICT(본문이 다르면) 또는 지난 결과 재생(같으면)이 됐다(2026-11-23)
+    this.keys = new IdGen(params.mode === 'http' ? `${this.id}-${Date.now().toString(36)}-` : `${this.id}-`);
   }
 
   // ───────────── 박자 ─────────────
@@ -397,6 +398,15 @@ export class VirtualRider {
       const me = await this.api.getMe();
       const r = me.restriction?.state;
       if (r && STOP_RESTRICTIONS.includes(r)) throw new RiderRestrictedError(this.id, r);
+      // 지점(1호점·2호점 목포)을 바꿨으면 배달지역을 이 MFC 하나로 — 배차 적격이 "배달지역에 그 mfcId"(사용자 2026-11-23 "01·02를 목포로 돌려 쓰기")
+      const areas = me.deliveryAreas ?? [];
+      if (areas.length !== 1 || areas[0]?.mfcId !== this.params.mfcId) {
+        // 면허 없이 면허가 필요한 수단(오토바이 등)이면 정보 변경마다 422 LICENSE_REQUIRED(rider updateProfile) — 면허 번호를 지어내지 않고 전기자전거로 같이 바꾼다(운행 꺼짐일 때만 됨)
+        const vehicle = me.vehicleType && LICENSE_VEHICLES.includes(me.vehicleType) && !me.licenseNumberMasked ? ('E_BIKE' as const) : undefined;
+        this.say(`배달지역 → ${this.params.mfcId}${vehicle ? ' · 수단 전기자전거(면허 없음)' : ''}`);
+        await this.write(this.opts('area', me.version), (o) => this.api.updateMe({ deliveryAreas: [{ mfcId: this.params.mfcId }], ...(vehicle ? { vehicleType: vehicle } : {}) }, o));
+        if (vehicle) this.vehicle = vehicle;
+      }
     } catch (e) {
       if (!(e instanceof ApiProblem && e.status === 404)) throw e;
       if (!this.options.allowSignup) throw new SignupNotAllowedError();

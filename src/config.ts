@@ -231,8 +231,9 @@ export const DEFAULT_PARAMS: SimParams = {
 export const REAL_RIDER_GATE: { operationAllowed: boolean; signupAllowed: boolean; riderCount: number } = {
   operationAllowed: true,
   signupAllowed: true,
-  // 2026-11-22 사용자 "RD-sim-03·04 새로 가입" — 2호점 목포용 2명을 더해 4명(01·02 = 1호점, 03·04 = 2호점, RIDER_SITES)
-  riderCount: 4,
+  // 2026-11-22 사용자 "RD-sim-03·04 새로 가입"(4명)은 LAN 가입 휴대폰 번호 확인(422 PHONE_NOT_VERIFIED, RR-10)에 막힘 →
+  // 2026-11-23 사용자 "01·02를 목포로 돌려 쓰기" — 2명 그대로, 지점을 바꾸면 배달지역을 그 MFC 로(PATCH /riders/me)
+  riderCount: 2,
 };
 
 /**
@@ -248,14 +249,14 @@ export interface RiderSite {
   short: string;
   /** MOCK MFC 좌표·실서버 센터를 읽기 전 지도 자리. 실서버는 center-master 값이 정본 */
   mfcLocation: { lat: number; lng: number };
-  /** 실서버에서 이 지점에 쓰는 시뮬레이터 라이더 번호(0 부터 — simRiderId·simRiderPhone). REAL_RIDER_GATE.riderCount 안에서만 */
+  /** 실서버에서 이 지점에 쓰는 시뮬레이터 라이더 번호(0 부터 — simRiderId·simRiderPhone). REAL_RIDER_GATE.riderCount 안에서만. 두 지점이 같은 01·02 를 돌려 씀(운행을 켤 때 배달지역을 그 지점으로) */
   realRiderIndexes: readonly number[];
 }
 export const RIDER_SITES: readonly RiderSite[] = [
   // 부산진구지점 '부산 부산진구 동천로 109' [확정 — 사용자 지점 목록 2026-11-16, 카카오 주소 검색]
   { id: 'MFC-SEED-01', name: '부산진구 MFC', short: '1호점 부산', mfcLocation: { lat: 35.158501, lng: 129.062021 }, realRiderIndexes: [0, 1] },
   // 목포 평화광장 부근 [가정 — 라이더 백엔드 세션 2026-11-22 예시 좌표. 센터 좌표는 mfc 백엔드(PC 3)가 등록 중]
-  { id: 'MFC-MOKPO-01', name: '목포 MFC', short: '2호점 목포', mfcLocation: { lat: 34.7985, lng: 126.4334 }, realRiderIndexes: [2, 3] },
+  { id: 'MFC-MOKPO-01', name: '목포 MFC', short: '2호점 목포', mfcLocation: { lat: 34.7985, lng: 126.4334 }, realRiderIndexes: [0, 1] },
 ];
 
 /** 주소 ?mfc= 의 지점(모르면 1호점) */

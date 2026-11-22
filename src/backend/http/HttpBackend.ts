@@ -213,6 +213,7 @@ export class HttpBackend implements RiderPort {
       // rider-service 0.4.0
       getMe: () => r<RiderProfile>('GET', '/riders/me'),
       signup: (body, w) => r<RiderProfile>('POST', '/riders/signups', { body, write: w }),
+      updateMe: (body, w) => r<RiderProfile>('PATCH', '/riders/me', { body, write: w }),
       getOperatingState: () => r<OperatingState>('GET', '/riders/me/state'),
       setOperatingState: (body, w) => r<OperatingState>('PUT', '/riders/me/state', { body, write: w }),
       getDispatchSettings: () => r<DispatchSettings>('GET', '/riders/me/settings'),

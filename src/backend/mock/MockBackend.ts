@@ -66,6 +66,7 @@ import {
   type PickupRequest,
   type RiderLocation,
   type RiderProfile,
+  type RiderProfileUpdate,
   type RiderSignupRequest,
   type Shipment,
   type ShipmentState,
@@ -1795,6 +1796,19 @@ export class MockBackend implements RiderPort {
           },
           { key: o.idempotencyKey, body: { ...body, phone: '<phone>' } },
           201,
+        ),
+      updateMe: (body: RiderProfileUpdate, o: WriteOptions) =>
+        b.call(
+          me,
+          'PATCH',
+          '/riders/me',
+          () => {
+            const r = b.signedRider(me);
+            if (body.vehicleType) r.vehicleType = body.vehicleType;
+            if (body.deliveryAreas) r.deliveryAreas = body.deliveryAreas.map((a) => ({ ...a }));
+            return b.profileView(r);
+          },
+          { key: o.idempotencyKey, body },
         ),
       getOperatingState: () => b.call(me, 'GET', '/riders/me/state', () => b.operatingView(b.signedRider(me))),
       setOperatingState: (body: OperatingStateRequest, o: WriteOptions) =>

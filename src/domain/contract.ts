@@ -835,6 +835,12 @@ export interface DeliveryArea {
  * 0.17.0: 서버 설정 phone-verification.required 가 켜지면 phoneVerificationId 필수(422 PHONE_NOT_VERIFIED — 실제 문자 확인이라 시뮬레이터는 가입 못 함). 기본 꺼짐.
  * 지금 RD-sim-01·02 는 가입이 끝나 이 길을 다시 부르지 않는다.
  */
+/** rider PATCH /riders/me 본문(RiderProfileUpdate) 중 시뮬레이터가 쓰는 칸 — 지점을 바꾸면 배달지역을 그 MFC 로(2026-11-23) */
+export interface RiderProfileUpdate {
+  vehicleType?: VehicleType;
+  deliveryAreas?: DeliveryArea[];
+}
+
 export interface RiderSignupRequest {
   /** ^01[0-9]{8,9}$ — 시뮬레이터 대역 010-0000-00NN(RR-02) */
   phone: string;

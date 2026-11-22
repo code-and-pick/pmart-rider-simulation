@@ -398,7 +398,8 @@ export class RealWorld implements World {
         // 번호로 인계(handoverByCodeRate)는 실서버도 — 맞는 번호로 같은 허가를 받는 다른 길. 일부러 틀리는 것(handoverCodeTypoRate)은 하지 않는다.
         { ...this.params, customerAbsentRate: 0, riderCancelRate: 0, locationOutageRate: 0, handoverCodeTypoRate: 0 },
         home,
-        r.pos ?? home,
+        // 마지막 서버 위치가 이 센터에서 멀면(다른 지점에서 운행하던 위치 — 부산 ↔ 목포) 센터에서 출발. 그대로 두면 배차 반경 밖
+        r.pos && distanceM(r.pos, home) <= CONTRACT.radiusStepsKm[CONTRACT.radiusStepsKm.length - 1]! * 1000 ? r.pos : home,
         {
           onTripDone: (t) => this.doneTrips.set(t.deliveryId, { ...t }),
           onNote: (riderId, text) => push(this.notes, { at: this.clock.now, riderId, text }, 1500),

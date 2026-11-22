@@ -35,6 +35,7 @@ import type {
   ReturnStoreDeliveryRequest,
   RiderLocation,
   RiderProfile,
+  RiderProfileUpdate,
   RiderSignupRequest,
   ReturnHandover,
   RiderDisplayNames,
@@ -87,6 +88,8 @@ export interface RiderApi {
   /** 404 = 미가입 */
   getMe(): Promise<RiderProfile>;
   signup(body: RiderSignupRequest, opts: WriteOptions): Promise<RiderProfile>;
+  /** 내 정보 바꾸기(PATCH /riders/me) — 시뮬레이터는 배달지역만(지점 전환) */
+  updateMe(body: RiderProfileUpdate, opts: WriteOptions): Promise<RiderProfile>;
   getOperatingState(): Promise<OperatingState>;
   setOperatingState(body: OperatingStateRequest, opts: WriteOptions): Promise<OperatingState>;
   getDispatchSettings(): Promise<DispatchSettings>;
