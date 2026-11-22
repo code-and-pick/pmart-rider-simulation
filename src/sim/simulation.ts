@@ -7,7 +7,7 @@
 
 import { MockBackend, type MDelivery } from '../backend/mock/MockBackend';
 import type { ApiCallRecord, DomainEventRecord } from '../backend/port';
-import { DEFAULT_PARAMS, MOCK_RIDER_VEHICLES, simRiderId, type SimParams } from '../config';
+import { DEFAULT_PARAMS, MOCK_RIDER_VEHICLES, riderSite, simRiderId, siteBearing, type SimParams } from '../config';
 import { ApiProblem } from '../domain/contract';
 import { destination, type LatLng } from '../util/geo';
 import { Rng } from '../util/rng';
@@ -72,7 +72,7 @@ export class Simulation implements World {
     for (let k = 0; k < n; k++) {
       const i = this.riders.length;
       const [lo, hi] = this.params.riderStartRadiusM;
-      const start = place?.(i) ?? destination(this.params.mfcLocation, this.rng.range(0, 360), this.rng.range(lo, hi));
+      const start = place?.(i) ?? destination(this.params.mfcLocation, siteBearing(riderSite(this.params.mfcId), this.rng.range(0, 1)), this.rng.range(lo, hi));
       const r = new VirtualRider(
         i,
         this.backend.asRider(simRiderId(i)),

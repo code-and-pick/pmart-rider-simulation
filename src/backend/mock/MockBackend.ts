@@ -13,7 +13,7 @@
 //    고객 잘못이면 다시 배송(ADR-0065 — 200m 미만 원래 기사 먼저 0원, 이상 결제 대기 → order-orchestration 대신 결제·거절).
 //  - 운영자 상태 정정·고객 반품 회수(CLAIM_RETURN)는 만들지 않는다.
 
-import { CONTRACT, isSimRiderId, MOCK_ORDER, type MockParams } from '../../config';
+import { CONTRACT, isSimRiderId, MOCK_ORDER, riderSite, siteBearing, type MockParams } from '../../config';
 import {
   ApiProblem,
   ResultUnknown,
@@ -362,6 +362,12 @@ export class MockBackend implements RiderPort {
   /** false 면 주문을 스스로 만들지 않는다(시험에서 createOrder 로 직접 넣을 때) */
   autoOrders = true;
   private nextOrderAt: number;
+
+  /** MOCK 배송지(가린 값) — 지점 동네로(1호점 부산·2호점 목포, config RIDER_SITES.mockAddress) */
+  private mockAddressMasked(): OrderShippingAddress {
+    const site = riderSite(this.mfcId);
+    return { ...MOCK_ADDRESS_MASKED, roadAddress: `(MOCK) ${site.mockAddress.area} 가상대로 123`, postalCode: site.mockAddress.postalCode };
+  }
 
   constructor(
     private readonly clock: SimClock,
@@ -748,7 +754,7 @@ export class MockBackend implements RiderPort {
     };
     this.shipments.set(shipmentId, ship);
     const customer =
-      opts.customer ?? destination(this.mfcLocation, this.rng.range(0, 360), this.rng.range(p.customerDistanceM[0], p.customerDistanceM[1]));
+      opts.customer ?? destination(this.mfcLocation, siteBearing(riderSite(this.mfcId), this.rng.range(0, 1)), this.rng.range(p.customerDistanceM[0], p.customerDistanceM[1]));
     const pickSec = opts.pickSec ?? this.rng.range(p.pickSec[0], p.pickSec[1]);
     this.schedule(pickSec, () => this.dispatchRequest(ship, customer, packMinutes));
     return { orderId, shipmentId };
@@ -814,7 +820,7 @@ export class MockBackend implements RiderPort {
         firstPurchaseApplied: false,
       },
       payment: { paymentAttemptId: `PA-mock-${orderId}` },
-      shippingAddress: { ...MOCK_ADDRESS_MASKED },
+      shippingAddress: this.mockAddressMasked(),
       shippingAddressMasked: true,
       lines: s.items.map((it, i) => ({
         orderLineId: `${orderId}-L${i + 1}`,
@@ -845,7 +851,7 @@ export class MockBackend implements RiderPort {
       recordedAt: this.clock.iso(),
       fields: [...fields],
       shippingAddress: {
-        ...MOCK_ADDRESS_MASKED,
+        ...this.mockAddressMasked(),
         receiverName: has('NAME') ? '김가상(MOCK)' : MOCK_ADDRESS_MASKED.receiverName,
         receiverPhone: has('PHONE') ? '010-0000-0000(MOCK)' : MOCK_ADDRESS_MASKED.receiverPhone,
         detailAddress: has('ADDRESS') ? '101동 1001호(MOCK)' : MOCK_ADDRESS_MASKED.detailAddress,
