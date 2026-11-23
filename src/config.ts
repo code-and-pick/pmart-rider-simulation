@@ -283,6 +283,9 @@ export function siteRealRiderIndexes(site: RiderSite, riderCount: number): numbe
   return site.realRiderIndexes.filter((i) => i >= 0 && i < riderCount);
 }
 
+/** 이 거리(m) 안이면 길찾기 없이 곧장 간다 [시뮬] — 카카오모빌리티는 출발·도착이 같거나 아주 가까우면 경로를 주지 않는다(NO_ROUTE, 2026-11-23 목포 D27932024) */
+export const ROUTE_NEAR_SKIP_M = 50;
+
 /** 시뮬레이터 라이더 시험 전화번호 `010-0000-00NN` [확정 — 사용자 2026-11-16 "시험 번호로", RR-02]. 실제 배정 번호인지는 확인 안 함. */
 export function simRiderPhone(index: number): string {
   return `0100000${String(index + 1).padStart(4, '0')}`;

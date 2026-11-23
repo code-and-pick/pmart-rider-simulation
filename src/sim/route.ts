@@ -1,6 +1,7 @@
 // 라이더 이동 경로 — 도로(카카오모빌리티, 개발 서버 /sim-route 경유) 또는 직선(docs/design.md §6-3).
 // 화면에는 둘을 구분해 그린다(도로 = 실선, 직선 = 점선 "도로 경로 아님"). 도로를 못 받으면 직선으로 가고 이유를 남긴다.
 
+import { ROUTE_NEAR_SKIP_M } from '../config';
 import { distanceM, type LatLng } from '../util/geo';
 
 export type RouteKind = 'ROAD' | 'STRAIGHT';
@@ -38,6 +39,8 @@ export class DevServerRoutes implements RouteProvider {
   constructor(private readonly doFetch: typeof fetch = (...a) => fetch(...a)) {}
 
   async route(from: LatLng, to: LatLng): Promise<Route> {
+    // 이미 거의 그 자리(50m 안)면 길찾기를 부르지 않는다 — 카카오는 출발·도착이 같으면 경로를 주지 않아(NO_ROUTE) "경로 없음"으로 보였다(2026-11-23 목포 D27932024: MFC 에 서 있던 라이더)
+    if (distanceM(from, to) <= ROUTE_NEAR_SKIP_M) return { kind: 'STRAIGHT', points: [{ ...from }, { ...to }] };
     try {
       const q = `from=${from.lat},${from.lng}&to=${to.lat},${to.lng}`;
       const res = await this.doFetch(`/sim-route?${q}`, { cache: 'no-store', signal: AbortSignal.timeout(12_000) });

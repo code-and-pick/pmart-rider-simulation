@@ -29,6 +29,15 @@ describe('경로 공급자', () => {
     }) as unknown as typeof fetch;
     expect(await new DevServerRoutes(down).route(MFC, offsetM(MFC, 100, 0))).toMatchObject({ kind: 'STRAIGHT', note: '길찾기 응답 없음' });
   });
+
+  it('이미 거의 그 자리(50m 안)면 길찾기를 부르지 않고 곧장 — "경로 없음" 안 남김(2026-11-23 목포)', async () => {
+    let called = 0;
+    const fake = (async () => (called++, new Response(JSON.stringify({ kind: 'NONE', reason: 'NO_ROUTE' })))) as unknown as typeof fetch;
+    const r = await new DevServerRoutes(fake).route(MFC, offsetM(MFC, 10, 0));
+    expect(r.kind).toBe('STRAIGHT');
+    expect(r.note).toBeUndefined();
+    expect(called).toBe(0);
+  });
 });
 
 describe('가상 라이더가 도로 경로를 따라간다', () => {
