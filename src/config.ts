@@ -237,7 +237,7 @@ export const REAL_RIDER_GATE: { operationAllowed: boolean; signupAllowed: boolea
 };
 
 /**
- * 라이더 시뮬레이터 지점(MFC) — 1호점 부산·2호점 목포(사용자 2026-11-22, mfc 시뮬레이터 R-39 와 같은 센터 ID)·3호점 세종(2026-11-24, PC1 백엔드 세션이 사용자 요청 전달).
+ * 라이더 시뮬레이터 지점(MFC) — 1호점 부산·2호점 목포(사용자 2026-11-22, mfc 시뮬레이터 R-39 와 같은 센터 ID)·3호점 세종·4호점 춘천·5호점 부산남구(2026-11-24, PC1 백엔드 세션이 사용자 요청 전달).
  * 주소 `?mfc=MFC-MOKPO-01` 로 고르고, 머리줄 단추로 바꾼다(바꾸면 페이지를 새로 연다 — 브라우저 저장소에 두지 않음).
  * 배차 규칙은 지점마다 같다(운행 중·신규배차 켬·NORMAL·배달지역에 그 mfcId — 백엔드 변경 없음).
  */
@@ -265,6 +265,14 @@ export const RIDER_SITES: readonly RiderSite[] = [
     landBearingDeg: [260, 80], realRiderIndexes: [0, 1] },
   // 세종 MFC "다솜1로 36 엠브릿지 3층" 센터 좌표 [확정 — center-master MFC-SEJ-01 등록값, PC1 백엔드 세션 2026-11-24]. 내륙이라 방향 제한 없음
   { id: 'MFC-SEJ-01', name: '세종 MFC', short: '3호점 세종', mfcLocation: { lat: 36.5017504, lng: 127.2573522 }, mockAddress: { area: '세종특별자치시', postalCode: '30100' }, realRiderIndexes: [0, 1] },
+  // 춘천 MFC "춘천로 236 2층" 센터 좌표 [확정 — center-master MFC-CHC-01 등록값, PC1 백엔드 세션 2026-11-24]
+  { id: 'MFC-CHC-01', name: '춘천 MFC', short: '4호점 춘천', mfcLocation: { lat: 37.8782993, lng: 127.7400726 }, mockAddress: { area: '강원 춘천시', postalCode: '24300' },
+    // 센터 서북쪽·북쪽 2km 밖은 소양강·의암호 — 북북동 20°에서 동·남을 돌아 서남서 240°까지만(카카오 지도로 확인 2026-11-24)
+    landBearingDeg: [20, 240], realRiderIndexes: [0, 1] },
+  // 부산남구 MFC "수영로 305 스파크타워 지하 1층" 센터 좌표 [확정 — center-master MFC-BNG-01 등록값, PC1 백엔드 세션 2026-11-24]
+  { id: 'MFC-BNG-01', name: '부산남구 MFC', short: '5호점 부산남구', mfcLocation: { lat: 35.1373386, lng: 129.0992709 }, mockAddress: { area: '부산 남구', postalCode: '48400' },
+    // 센터 동북동~동쪽 2km 밖은 수영만(광안리 바다) — 남동 130°에서 남·서를 돌아 북북동 30°까지만(카카오 지도로 확인 2026-11-24)
+    landBearingDeg: [130, 30], realRiderIndexes: [0, 1] },
 ];
 
 /** 주소 ?mfc= 의 지점(모르면 1호점) */

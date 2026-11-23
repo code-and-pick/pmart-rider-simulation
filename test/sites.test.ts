@@ -1,4 +1,4 @@
-// 지점(1호점 부산·2호점 목포·3호점 세종) — MOCK 자리 방향은 목포만 바다 쪽(남·동남)을 뺀다
+// 지점(1호점 부산·2호점 목포·3호점 세종·4호점 춘천·5호점 부산남구) — MOCK 자리 방향은 목포만 바다 쪽(남·동남)을 뺀다
 import { describe, expect, it } from 'vitest';
 import { riderSite, siteBearing } from '../src/config';
 
@@ -21,5 +21,18 @@ describe('지점 MOCK 방향', () => {
     expect(sej.mfcLocation).toEqual({ lat: 36.5017504, lng: 127.2573522 });
     expect(siteBearing(sej, 0.5)).toBe(180);
     expect(sej.realRiderIndexes).toEqual([0, 1]);
+  });
+
+  it('춘천·부산남구 — 센터 좌표, 물 쪽(소양강·수영만) 방향 뺌', () => {
+    const chc = riderSite('MFC-CHC-01');
+    const bng = riderSite('MFC-BNG-01');
+    expect(chc.mfcLocation).toEqual({ lat: 37.8782993, lng: 127.7400726 });
+    expect(bng.mfcLocation).toEqual({ lat: 35.1373386, lng: 129.0992709 });
+    for (let r = 0; r <= 1; r += 0.05) {
+      const c = siteBearing(chc, r);
+      expect(c >= 20 && c <= 240).toBe(true);
+      const b = siteBearing(bng, r);
+      expect(b >= 130 || b <= 30).toBe(true);
+    }
   });
 });
