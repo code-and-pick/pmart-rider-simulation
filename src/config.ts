@@ -237,9 +237,9 @@ export const REAL_RIDER_GATE: { operationAllowed: boolean; signupAllowed: boolea
 };
 
 /**
- * 라이더 시뮬레이터 지점(MFC) — 1호점 부산·2호점 목포(사용자 2026-11-22, mfc 시뮬레이터 R-39 와 같은 센터 ID).
+ * 라이더 시뮬레이터 지점(MFC) — 1호점 부산·2호점 목포(사용자 2026-11-22, mfc 시뮬레이터 R-39 와 같은 센터 ID)·3호점 세종(2026-11-24, PC1 백엔드 세션이 사용자 요청 전달).
  * 주소 `?mfc=MFC-MOKPO-01` 로 고르고, 머리줄 단추로 바꾼다(바꾸면 페이지를 새로 연다 — 브라우저 저장소에 두지 않음).
- * 배차 규칙은 두 지점이 같다(운행 중·신규배차 켬·NORMAL·배달지역에 그 mfcId — 백엔드 변경 없음).
+ * 배차 규칙은 지점마다 같다(운행 중·신규배차 켬·NORMAL·배달지역에 그 mfcId — 백엔드 변경 없음).
  */
 export interface RiderSite {
   id: string;
@@ -253,7 +253,7 @@ export interface RiderSite {
   landBearingDeg?: readonly [number, number];
   /** MOCK 주문 배송지(가린 값)의 동네·우편번호 앞자리 [시뮬] */
   mockAddress: { area: string; postalCode: string };
-  /** 실서버에서 이 지점에 쓰는 시뮬레이터 라이더 번호(0 부터 — simRiderId·simRiderPhone). REAL_RIDER_GATE.riderCount 안에서만. 두 지점이 같은 01·02 를 돌려 씀(운행을 켤 때 배달지역을 그 지점으로) */
+  /** 실서버에서 이 지점에 쓰는 시뮬레이터 라이더 번호(0 부터 — simRiderId·simRiderPhone). REAL_RIDER_GATE.riderCount 안에서만. 모든 지점이 같은 01·02 를 돌려 씀(운행을 켤 때 배달지역을 그 지점으로) */
   realRiderIndexes: readonly number[];
 }
 export const RIDER_SITES: readonly RiderSite[] = [
@@ -263,6 +263,8 @@ export const RIDER_SITES: readonly RiderSite[] = [
   { id: 'MFC-MOKPO-01', name: '목포 MFC', short: '2호점 목포', mfcLocation: { lat: 34.7985, lng: 126.4334 }, mockAddress: { area: '전남 목포시', postalCode: '58700' },
     // 센터 남쪽·동남쪽 3km 안은 영산강 하구(바다) — 서쪽 260°에서 북쪽을 돌아 동쪽 80°까지만(카카오 지도로 확인 2026-11-23)
     landBearingDeg: [260, 80], realRiderIndexes: [0, 1] },
+  // 세종 MFC "다솜1로 36 엠브릿지 3층" 센터 좌표 [확정 — center-master MFC-SEJ-01 등록값, PC1 백엔드 세션 2026-11-24]. 내륙이라 방향 제한 없음
+  { id: 'MFC-SEJ-01', name: '세종 MFC', short: '3호점 세종', mfcLocation: { lat: 36.5017504, lng: 127.2573522 }, mockAddress: { area: '세종특별자치시', postalCode: '30100' }, realRiderIndexes: [0, 1] },
 ];
 
 /** 주소 ?mfc= 의 지점(모르면 1호점) */

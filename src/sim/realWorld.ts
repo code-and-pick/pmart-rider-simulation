@@ -308,7 +308,7 @@ export class RealWorld implements World {
       push(this.apiLog, r);
       if (r.status === 'ERR' || (typeof r.status === 'number' && r.status >= 500)) this.apiErrors++;
     });
-    // 실서버 시뮬레이터 라이더는 사용자가 정한 인원(REAL_RIDER_GATE.riderCount) 안에서 지점 몫만 — 1호점 01·02, 2호점 목포 03·04(RIDER_SITES)
+    // 실서버 시뮬레이터 라이더는 사용자가 정한 인원(REAL_RIDER_GATE.riderCount) 안에서 지점 몫만 — 모든 지점이 01·02 를 돌려 씀(RIDER_SITES, 사용자 2026-11-23)
     for (const i of siteRealRiderIndexes(riderSite(params.mfcId), this.gate.riderCount)) {
       this.remote.push(new RemoteRider(simRiderId(i)));
       this.remoteIndexes.push(i);
