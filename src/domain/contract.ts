@@ -1,17 +1,17 @@
 // 백엔드 계약의 부분 사본 — 이 시뮬레이터(가상 라이더)가 부르거나 읽는 부분만.
 // 이름·상태값·필드는 계약을 그대로 따른다. 계약이 바뀌면 여기를 먼저 맞추고 docs/design.md §3 표를 고친다.
 //
-// 기준: pmart-backend origin/main 527dff2b + PR #350(ADR-0085 짧은 화면 번호, 2026-11-22 병합 전 — 값 모양만: riderNumber R4785, deliveryNumber D74939255·D74939255-2) (2026-11-21 바뀐 배송·라이더·인계 계약만 다시 읽음 — 3817f9bc 뒤 모두 선택 필드·직원용 조회 추가, 부르는 길·필수 필드 변화 없음.
-//        이전 전체 읽기 3817f9bc 2026-11-20 — c475ff94 뒤 부르는 길이 없어지거나 필수 필드가 생긴 것은 없음. 새 값·새 흐름은 아래)
-//   contracts/openapi/delivery-dispatch-service.yaml   0.14.0 (0.14.0 배정 이력 deliveryNumber D+주문번호, 0.13.2 Offer.source FAILED_RETURN 이 계약 enum 에 들어감 — 이미 받고 있었음,0.6.0 purpose FAILED_DELIVERY_RETURN — 실패 확정 뒤 같은 라이더에게 제안 없이 반납 배송, 0.12.1 recovery.pickup.source RIDER_LOCATION,
+// 기준: pmart-backend origin/main f43a1505 (2026-11-24 다시 읽음 — 527dff2b 뒤 dispatch·execution·tracking·rider 는 모두 선택 칸·직원용 조회 추가. 부르는 길·필수 칸 변화 없음, 단 rider 0.23.0 배달지역 변경이 운행 중이면 409 → prepare 가 먼저 OFF_DUTY).
+//        이전: 527dff2b + PR #350(ADR-0085) 2026-11-22, 전체 읽기 3817f9bc 2026-11-20
+//   contracts/openapi/delivery-dispatch-service.yaml   0.17.0 (0.15~0.17 운영 통계 /metrics/dispatch·자동 취소 내역·내부 진행 중 배송 수 — 안 부름. 0.14.0 배정 이력 deliveryNumber D+주문번호, 0.13.2 Offer.source FAILED_RETURN 이 계약 enum 에 들어감 — 이미 받고 있었음,0.6.0 purpose FAILED_DELIVERY_RETURN — 실패 확정 뒤 같은 라이더에게 제안 없이 반납 배송, 0.12.1 recovery.pickup.source RIDER_LOCATION,
 //                                                              0.12.2 GET /offers pollAfterSec 은 더 이상 null 아님 — 못 받으면 30초, 0.5.2 order.mfcPhone, 0.13.1 Delivery.dropAreaLabel, 0.11.1 Assignment.vehicleType nullable)
-//   contracts/openapi/delivery-execution-service.yaml  0.36.0 (0.36.0 deliveryNumber D+주문번호·두 번째부터 -순번, 0.35.0 직원 도움요청 목록 state=ALL — 안 부름, 0.34.0 직원 배송 목록 firstAssignedAt·arrivedAtStoreAt·arrivedAtCustomerAt·promisedAt·completionMethod — 선택 칸, 시뮬레이터는 아직 안 읽음,
+//   contracts/openapi/delivery-execution-service.yaml  0.42.0 (0.41~0.42 오배송 차감·지급 이월 — 정산, 안 부름. 0.40.0 RiderDelivery.bundleId·stopSequence 선택 칸, 0.39.0 배송이 끝나면 열린 도움요청 자동 완료(resolvedBy system:delivery-ended), 0.37~0.38 직원용 mfcId 거르기·/delivery-metrics — 안 부름. 0.36.0 deliveryNumber D+주문번호·두 번째부터 -순번, 0.35.0 직원 도움요청 목록 state=ALL — 안 부름, 0.34.0 직원 배송 목록 firstAssignedAt·arrivedAtStoreAt·arrivedAtCustomerAt·promisedAt·completionMethod — 선택 칸, 시뮬레이터는 아직 안 읽음,
 //                                                              DeliveryAssigned.promisedAt 선택 칸 추가,
 //0.14.0 실패 등록 = DELIVERY_FAILURE 도움요청 대화도 같이 열림(따로 보내지 않음), 0.15.0 실패 확정(custody RIDER) → 반납 배송 ASSIGNED 에서 바로 returns/store-deliveries,
 //                                                              0.20.0 고객 "받았어요"·픽업 5시간 자동 완료(CUSTOMER_CONFIRMED·AUTO_COMPLETED — 라이더 완료가 409 일 수 있음), 0.28.0 반납 인증번호 handoverCode(설정 꺼짐이면 선택),
 //                                                              0.32.0 실패 확정 30분 안 되돌리기, 0.31.0 직원용 운행시간)
-//   contracts/openapi/delivery-tracking-service.yaml   0.13.0 (0.13.0 설명만 — 번호 새 모양. 0.12.0: ControlRider.locationShared — 쉬는 라이더(신규배차 끔·배송 0건)는 location null·stale false, 백엔드 4c8748fd.0.10.0: ControlRider.riderNumber 화면 번호 — 백엔드 c902fb2f. 0.8.0: 라이더 관제 GET /rider-locations — RIDER_OPS·OPERATOR_ADMIN, 실서버 화면이 관제 계정으로 읽음 RR-08. 백엔드 aaa2ff8c)
-//   contracts/openapi/rider-service.yaml               0.21.0 (0.21.0 riderNumber R+4자리·찾기 R4785=4785, 0.19.0 직원 탈퇴 신청 목록 GET /riders/withdrawals, 0.20.0 탈퇴 라이더 보기 withdrawn·includeWithdrawn·withdrawnAt — 직원용, 안 부름.0.17.0 가입 휴대폰 확인 phoneVerificationId — 설정 꺼짐이면 선택, 0.7.0 가입 주소·은행 코드 검사. 부르는 길 그대로) — 0.16.0 직원용 라이더 찾기 GET /riders?riderIds= 만 추가로 읽음(2026-11-19 백엔드 a767ad5f, 관제 계정 — 기본 화면 라이더 상세). (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
+//   contracts/openapi/delivery-tracking-service.yaml   0.14.0 (0.14.0 관제 activeDeliveries 에 promisedAt·delayed·dropArea(대략 위치) 선택 칸 — 아직 화면에 안 씀. 0.13.0 설명만 — 번호 새 모양. 0.12.0: ControlRider.locationShared — 쉬는 라이더(신규배차 끔·배송 0건)는 location null·stale false, 백엔드 4c8748fd.0.10.0: ControlRider.riderNumber 화면 번호 — 백엔드 c902fb2f. 0.8.0: 라이더 관제 GET /rider-locations — RIDER_OPS·OPERATOR_ADMIN, 실서버 화면이 관제 계정으로 읽음 RR-08. 백엔드 aaa2ff8c)
+//   contracts/openapi/rider-service.yaml               0.26.0 (0.23.0 PATCH /riders/me 배달지역은 쉴 때만(ON_DUTY·진행 중 배송이면 409 INVALID_STATE, 운영 MFC 아니면 422 MFC_NOT_AVAILABLE), 0.25.0 activeDeliveryCount nullable, 0.22·0.24·0.26 직원용 mfcId 거르기·목록 진행 중 수·구역 이름 — 안 부름. 0.21.0 riderNumber R+4자리·찾기 R4785=4785, 0.19.0 직원 탈퇴 신청 목록 GET /riders/withdrawals, 0.20.0 탈퇴 라이더 보기 withdrawn·includeWithdrawn·withdrawnAt — 직원용, 안 부름.0.17.0 가입 휴대폰 확인 phoneVerificationId — 설정 꺼짐이면 선택, 0.7.0 가입 주소·은행 코드 검사. 부르는 길 그대로) — 0.16.0 직원용 라이더 찾기 GET /riders?riderIds= 만 추가로 읽음(2026-11-19 백엔드 a767ad5f, 관제 계정 — 기본 화면 라이더 상세). (0.5.0: 수단 E_BIKE·KICKBOARD, 운전면허 licenseNumber — 오토바이·자동차·킥보드 가입은 면허 필수 422 LICENSE_REQUIRED. 가입은 RD-sim-01·02 끝나 지금 안 부름)
 //   contracts/openapi/mfc-fulfillment-service.yaml     0.34.0 (출고 조회·포장 인계 부분만 — 0.13.0/0.23.0 번호로 인계, 0.24.0 Shipment.deliveryId 채움, 0.31.1 번호 인계에 이미 인계된 포장 숫자면 409 ALREADY_HANDED_OVER(틀린 횟수에 안 셈).
 //                                                              0.27~0.34 는 MFC 작업 쪽(관리자 중지·부분 종료·결품 지표) — 인계 API 그대로)
 //   contracts/openapi/rider-auth-service.yaml          0.2.0 (카카오·네이버 로그인 — 시뮬레이터는 안 부름)
@@ -576,6 +576,9 @@ export interface DeliveryExecution {
   orderNumber?: string | null;
   mfcName?: string | null;
   mfcPhone?: string | null;
+  /** (0.40.0) 알뜰 묶음 ID·묶음 안 전달 순서 — 배정 사건 값 그대로, 묶음 아니면 null. 시뮬레이터는 하나씩 배달이라 안 씀 */
+  bundleId?: string | null;
+  stopSequence?: number | null;
   version?: number;
   type?: DeliveryType;
   orderId?: string;
@@ -741,7 +744,7 @@ export interface StaffDeliveryListResponse {
   page?: Page;
 }
 
-// ───────────────────────── delivery-tracking 0.12.0 ─────────────────────────
+// ───────────────────────── delivery-tracking 0.14.0 ─────────────────────────
 
 export interface LocationPoint {
   lat: number;
@@ -809,6 +812,12 @@ export interface ControlRider {
     pickedUp?: boolean;
     etaPickup?: string | null;
     etaDrop?: string | null;
+    /** (0.14.0) 배송 약속 시각(배정 사건 사본 — 이 배포 전 배정은 null) */
+    promisedAt?: string | null;
+    /** (0.14.0) 예상 도착(없거나 지났으면 지금)이 약속 + 20분을 넘음. 약속을 모르면 false */
+    delayed?: boolean;
+    /** (0.14.0) 배송지 대략 위치 — 소수 둘째 자리 반올림(약 1km). 정확한 곳은 전달지(열람 기록) */
+    dropArea?: { lat: number; lng: number } | null;
   }[];
 }
 
@@ -817,7 +826,7 @@ export interface ControlRiderList {
   asOf: string;
 }
 
-// ───────────────────────── rider-service 0.18.0 ─────────────────────────
+// ───────────────────────── rider-service 0.26.0 ─────────────────────────
 
 export type VehicleType = 'MOTORCYCLE' | 'BICYCLE' | 'E_BIKE' | 'KICKBOARD' | 'CAR' | 'WALK';
 export type OperatingStatus = 'OFF_DUTY' | 'ON_DUTY';
@@ -866,7 +875,8 @@ export interface OperatingState {
   status?: OperatingStatus;
   newDispatchEnabled?: boolean;
   mfcId?: string;
-  activeDeliveryCount?: number;
+  /** (0.25.0) dispatch 의 배정됐고 안 끝난 배송 수(ASSIGNED·PICKED_UP). 못 읽으면 null — 0 으로 보지 말 것 */
+  activeDeliveryCount?: number | null;
   changedAt?: string;
   version?: number;
 }

@@ -403,6 +403,11 @@ export class VirtualRider {
       if (areas.length !== 1 || areas[0]?.mfcId !== this.params.mfcId) {
         // 면허 없이 면허가 필요한 수단(오토바이 등)이면 정보 변경마다 422 LICENSE_REQUIRED(rider updateProfile) — 면허 번호를 지어내지 않고 전기자전거로 같이 바꾼다(운행 꺼짐일 때만 됨)
         const vehicle = me.vehicleType && LICENSE_VEHICLES.includes(me.vehicleType) && !me.licenseNumberMasked ? ('E_BIKE' as const) : undefined;
+        // rider 0.23.0: 운행 중(ON_DUTY)이면 배달지역 변경이 409 — 지난 운행 창이 닫혀 ON 으로 남은 경우 먼저 쉬게 한다(진행 중 배송이 있으면 409 로 멈춤)
+        if (me.operating?.status === 'ON_DUTY') {
+          this.say('지난 운행이 켜진 채 남음 → 먼저 OFF_DUTY(배달지역은 쉴 때만 바뀜)');
+          await this.write(this.opts('off-before-area'), (o) => this.api.setOperatingState({ status: 'OFF_DUTY', newDispatchEnabled: false }, o));
+        }
         this.say(`배달지역 → ${this.params.mfcId}${vehicle ? ' · 수단 전기자전거(면허 없음)' : ''}`);
         await this.write(this.opts('area', me.version), (o) => this.api.updateMe({ deliveryAreas: [{ mfcId: this.params.mfcId }], ...(vehicle ? { vehicleType: vehicle } : {}) }, o));
         if (vehicle) this.vehicle = vehicle;

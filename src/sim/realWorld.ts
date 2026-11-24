@@ -438,6 +438,20 @@ export class RealWorld implements World {
     for (const v of this.driven.values()) v.requestStop();
   }
 
+  /** 이 페이지가 지금 움직이는 라이더(운행 지킴이 맥박에 싣는다) */
+  get operatingRiderIds(): string[] {
+    return [...this.driven.entries()].filter(([, v]) => v.phase !== 'STOPPED').map(([id]) => id);
+  }
+
+  /** 개발 서버 지킴이가 이 페이지를 멈춘 것으로 보고 라이더를 OFF_DUTY(또는 신규배차 끔)로 바꾼 뒤 — 이 페이지도 운행 종료로 */
+  stopByWatch(): void {
+    for (const [id, v] of this.driven) {
+      if (v.phase === 'STOPPED') continue;
+      push(this.notes, { at: this.clock.now, riderId: id, text: '운행 지킴이: 이 창이 멈춰 있던 동안 개발 서버가 운행을 껐음 → 운행 종료' }, 1500);
+      v.requestStop();
+    }
+  }
+
   /** 실서버는 실제 시각 1× — 박자가 늦거나 탭이 가려져도 벽시계로 맞춘다 */
   async advance(_dtReal: number): Promise<void> {
     const wall = (Date.now() - this.startWall) / 1000;

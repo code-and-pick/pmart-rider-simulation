@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { AppController } from './app/controller';
+import { startOperationWatch } from './app/operationWatch';
 import { DEFAULT_PARAMS, REAL_RIDER_GATE, riderSite } from './config';
 import { RealWorld } from './sim/realWorld';
 import { DevServerGeocoder } from './sim/geocode';
@@ -35,7 +36,10 @@ if (mode === 'http') {
   // 다시 배송 전달지(핀 없음)는 개발 서버 카카오 주소 검색으로 찾는다(이 PC 만 — 다른 기기는 운행하지 않음)
   const geocoder = new DevServerGeocoder();
   void geocoder.refresh();
-  world = new RealWorld({ ...DEFAULT_PARAMS, ...siteParams, ...codeParams, mode: 'http' }, REAL_RIDER_GATE, routes, { locator: geocoder });
+  const real = new RealWorld({ ...DEFAULT_PARAMS, ...siteParams, ...codeParams, mode: 'http' }, REAL_RIDER_GATE, routes, { locator: geocoder });
+  // 운행 창이 닫히거나 멈춰도 라이더가 ON_DUTY 로 남지 않게 — 개발 서버 지킴이에 맥박(config OPERATION_WATCH)
+  startOperationWatch(real);
+  world = real;
 } else {
   const sim = new Simulation({ ...DEFAULT_PARAMS, ...siteParams, ...codeParams }, { routes });
   sim.startRiders();

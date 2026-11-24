@@ -165,6 +165,37 @@ describe('실서버 운행 잠금(REAL_RIDER_GATE)', () => {
   });
 });
 
+describe('배달지역 바꾸기 — 쉴 때만(rider 0.23.0)', () => {
+  it('운행 중이면 409, 지난 운행이 ON 으로 남은 라이더가 다른 지점에서 켜지면 먼저 OFF_DUTY → 배달지역 → ON_DUTY', async () => {
+    const sim = new Simulation({ ...DEFAULT_PARAMS }, { startEpochMs: START });
+    sim.backend.autoOrders = false;
+    const api = sim.backend.asRider('RD-sim-01');
+    // 창이 닫혀 ON_DUTY 로 남은 라이더(돌리는 페이지 없음)
+    await api.signup({ phone: '01000000001', vehicleType: 'E_BIKE', deliveryAreas: [{ mfcId: DEFAULT_PARAMS.mfcId }], consents: [] }, { idempotencyKey: 's' });
+    await api.setOperatingState({ status: 'ON_DUTY', newDispatchEnabled: true, mfcId: DEFAULT_PARAMS.mfcId }, { idempotencyKey: 'on' });
+    const mokpo = riderSite('MFC-MOKPO-01');
+    await expect(api.updateMe({ deliveryAreas: [{ mfcId: mokpo.id }] }, { idempotencyKey: 'a1' })).rejects.toMatchObject({ status: 409, code: 'INVALID_STATE' });
+    // 같은 목록은 운행 중이어도 그대로
+    await expect(api.updateMe({ deliveryAreas: [{ mfcId: DEFAULT_PARAMS.mfcId }] }, { idempotencyKey: 'a2' })).resolves.toBeTruthy();
+    // 목포 지점에서 새로 켠다
+    const { VirtualRider } = await import('../src/sim/rider');
+    const params = { ...sim.params, mfcId: mokpo.id, mfcName: mokpo.name, mfcLocation: mokpo.mfcLocation };
+    const again = new VirtualRider(0, api, sim.backend.observer, sim.clock, params, mokpo.mfcLocation, mokpo.mfcLocation, {
+      onTripDone: () => undefined,
+      onNote: () => undefined,
+    });
+    void again.run();
+    await sim.runFor(5);
+    expect(again.phase).toBe('IDLE');
+    const rec = sim.backend.riders.get('RD-sim-01')!;
+    expect(rec.deliveryAreas).toEqual([{ mfcId: mokpo.id }]);
+    expect(rec.operating).toMatchObject({ status: 'ON_DUTY', mfcId: mokpo.id });
+    const writes = sim.apiLog.filter((x) => x.method !== 'GET' && x.status !== 409).map((x) => `${x.method} ${x.path}`);
+    const i = writes.lastIndexOf('PATCH /riders/me');
+    expect(writes.slice(i - 1, i + 1)).toEqual(['PUT /riders/me/state', 'PATCH /riders/me']);
+  });
+});
+
 describe('운행 종료 — OFF_DUTY', () => {
   it('대기 중이면 곧 OFF_DUTY, 배송 중이면 끝낸 뒤 OFF_DUTY', async () => {
     const sim = new Simulation({ ...DEFAULT_PARAMS, acceptProbability: 1 }, { startEpochMs: START });

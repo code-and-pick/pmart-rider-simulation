@@ -7,14 +7,18 @@
 //     개발 서버가 시험 라이더 토큰을 서명하거나(조건 3·4) 관찰 계정으로 로그인해 Authorization 을 붙인 뒤 X-Sim-* 를 지운다.
 //  3. 401 이면 그 토큰을 버린다 → 다음 요청에서 새로(조건 7 의 앞부분. 정지 라이더 멈춤은 엔진 몫 — P3).
 //  4. GET /sim-auth/status(루프백만) — 비밀 파일이 있는지만(값 없음).
+//  6. /sim-operation/beat·end·release(루프백만) — 실서버 운행 지킴이(operationWatch.ts): 맥박이 끊기거나 페이지가 떠나면 라이더 OFF_DUTY.
 //  5. /sim-route(도로 경로)·/sim-geocode(주소 → 좌표, POST 본문 — 다시 배송 전달지에 핀이 없어서)(루프백만). 주소·좌표는 로그에 남기지 않는다.
 // 로그에는 라이더 ID·경로·상태 코드만(조건 6). 토큰·비밀번호·고객 정보는 남기지 않는다.
 
+import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HttpProxy, Plugin } from 'vite';
 import { decideLanRequest, isControlRequest, isListedSimRider, isLoopback } from './lanPolicy';
 import { makeSigner, NotSimRiderError, RiderTokenCache } from './riderToken';
+import { DEFAULT_PARAMS, OPERATION_WATCH } from '../src/config';
 import { GeocodeService, parseAddressBody } from './geocode';
+import { OperationWatch, parseWatchBody, type SendState } from './operationWatch';
 import { parsePoint, RouteService } from './routing';
 import { Secrets, SECRET_FILES, secretsDir } from './secrets';
 import { CONTROL_ACCOUNT, fetchStaffToken, OBSERVER_ACCOUNT, staffAuthEndpoints, StaffTokenCache } from './staffToken';
@@ -30,12 +34,14 @@ interface AuthDeps {
   control: StaffTokenCache | null;
   routes: RouteService;
   geocoder: GeocodeService;
+  /** 실서버 운행 지킴이 — 라이더 서명키가 있을 때만 */
+  watch: OperationWatch | null;
 }
 
 const ACTOR = Symbol('simActor');
 let deps: AuthDeps | null = null;
 
-function initDeps(root: string, kakaoRestKey: string | null, kakaoLocalKey: string | null): AuthDeps {
+function initDeps(root: string, kakaoRestKey: string | null, kakaoLocalKey: string | null, gateway: string): AuthDeps {
   const secrets = new Secrets(secretsDir(root));
   const st = secrets.status();
   const riders = st.riderSigning
@@ -56,7 +62,50 @@ function initDeps(root: string, kakaoRestKey: string | null, kakaoLocalKey: stri
   console.info(`[sim-route] 카카오모빌리티 REST 키 ${kakaoRestKey ? '있음 — 도로 경로' : '없음 — 직선으로'}`);
   const localKey = kakaoLocalKey ?? kakaoRestKey;
   console.info(`[sim-geocode] 카카오 주소 검색 키 ${localKey ? (kakaoLocalKey ? '있음(KAKAO_LOCAL_REST_KEY)' : '있음(모빌리티 키와 같은 앱 키)') : '없음 — 실서버 다시 배송은 거절'}`);
-  return { secrets, riders, staff, control, routes: new RouteService(kakaoRestKey), geocoder: new GeocodeService(localKey) };
+  const watch = riders ? new OperationWatch(riderStateSender(riders, gateway), OPERATION_WATCH.timeoutSec * 1000) : null;
+  if (watch) setInterval(() => void watch.check().catch(() => undefined), OPERATION_WATCH.checkSec * 1000).unref();
+  return { secrets, riders, staff, control, routes: new RouteService(kakaoRestKey), geocoder: new GeocodeService(localKey), watch };
+}
+
+/**
+ * 지킴이가 쓰는 라이더 본인 운행 상태 쓰기 — 게이트웨이에 바로(브라우저 거치지 않음). 응답 본문은 읽지 않는다.
+ * 응답이 없으면 결과 불명 — 같은 Idempotency-Key·같은 본문으로 다시(세 번까지). 401 이면 토큰을 버리고 새 토큰·같은 키로 한 번 더.
+ */
+function riderStateSender(riders: RiderTokenCache, gateway: string): SendState {
+  const url = `${gateway.replace(/\/$/, '')}/api/v1/riders/me/state`;
+  return async (riderId, body) => {
+    const key = randomUUID();
+    const payload = JSON.stringify(body);
+    let last: number | 'ERR' = 'ERR';
+    let renewed = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let token: string;
+      try {
+        token = riders.get(riderId);
+      } catch {
+        return 'ERR'; // RD-sim- 가 아니면 서명하지 않음
+      }
+      try {
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Idempotency-Key': key, 'X-Source-System': DEFAULT_PARAMS.sourceSystem },
+          body: payload,
+          signal: AbortSignal.timeout(10_000),
+        });
+        await res.body?.cancel();
+        last = res.status;
+        if (res.status === 401 && !renewed) {
+          riders.invalidate(riderId);
+          renewed = true;
+          continue;
+        }
+        return last;
+      } catch {
+        last = 'ERR';
+      }
+    }
+    return last;
+  };
 }
 
 function problem(res: ServerResponse, status: number, code: string, title: string) {
@@ -116,6 +165,24 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
     return;
   }
   if (path === '/sim-geocode/' || path.startsWith('/sim-geocode/')) return problem(res, 404, 'NOT_FOUND', '없는 경로');
+  if (path === '/sim-operation' || path.startsWith('/sim-operation/')) {
+    // 실서버 운행 지킴이(이 PC 만 — lanPolicy). 맥박이 끊기거나 페이지가 떠나면 라이더를 OFF_DUTY
+    const kind = path.slice('/sim-operation/'.length);
+    if (method !== 'POST' || !['beat', 'end', 'release'].includes(kind)) return problem(res, 404, 'NOT_FOUND', '없는 경로');
+    const raw = await readBody(req, 2048);
+    const body = raw === null ? null : parseWatchBody(raw);
+    if (!body) return problem(res, 400, 'VALIDATION_FAILED', '{"session": …, "riders": [RD-sim-NN]}');
+    if (!deps?.watch) return problem(res, 503, 'SIM_AUTH_UNAVAILABLE', '라이더 서명키가 없는 PC');
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    if (kind === 'beat') return void res.end(JSON.stringify(deps.watch.beat(body.session, body.riders)));
+    if (kind === 'release') {
+      deps.watch.release(body.session);
+      return void res.end('{}');
+    }
+    const results = await deps.watch.end(body.session);
+    return void res.end(JSON.stringify({ results }));
+  }
   if (path !== '/api' && !path.startsWith('/api/')) return next();
 
   const loopback = isLoopback(req.socket.remoteAddress);
@@ -214,19 +281,20 @@ export function configureApiProxy(proxy: HttpProxy.Server): void {
   });
 }
 
-export function pmartDevServer(opts: { kakaoRestKey?: string | null; kakaoLocalKey?: string | null } = {}): Plugin {
+export function pmartDevServer(opts: { kakaoRestKey?: string | null; kakaoLocalKey?: string | null; gateway?: string } = {}): Plugin {
+  const gateway = opts.gateway ?? 'http://192.168.0.40:8080';
   const restKey = opts.kakaoRestKey?.trim() || null;
   const localKey = opts.kakaoLocalKey?.trim() || null;
   return {
     name: 'pmart-rider-dev-server',
     configureServer(server) {
       if (process.env.VITEST) return; // 시험은 실제 비밀 파일·키를 읽지 않는다
-      deps ??= initDeps(server.config.root, restKey, localKey);
+      deps ??= initDeps(server.config.root, restKey, localKey, gateway);
       server.middlewares.use(apiMiddleware);
     },
     configurePreviewServer(server) {
       // vite preview 도 server.host·server.proxy 를 물려받으므로 같은 가드·토큰 붙이기
-      deps ??= initDeps(server.config.root, restKey, localKey);
+      deps ??= initDeps(server.config.root, restKey, localKey, gateway);
       server.middlewares.use(apiMiddleware);
     },
   };

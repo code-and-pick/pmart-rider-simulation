@@ -1810,8 +1810,12 @@ export class MockBackend implements RiderPort {
           '/riders/me',
           () => {
             const r = b.signedRider(me);
+            // rider 0.23.0: 배달지역을 바꾸려면 운행을 쉬고(OFF_DUTY) 진행 중 배송이 없어야 함 — 같은 목록을 다시 보내면 그대로
+            const areaKey = (a: { mfcId?: string; zoneId?: string }[]) => a.map((x) => `${x.mfcId ?? ''}/${x.zoneId ?? ''}`).join(',');
+            const areaChange = !!body.deliveryAreas && areaKey(body.deliveryAreas) !== areaKey(r.deliveryAreas);
+            if (areaChange && (r.operating.status === 'ON_DUTY' || b.activeDeliveryCount(me) > 0)) fail(409, 'INVALID_STATE', '운행 중·진행 중 배송 — 배달지역은 쉴 때만');
             if (body.vehicleType) r.vehicleType = body.vehicleType;
-            if (body.deliveryAreas) r.deliveryAreas = body.deliveryAreas.map((a) => ({ ...a }));
+            if (areaChange && body.deliveryAreas) r.deliveryAreas = body.deliveryAreas.map((a) => ({ ...a }));
             return b.profileView(r);
           },
           { key: o.idempotencyKey, body },
