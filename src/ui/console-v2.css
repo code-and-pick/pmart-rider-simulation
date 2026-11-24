@@ -410,10 +410,9 @@ a.c-btn-s {
   box-shadow: var(--c-shadow);
 }
 
-/* 어두운 화면에서도 예전 조각(흐름·로그·운영 화면)의 글자색이 맞게 */
+/* 어두운 화면에서도 예전 조각(흐름·로그)의 글자색이 맞게 */
 .c-app .log li,
-.c-app .timeline,
-.c-app .ops {
+.c-app .timeline {
   color: var(--c-ink);
 }
 @media (max-width: 900px) {

@@ -8,7 +8,6 @@ import { MapDetail } from './MapDetail';
 import type { OpsRow } from './ops';
 import { dur, seoulTime } from './format';
 import { ActiveOrders } from './ActiveOrders';
-import { OpsPanel } from './OpsPanel';
 import { RiderDetail } from './RiderDetail';
 import { Progress } from './Progress';
 import { SearchFilterBar } from './SearchFilterBar';
@@ -27,7 +26,7 @@ const RECENT = 30;
 
 /**
  * 라이더 관제(표) — 라이더 백오피스 "라이더 관제" 화면과 같은 내용을 이 시뮬레이터에서(백오피스가 안 열릴 때도 본다).
- *   숫자 카드(운행 중·배송 중·위치 끊김·없음) → 거르기·찾기 → 라이더 표 → 최근 배송 표 → (접기) 백오피스에서 열기.
+ *   숫자 카드(운행 중·배송 중·위치 끊김·없음) → 거르기·찾기 → 라이더 표 → 최근 배송 표. 백오피스로 가는 길은 머리줄 "라이더 백오피스 ▾"(OpsMenu).
  * 실서버 이 PC 는 관제 응답(GET /rider-locations) 그대로, 그 밖은 화면 라이더로 채운다(모르는 칸은 —).
  * 이 화면 안에서 배송을 누르면 아래 최근 배송 표에서 그 줄이 펼쳐진다(화면을 옮기지 않음 — 사용자 2026-11-20 "정신 사납게 배송관제로 넘어갈게 아니라 바로 아래쪽에").
  * 지도로 가는 것은 "지도에서 보기" 단추로만.
@@ -181,10 +180,6 @@ export function RiderControlPage({ onShowOnMap }: { onShowOnMap: () => void }) {
 
       <RecentDeliveries onOpen={openOnMap} focus={focus} />
 
-      <details className="c-page-links">
-        <summary>라이더 백오피스에서 열기(대시보드·라이더 찾기·배송 찾기·지원센터·수행료 …)</summary>
-        <OpsPanel />
-      </details>
     </section>
   );
 }

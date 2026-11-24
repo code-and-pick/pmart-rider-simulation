@@ -1,6 +1,7 @@
 import { useApp, type View } from '../app/App';
 import { RIDER_SITES } from '../config';
 import { seoulTime } from './format';
+import { OpsMenu } from './OpsMenu';
 
 const SPEEDS = [1, 5, 20, 60];
 
@@ -50,6 +51,7 @@ export function ConsoleHeader() {
         </span>
       </div>
       <div className="c-right">
+        <OpsMenu />
         <span className="c-clock" title={real ? '실제 시각(서울)' : '시뮬레이션 시각(서울)'}>
           <span className={`c-live ${sim.paused ? 'paused' : ''}`} />
           {seoulTime(sim.clock.epochMs())}
