@@ -5,7 +5,7 @@ import { StaffAuthError, StaffTokenCache } from '../../server/staffToken';
 
 describe('관제 계정 (RR-08)', () => {
   it('붙여도 되는 요청은 GET /api/v1/rider-locations 하나', () => {
-    expect(isControlRequest('GET', '/api/v1/rider-locations?mfcId=MFC-SEED-01')).toBe(true);
+    expect(isControlRequest('GET', '/api/v1/rider-locations?mfcId=MFC-BJG-01')).toBe(true);
     expect(isControlRequest('HEAD', '/api/v1/rider-locations')).toBe(true);
     expect(isControlRequest('GET', '/api/v1/deliveries/DLV-1/drop-location')).toBe(true);
     // 운행시간·라이더 찾기(가린 이름·전화) — 2026-11-19 기본 화면을 백오피스 라이더 관제처럼(다시 넣음)
@@ -52,7 +52,7 @@ describe('관제 계정 (RR-08)', () => {
   });
 
   it('다른 기기는 라이더 관제 경로 자체가 막힌다', () => {
-    expect(decideLanRequest('GET', '/api/v1/rider-locations?mfcId=MFC-SEED-01', '192.168.0.55')).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
+    expect(decideLanRequest('GET', '/api/v1/rider-locations?mfcId=MFC-BJG-01', '192.168.0.55')).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
     expect(decideLanRequest('GET', '/api/v1/deliveries/DLV-1/drop-location', '192.168.0.55')).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
   });
 

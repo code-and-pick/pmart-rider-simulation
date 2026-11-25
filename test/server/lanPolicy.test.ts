@@ -29,15 +29,15 @@ describe('LAN 다른 기기 가드 (docs/design.md §6-4)', () => {
   });
 
   it('다른 기기의 허용 목록 조회는 Authorization 을 지우고 넘긴다', () => {
-    expect(decideLanRequest('GET', '/api/v1/deliveries?mfcId=MFC-SEED-01', LAN)).toEqual({
+    expect(decideLanRequest('GET', '/api/v1/deliveries?mfcId=MFC-BJG-01', LAN)).toEqual({
       allow: true,
       stripAuthorization: true,
       token: 'OBSERVER',
     });
     expect(decideLanRequest('GET', '/api/v1/deliveries/DL-1/dispatch', LAN)).toMatchObject({ allow: true, token: 'OBSERVER' });
     expect(decideLanRequest('HEAD', '/api/v1/shipments/SH-1', LAN)).toMatchObject({ allow: true, token: 'OBSERVER' });
-    expect(decideLanRequest('GET', '/api/v1/centers/MFC-SEED-01', LAN)).toMatchObject({ allow: true, token: 'OBSERVER' });
-    expect(decideLanRequest('GET', '/api/v1/centers/MFC-SEED-01/calendar', LAN)).toMatchObject({ allow: false });
+    expect(decideLanRequest('GET', '/api/v1/centers/MFC-BJG-01', LAN)).toMatchObject({ allow: true, token: 'OBSERVER' });
+    expect(decideLanRequest('GET', '/api/v1/centers/MFC-BJG-01/calendar', LAN)).toMatchObject({ allow: false });
     expect(decideLanRequest('GET', '/api/v1/mfc-pickup-points', LAN)).toMatchObject({ allow: true, token: 'SIM_RIDER' });
     expect(decideLanRequest('GET', '/api/v1/riders/me/locations/latest', LAN)).toMatchObject({ allow: true, token: 'SIM_RIDER' });
     expect(decideLanRequest('GET', '/api/v1/offers', LAN)).toMatchObject({ allow: true, token: 'SIM_RIDER' });

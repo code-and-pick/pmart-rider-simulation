@@ -16,11 +16,11 @@ describe('MFC 위치 — center-master', () => {
     const calls: { url: string; headers: Record<string, string> }[] = [];
     const fake = (async (url: string, init: RequestInit) => {
       calls.push({ url, headers: init.headers as Record<string, string> });
-      return json(200, { centerId: 'MFC-SEED-01', coordinates: { lat: 1, lng: 2 } });
+      return json(200, { centerId: 'MFC-BJG-01', coordinates: { lat: 1, lng: 2 } });
     }) as unknown as typeof fetch;
     const b = new HttpBackend({ apiBase: '/api/v1', sourceSystem: 'rider-simulator', now: () => 0, fetch: fake });
-    await b.observer.getCenter('MFC-SEED-01');
-    expect(calls[0]).toMatchObject({ url: '/api/v1/centers/MFC-SEED-01', headers: { 'X-Sim-Actor': 'observer' } });
+    await b.observer.getCenter('MFC-BJG-01');
+    expect(calls[0]).toMatchObject({ url: '/api/v1/centers/MFC-BJG-01', headers: { 'X-Sim-Actor': 'observer' } });
   });
 
   it('센터 좌표를 쓰고, 인계 위치(HANDOVER_POINT)가 있으면 그것 — 읽기 전에는 운행을 막는다', async () => {
@@ -37,7 +37,7 @@ describe('MFC 위치 — center-master', () => {
     expect(w.diagnostics().some((d) => d.includes('못 읽음'))).toBe(true);
 
     center = {
-      centerId: 'MFC-SEED-01',
+      centerId: 'MFC-BJG-01',
       version: 3,
       name: '부산진구 MFC',
       coordinates: { lat: 35.1585, lng: 129.062 },
@@ -50,7 +50,7 @@ describe('MFC 위치 — center-master', () => {
   });
 
   it('운행(쓰기)은 서명키가 있는 그 PC 에서만 — 다른 기기·서명키 없는 PC 는 버튼을 막는다', async () => {
-    const center = { centerId: 'MFC-SEED-01', coordinates: { lat: 35.1585, lng: 129.062 } };
+    const center = { centerId: 'MFC-BJG-01', coordinates: { lat: 35.1585, lng: 129.062 } };
     const make = (status: Response) =>
       (async (url: string) => (url.includes('/sim-auth/status') ? status.clone() : json(200, center))) as unknown as typeof fetch;
     const remote = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: make(json(403, { code: 'LOOPBACK_ONLY' })) });
@@ -74,7 +74,7 @@ describe('MFC 위치 — center-master', () => {
           items: [
             { centerId: 'MFC-OTHER', name: '다른 지점', coordinates: { lat: 1, lng: 1 } },
             {
-              centerId: 'MFC-SEED-01',
+              centerId: 'MFC-BJG-01',
               name: '부산진구 MFC',
               coordinates: { lat: 35.1585, lng: 129.062 },
               handoverPoint: { label: '라이더 인계', coordinates: { lat: 35.1587, lng: 129.0623 } },
@@ -93,7 +93,7 @@ describe('MFC 위치 — center-master', () => {
 
   it('픽업지 목록이 404(아직 배포 안 됨)거나 목록에 없으면 센터 조회로, 둘 다 못 읽으면 운행 막음', async () => {
     let list: Response = json(404, { title: 'Not Found' });
-    let center: Response = json(200, { centerId: 'MFC-SEED-01', version: 2, coordinates: { lat: 35.1578, lng: 129.0597 } });
+    let center: Response = json(200, { centerId: 'MFC-BJG-01', version: 2, coordinates: { lat: 35.1578, lng: 129.0597 } });
     const fake = (async (url: string) => {
       if (url.endsWith('/mfc-pickup-points')) return list.clone();
       if (url.includes('/centers/')) return center.clone();
@@ -120,7 +120,7 @@ describe('MFC 위치 — center-master', () => {
 
   it('인계 위치가 없으면 센터 좌표', async () => {
     const fake = (async () =>
-      json(200, { centerId: 'MFC-SEED-01', version: 2, coordinates: { lat: 35.1578, lng: 129.0597 }, accessPoints: null })) as unknown as typeof fetch;
+      json(200, { centerId: 'MFC-BJG-01', version: 2, coordinates: { lat: 35.1578, lng: 129.0597 }, accessPoints: null })) as unknown as typeof fetch;
     const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
     await w.loadCenter();
     expect(w.mfcLocation).toEqual({ lat: 35.1578, lng: 129.0597 });
@@ -149,7 +149,7 @@ describe('라이더 관제(RR-08) — 라이더 앱 라이더 위치', () => {
             { riderId: 'RD-noloc', stale: true, activeDeliveries: [], location: null },
           ],
         });
-      if (url.includes('/mfc-pickup-points')) return json(200, { items: [{ centerId: 'MFC-SEED-01', name: 'x', coordinates: { lat: 35.1578, lng: 129.0597 } }] });
+      if (url.includes('/mfc-pickup-points')) return json(200, { items: [{ centerId: 'MFC-BJG-01', name: 'x', coordinates: { lat: 35.1578, lng: 129.0597 } }] });
       if (url.includes('/deliveries')) return json(200, { items: [] });
       return json(404, {});
     }) as unknown as typeof fetch;
@@ -157,7 +157,7 @@ describe('라이더 관제(RR-08) — 라이더 앱 라이더 위치', () => {
     await flush();
     await w.advance(0);
     const call = calls.find((c) => c.url.includes('/rider-locations'));
-    expect(call?.url).toContain('mfcId=MFC-SEED-01');
+    expect(call?.url).toContain('mfcId=MFC-BJG-01');
     expect(call?.headers).toMatchObject({ 'X-Sim-Actor': 'control' });
     const app = w.riders.filter((r) => !r.id.startsWith('RD-sim-'));
     expect(app.map((r) => r.id)).toEqual(['RD-5c41', 'RD-noloc']);

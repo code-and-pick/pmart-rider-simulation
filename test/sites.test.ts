@@ -4,7 +4,7 @@ import { riderSite, siteBearing } from '../src/config';
 
 describe('지점 MOCK 방향', () => {
   it('부산은 사방, 목포는 260°→북→80° 안', () => {
-    const busan = riderSite('MFC-SEED-01');
+    const busan = riderSite('MFC-BJG-01');
     expect(siteBearing(busan, 0.5)).toBe(180);
     const mokpo = riderSite('MFC-MOKPO-01');
     for (let r = 0; r <= 1; r += 0.05) {

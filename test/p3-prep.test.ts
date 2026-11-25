@@ -114,11 +114,11 @@ describe('탈퇴(rider-service 0.6.0 계약 흉내 — 백엔드 회신 RR-07)',
     expect(await api.getWithdrawal('w2')).toMatchObject({ state: 'COMPLETED' });
     await expect(api.getMe()).rejects.toMatchObject({ status: 404 });
     await expect(
-      api.signup({ phone: '01099990001', vehicleType: 'MOTORCYCLE', deliveryAreas: [{ mfcId: 'MFC-SEED-01' }], consents: [] }, { idempotencyKey: 's' }),
+      api.signup({ phone: '01099990001', vehicleType: 'MOTORCYCLE', deliveryAreas: [{ mfcId: 'MFC-BJG-01' }], consents: [] }, { idempotencyKey: 's' }),
     ).rejects.toMatchObject({ status: 409, code: 'RIDER_WITHDRAWN' });
     // 전화번호는 지워졌다 — 같은 전화로 새 ID 는 가입된다
     await expect(
-      sim.backend.asRider('RD-sim-09').signup({ phone: '01000000001', vehicleType: 'MOTORCYCLE', deliveryAreas: [{ mfcId: 'MFC-SEED-01' }], consents: [] }, { idempotencyKey: 's9' }),
+      sim.backend.asRider('RD-sim-09').signup({ phone: '01000000001', vehicleType: 'MOTORCYCLE', deliveryAreas: [{ mfcId: 'MFC-BJG-01' }], consents: [] }, { idempotencyKey: 's9' }),
     ).resolves.toMatchObject({ riderId: 'RD-sim-09' });
   });
 });
@@ -148,7 +148,7 @@ describe('실서버 운행 잠금(REAL_RIDER_GATE)', () => {
     expect(new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }).riders.map((r) => r.id)).toEqual(['RD-sim-01', 'RD-sim-02']);
     const mokpo = riderSite('MFC-MOKPO-01');
     expect(new RealWorld({ ...DEFAULT_PARAMS, mode: 'http', mfcId: mokpo.id, mfcName: mokpo.name, mfcLocation: mokpo.mfcLocation }).riders.map((r) => r.id)).toEqual(['RD-sim-01', 'RD-sim-02']);
-    expect(riderSite('없는 센터').id).toBe('MFC-SEED-01');
+    expect(riderSite('없는 센터').id).toBe('MFC-BJG-01');
     // 인원 잠금 밖 번호는 쓰지 않음
     expect(new RealWorld({ ...DEFAULT_PARAMS, mode: 'http', mfcId: mokpo.id }, { operationAllowed: true, signupAllowed: true, riderCount: 1 }).riders.map((r) => r.id)).toEqual(['RD-sim-01']);
     expect(simRiderPhone(0)).toBe('01000000001');

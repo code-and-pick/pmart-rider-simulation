@@ -172,7 +172,7 @@ MOCK 모드는 같은 포트(`RiderPort`) 메서드를 MockBackend 가 받는다
 - 매 프레임 바뀌는 라이더 위치는 React 상태로 올리지 않고 오버레이 객체의 `setPosition` 을 직접 부른다(MFC 시뮬레이터의 `useFrame` 규칙과 같은 뜻). 패널은 약 4Hz.
 - MFC 위치(2026-11-16):
   - **실서버**(2026-11-17 바꿈): 먼저 center-master 라이더용 픽업지 목록 `GET /mfc-pickup-points`(0.2.0, 첫 시뮬레이터 라이더 토큰 — 라이더 앱과 같은 길)에서 이 MFC 의 `handoverPoint.coordinates`, 없으면 `coordinates`. 못 읽으면(LAN 서버에 아직 배포 안 돼 404 — 2026-11-17 실측, 목록에 없음 등) center-master `GET /centers/{centerId}`(관찰 계정)를 읽어 쓴다 — `accessPoints` 에 `HANDOVER_POINT` 가 있으면 그 좌표(라이더가 가는 곳), 없으면 `coordinates`. 화면 진단 줄에 어느 길로 읽었는지 적는다. 배차 반경(1→2→3km)이 이 좌표 기준이라 **읽기 전·실패면 가상 라이더 운행을 막는다**(못 읽으면 조회 때마다 다시). 지도는 읽은 위치로 옮긴다. 다른 기기도 같은 조회(허용 목록).
-  - 지금 LAN 값: `MFC-SEED-01` "[시험] 부산진구 MFC" v2, `35.1578, 129.0597`(백엔드 `deploy/lan/seed/seed-data.json` — "서면역 부근 시험 좌표, 실제 주소 수집 중"), accessPoints 없음.
+  - 지금 LAN 값: `MFC-BJG-01` "[시험] 부산진구 MFC"(2026-11-24 R-46 — 옛 ID `MFC-SEED-01` 에서 바뀜, 백엔드가 배송·배달지역·주문 기록까지 DB 에서 새 ID 로 옮김, 옛 ID 별칭 없음 — 회신 `docs/handoff/simulator/mfc/2026-11-24-reply-r46-center-id.md`). 처음 읽은 값: v2, `35.1578, 129.0597`(seed-data.json "서면역 부근 시험 좌표"), accessPoints 없음.
   - **MOCK**: 부산진구지점 실제 주소 "부산 부산진구 동천로 109 삼한골든게이트"(지번 부전동 112-3) = `35.158501, 129.062021`(사용자 지점 목록 2026-11-16, 카카오 주소 검색). 백엔드 시험 좌표와 약 220m 차이.
   - 백엔드 center-master·seed 를 실제 주소로 바꾸는 것은 사용자 백엔드 작업(사용자 "1번"). 바뀌면 실서버는 자동으로 따라온다.
 

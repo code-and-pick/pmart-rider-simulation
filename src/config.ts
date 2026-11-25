@@ -166,7 +166,7 @@ export const DEFAULT_PARAMS: SimParams = {
   mode: 'mock',
   apiBase: '/api/v1',
   sourceSystem: 'rider-simulator',
-  mfcId: 'MFC-SEED-01',
+  mfcId: 'MFC-BJG-01',
   mfcName: '부산진구 MFC',
   mfcLocation: { lat: 35.158501, lng: 129.062021 },
   riderCount: 5,
@@ -271,8 +271,8 @@ export interface RiderSite {
   realRiderIndexes: readonly number[];
 }
 export const RIDER_SITES: readonly RiderSite[] = [
-  // 부산진구지점 '부산 부산진구 동천로 109' [확정 — 사용자 지점 목록 2026-11-16, 카카오 주소 검색]
-  { id: 'MFC-SEED-01', name: '부산진구 MFC', short: '1호점 부산', mfcLocation: { lat: 35.158501, lng: 129.062021 }, mockAddress: { area: '부산 부산진구', postalCode: '47000' }, realRiderIndexes: [0, 1] },
+  // 부산진구지점 '부산 부산진구 동천로 109' [확정 — 사용자 지점 목록 2026-11-16, 카카오 주소 검색] · 센터 ID 2026-11-24 R-46 MFC-SEED-01 → MFC-BJG-01 [확정 — 백엔드 3871061b, 기록은 DB 에서 옮겨짐·옛 ID 별칭 없음]
+  { id: 'MFC-BJG-01', name: '부산진구 MFC', short: '1호점 부산', mfcLocation: { lat: 35.158501, lng: 129.062021 }, mockAddress: { area: '부산 부산진구', postalCode: '47000' }, realRiderIndexes: [0, 1] },
   // 목포 MFC "백년대로 352" 센터 좌표 [확정 — center-master MFC-MOKPO-01 등록값, 라이더 백엔드 세션 2026-11-23]. 실서버는 center-master 라이더용 픽업지(인계 위치)를 읽음
   { id: 'MFC-MOKPO-01', name: '목포 MFC', short: '2호점 목포', mfcLocation: { lat: 34.7985, lng: 126.4334 }, mockAddress: { area: '전남 목포시', postalCode: '58700' },
     // 센터 남쪽·동남쪽 3km 안은 영산강 하구(바다) — 서쪽 260°에서 북쪽을 돌아 동쪽 80°까지만(카카오 지도로 확인 2026-11-23)

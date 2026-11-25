@@ -35,8 +35,8 @@ describe('HttpBackend (실서버 어댑터)', () => {
 
   it('관찰 조회는 X-Sim-Actor: observer', async () => {
     const { b, calls } = backend(() => json(200, { items: [] }));
-    await b.observer.searchDeliveries({ mfcId: 'MFC-SEED-01', sort: 'NEWEST', size: 30 });
-    expect(calls[0]?.url).toBe('/api/v1/deliveries?mfcId=MFC-SEED-01&sort=NEWEST&size=30');
+    await b.observer.searchDeliveries({ mfcId: 'MFC-BJG-01', sort: 'NEWEST', size: 30 });
+    expect(calls[0]?.url).toBe('/api/v1/deliveries?mfcId=MFC-BJG-01&sort=NEWEST&size=30');
     expect(calls[0]?.headers['X-Sim-Actor']).toBe('observer');
   });
 
