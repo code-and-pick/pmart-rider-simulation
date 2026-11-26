@@ -198,6 +198,7 @@ MFC 시뮬레이터 실행 구조(그쪽 커밋 `d0dd0b2`, `vite.config.ts` `ser
 | 토큰 | **브라우저는 토큰을 받지 않는다**(P2 결정): `X-Sim-Rider: RD-sim-NN` / `X-Sim-Actor: observer` 만 보내면 개발 서버가 서명·로그인해 붙인다. `/sim-auth/status`(비밀 파일 있는지만)는 루프백만 | **토큰을 주지 않음** — 같은 방식으로 개발 서버가 붙이되 아래 허용 목록만. `/sim-auth/*` 는 루프백만(`LOOPBACK_ONLY`) |
 | 백엔드 호출 | 읽기·쓰기(가상 라이더 운행) | **GET·HEAD 만**(그 밖 403 `LAN_READ_ONLY`). 개발 서버가 들어온 Authorization 을 지우고 아래 토큰을 붙여 프록시로 넘김 |
 | 가상 라이더 | 켤 수 있음 | 켜지 않음 |
+| 라이더 관제(라이더 앱 라이더) | 관제 계정 여섯 경로 | **라이더 보기 셋만**(사용자 2026-11-26 "다른 pc에서 라이더 전부 보이게 해줘"): `GET /rider-locations`·`/riders`·`/rider-operating-time` 에 개발 서버가 관제 계정을 붙임. 전달지·주문 상세·원문 열람은 403 그대로 |
 
 다른 기기 조회에 개발 서버가 붙이는 토큰:
 - **직원 조회 경로**(`GET /deliveries?mfcId=`, `/deliveries/{id}`, `/deliveries/{id}/dispatch`, `/shipments/{id}`) → 관찰 직원 계정 토큰(MFC 시뮬레이터와 같은 `claude-mfc-wrk` — 계정은 P2 에서 확정).

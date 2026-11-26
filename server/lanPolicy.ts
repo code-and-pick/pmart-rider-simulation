@@ -17,7 +17,7 @@ export const SIM_GEOCODE_PATH = '/sim-geocode';
 export const SIM_OPERATION_PREFIX = '/sim-operation';
 
 /** 다른 기기 요청에 개발 서버가 붙일 토큰 종류. P0 에서는 아직 붙이지 않는다(백엔드가 401 로 답한다). */
-export type LanTokenKind = 'OBSERVER' | 'SIM_RIDER';
+export type LanTokenKind = 'OBSERVER' | 'SIM_RIDER' | 'CONTROL';
 
 interface LanRoute {
   pattern: RegExp;
@@ -41,6 +41,11 @@ export const LAN_READ_ROUTES: readonly LanRoute[] = [
   { pattern: /^\/riders\/me\/deliveries$/, token: 'SIM_RIDER' },
   { pattern: /^\/offers$/, token: 'SIM_RIDER' },
   { pattern: /^\/mfc-pickup-points$/, token: 'SIM_RIDER' }, // center-master 라이더용 픽업지 목록(MFC 위치 — 지점 공개 정보)
+  // 라이더 보기 — 관제 계정 토큰, 조회 셋만(사용자 2026-11-26 "다른 pc에서 라이더 전부 보이게 해줘").
+  // 전달지(drop-location)·주문 상세·원문 열람은 여기 넣지 않는다 — 그대로 이 PC 만.
+  { pattern: /^\/rider-locations$/, token: 'CONTROL' }, // tracking 라이더 관제(운행 중 라이더 위치·진행 중 배송)
+  { pattern: /^\/riders$/, token: 'CONTROL' }, // rider 직원용 라이더 찾기(가린 이름·전화·가입일)
+  { pattern: /^\/rider-operating-time$/, token: 'CONTROL' }, // execution 직원용 운행·접속·대기 시간
 ];
 
 export type LanDecision =
@@ -116,8 +121,8 @@ export function decideLanRequest(method: string, url: string, remoteAddress: str
  *   GET  /api/v1/rider-operating-time?riderId=…        직원용 라이더 운행·접속·대기 시간  ┐ 사용자 2026-11-19 "똑같이 해봐"(기본 화면을
  *   GET  /api/v1/riders?riderIds=…                     직원용 라이더 찾기(가린 이름·전화)  ┘ 백오피스 라이더 관제처럼 — 상세 칸·가입일)
  * (운행시간은 2026-11-18 에 넣었다 뺐다가 위 결정으로 다시 넣음)
- * 관리자 권한 토큰이라 그 밖의 경로·쓰기에는 절대 붙이지 않는다. 다른 기기는 이 경로들이 허용 목록에 없어 위에서 이미 막힌다
- * (개인정보·관리자 권한 — LAN 아무 기기에나 넘기지 않는다).
+ * 관리자 권한 토큰이라 그 밖의 경로·쓰기에는 절대 붙이지 않는다. 다른 기기에는 라이더 보기 셋(rider-locations·riders·
+ * rider-operating-time, 조회만 — 사용자 2026-11-26)만 LAN_READ_ROUTES 로 넘기고, 전달지·주문 상세·원문 열람은 허용 목록에 없어 위에서 막힌다.
  */
 export function isControlRequest(method: string, url: string): boolean {
   const m = method.toUpperCase();

@@ -15,7 +15,8 @@ describe('관제 계정 (RR-08)', () => {
     expect(isControlRequest('PATCH', '/api/v1/riders')).toBe(false);
     expect(isControlRequest('POST', '/api/v1/rider-operating-time')).toBe(false);
     expect(isControlRequest('GET', '/api/v1/riders/me/operating-time')).toBe(false);
-    expect(decideLanRequest('GET', '/api/v1/rider-operating-time?riderId=RD-1', '192.168.0.55')).toMatchObject({ allow: false });
+    // 다른 기기도 라이더 보기 셋은 조회만(사용자 2026-11-26)
+    expect(decideLanRequest('GET', '/api/v1/rider-operating-time?riderId=RD-1', '192.168.0.55')).toMatchObject({ allow: true, token: 'CONTROL' });
     for (const [m, u] of [
       ['POST', '/api/v1/rider-locations'],
       ['GET', '/api/v1/rider-locations/x'],
@@ -51,9 +52,14 @@ describe('관제 계정 (RR-08)', () => {
     expect(decideLanRequest('POST', '/api/v1/orders/lookups/OR-1/pii-reveals', '192.168.0.55')).toMatchObject({ allow: false });
   });
 
-  it('다른 기기는 라이더 관제 경로 자체가 막힌다', () => {
-    expect(decideLanRequest('GET', '/api/v1/rider-locations?mfcId=MFC-BJG-01', '192.168.0.55')).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
+  it('다른 기기는 라이더 보기 셋만 조회(관제 계정, 사용자 2026-11-26) — 전달지·주문·쓰기는 막힌다', () => {
+    for (const u of ['/api/v1/rider-locations?mfcId=MFC-BJG-01', '/api/v1/riders?riderIds=R-1', '/api/v1/rider-operating-time?riderId=R-1']) {
+      expect(decideLanRequest('GET', u, '192.168.0.55'), u).toMatchObject({ allow: true, stripAuthorization: true, token: 'CONTROL' });
+      expect(decideLanRequest('POST', u, '192.168.0.55'), u).toMatchObject({ allow: false, code: 'LAN_READ_ONLY' });
+    }
     expect(decideLanRequest('GET', '/api/v1/deliveries/DLV-1/drop-location', '192.168.0.55')).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
+    expect(decideLanRequest('GET', '/api/v1/riders/R-1', '192.168.0.55')).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
+    expect(decideLanRequest('GET', '/api/v1/riders/withdrawals', '192.168.0.55')).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
   });
 
   it('비밀번호가 거절되면(400·401) 다시 로그인하지 않는다 — 같이 쓰는 계정이 잠기지 않게', async () => {

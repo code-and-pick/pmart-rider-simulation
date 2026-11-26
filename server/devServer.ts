@@ -204,6 +204,10 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
       actor = { kind: 'rider', riderId: riderHdr as string };
     } else if (decision.token === 'OBSERVER') {
       actor = { kind: 'observer' };
+    } else if (decision.token === 'CONTROL') {
+      // 라이더 보기 셋만(사용자 2026-11-26) — 허용 목록이 거른 것을 한 번 더 확인
+      if (!isControlRequest(method, url)) return problem(res, 403, 'LAN_PATH_BLOCKED', '다른 기기는 라이더 보기 조회만');
+      actor = { kind: 'control' };
     }
   } else if (riderHdr) {
     actor = { kind: 'rider', riderId: riderHdr };

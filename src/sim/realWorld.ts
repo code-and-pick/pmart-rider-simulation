@@ -227,7 +227,7 @@ export class RealWorld implements World {
   private infoTimer: ReturnType<typeof setTimeout> | null = null;
 
   riderInfo(riderId: string): RiderInfo | null {
-    if (this.writeAccess !== 'ok' || !this.controlAvailable) return null;
+    if (!this.canViewRiders) return null;
     const cur = this.infos.get(riderId);
     if (!cur || this.clock.now - cur.at > 60) {
       this.infoQueue.add(riderId);
@@ -584,12 +584,13 @@ export class RealWorld implements World {
   /** 관제 조회 박자 [시뮬] — 계약 설명 "화면은 10초마다 다시 부른다" */
   private static readonly CONTROL_POLL_SEC = 10;
 
+  /** 라이더 보기(관제 계정 조회 셋)를 부를 수 있나 — 이 PC 는 비밀 파일이 있을 때, 다른 기기는 개발 서버가 넘겨 줌(사용자 2026-11-26) */
+  private get canViewRiders(): boolean {
+    return this.writeAccess === 'remote' || (this.writeAccess === 'ok' && this.controlAvailable);
+  }
+
   private async pollControl() {
-    if (this.writeAccess === 'remote') {
-      this.controlStatus = '라이더 관제: 다른 기기에서는 안 보임(라이더 위치는 라이더 운영·관리자만 — 개발 서버가 있는 PC 에서만)';
-      return;
-    }
-    if (!this.controlAvailable) {
+    if (!this.canViewRiders) {
       this.controlStatus = this.writeAccess === 'unknown' ? null : '라이더 관제: 이 PC 에 관제 계정 비밀번호 파일 없음 — 라이더 앱 라이더 위치 못 봄';
       return;
     }
@@ -634,7 +635,7 @@ export class RealWorld implements World {
         ].join(' · ');
       }
       for (const id of [...this.appRiders.keys()]) if (!seen.has(id)) this.appRiders.delete(id); // 운행 끈 라이더는 목록에서 빠진다
-      this.controlStatus = `라이더 관제(관제 계정 claude-dev, 이 PC 만): 운행 중 라이더 앱 라이더 ${seen.size}명 · 위치 있음 ${located}명`;
+      this.controlStatus = `라이더 관제(관제 계정 claude-dev${this.writeAccess === 'remote' ? ' — 개발 서버 PC 를 거쳐' : ''}): 운행 중 라이더 앱 라이더 ${seen.size}명 · 위치 있음 ${located}명`;
     } catch (e) {
       this.controlStatus = `라이더 관제 실패: ${describe(e)}`;
     }

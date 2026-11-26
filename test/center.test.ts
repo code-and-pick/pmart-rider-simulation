@@ -167,20 +167,24 @@ describe('라이더 관제(RR-08) — 라이더 앱 라이더 위치', () => {
     expect(w.diagnostics().some((d) => d.includes('라이더 앱 라이더 2명') && d.includes('위치 있음 1명'))).toBe(true);
   });
 
-  it('다른 기기·관제 계정 없는 PC 는 부르지 않는다', async () => {
-    for (const status of [json(403, { code: 'LOOPBACK_ONLY' }), json(200, { riderSigning: true, observer: true, control: false })]) {
+  it('관제 계정 없는 PC 는 부르지 않고, 다른 기기는 개발 서버를 거쳐 부른다(사용자 2026-11-26)', async () => {
+    for (const [status, calls] of [
+      [json(200, { riderSigning: true, observer: true, control: false }), false],
+      [json(403, { code: 'LOOPBACK_ONLY' }), true],
+    ] as const) {
       const urls: string[] = [];
       const fake = (async (url: string) => {
         urls.push(url);
         if (url.includes('/sim-auth/status')) return status.clone();
-        if (url.includes('/deliveries')) return json(200, { items: [] });
+        if (url.includes('/deliveries') || url.includes('/rider-locations')) return json(200, { items: [] });
         return json(404, {});
       }) as unknown as typeof fetch;
       const w = new RealWorld({ ...DEFAULT_PARAMS, mode: 'http' }, GATE, undefined, { fetch: fake });
       await flush();
       await w.advance(0);
-      expect(urls.some((u) => u.includes('/rider-locations'))).toBe(false);
-      expect(w.diagnostics().some((d) => d.startsWith('라이더 관제:'))).toBe(true);
+      await flush();
+      expect(urls.some((u) => u.includes('/rider-locations'))).toBe(calls);
+      expect(w.diagnostics().some((d) => d.startsWith('라이더 관제'))).toBe(true);
     }
   });
 });
