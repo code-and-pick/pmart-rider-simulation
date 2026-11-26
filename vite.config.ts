@@ -17,11 +17,11 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    plugins: [react(), pmartDevServer({ kakaoRestKey: env.KAKAO_MOBILITY_REST_KEY ?? null, kakaoLocalKey: env.KAKAO_LOCAL_REST_KEY ?? null, gateway })],
+    plugins: [react(), pmartDevServer({ kakaoRestKey: env.KAKAO_MOBILITY_REST_KEY ?? null, kakaoLocalKey: env.KAKAO_LOCAL_REST_KEY ?? null, gateway, operatorIps: env.SIM_OPERATOR_IPS ?? null })],
     server: {
       port: 5181, // MFC 시뮬레이터 5180 과 겹치지 않게
       strictPort: true, // 카카오 콘솔 Web 플랫폼에 등록한 주소와 포트가 달라지지 않게
-      host: true, // LAN 다른 기기에서 보기 — 다른 기기 요청은 server/lanPolicy.ts 가 GET·HEAD 허용 목록만 넘긴다(§6-4)
+      host: true, // LAN 다른 기기에서 보기·운행 — server/lanPolicy.ts(보기 = GET 허용 목록, 운행 기기 = 시뮬레이터 라이더 쓰기도, §6-4)
       proxy: {
         // 토큰은 server/devServer.ts 가 붙인다(브라우저는 토큰을 모른다). 401 이면 그 토큰을 버린다.
         '/api': { target: gateway, changeOrigin: true, configure: (proxy) => configureApiProxy(proxy) },

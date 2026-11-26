@@ -5,6 +5,8 @@
 // - 다른 기기는 GET·HEAD 이고 아래 허용 목록에 있는 경로만. 그 밖 메서드는 403 LAN_READ_ONLY, 목록 밖 경로는 403 LAN_PATH_BLOCKED.
 //   특히 전달지(`/deliveries/{id}/drop-info` — 고객 주소·전화, `/drop-location` — 직원용 주소·좌표)·회수 연락처·증빙 사진은 목록에 넣지 않는다.
 // - 토큰 경로(`/sim-auth/…`)는 루프백만(LOOPBACK_ONLY) — P2 에서 만든다.
+// - 운행 기기(사용자 2026-11-26 — isOperatorDevice: LAN 사설 주소, SIM_OPERATOR_IPS 가 있으면 그 IP 만)는 도구 경로(/sim-*)와
+//   시뮬레이터 라이더(X-Sim-Rider RD-sim-NN) 본인 호출을 모든 메서드로 쓸 수 있다. 관제 계정은 그래도 라이더 보기 셋만.
 // - 다른 기기가 보낸 Authorization 은 지우고, 붙일 토큰(관찰 계정 / 시뮬레이터 라이더)은 P2 에서 개발 서버가 정한다.
 
 export const API_PREFIX = '/api/v1';
@@ -73,6 +75,27 @@ export function isLoopback(remoteAddress: string | undefined): boolean {
   );
 }
 
+/** 사설 IPv4(LAN) 인가 — 10/8·172.16/12·192.168/16 (IPv6 로 감싼 ::ffff: 꼴도) */
+export function isPrivateLan(remoteAddress: string | undefined): boolean {
+  const ip = (remoteAddress ?? '').replace(/^::ffff:/, '');
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(ip);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+/**
+ * 운행 기기 — 다른 기기지만 가상 라이더 운행(쓰기)을 맡길 수 있는 곳(사용자 2026-11-26 "1번": 다른 PC 에서도 운행).
+ * 루프백이 아니고 사설 LAN 주소여야 하며, 허용 목록(.env.local SIM_OPERATOR_IPS, 쉼표)이 있으면 그 안만. 목록이 비면 LAN 전체.
+ * 토큰은 여전히 브라우저로 가지 않는다 — 개발 서버가 시뮬레이터 라이더(RD-sim-NN)에 한해 서명해 붙인다.
+ */
+export function isOperatorDevice(remoteAddress: string | undefined, allowIps: readonly string[]): boolean {
+  if (isLoopback(remoteAddress) || !isPrivateLan(remoteAddress)) return false;
+  if (allowIps.length === 0) return true;
+  return allowIps.includes((remoteAddress ?? '').replace(/^::ffff:/, ''));
+}
+
 /** 요청 URL 에서 쿼리를 떼고 `/api/v1` 뒤 경로를 돌려준다. `/api/v1` 아래가 아니면 null. */
 export function apiSubPath(url: string): string | null {
   const path = url.split('?')[0] ?? '';
@@ -85,9 +108,16 @@ export function apiSubPath(url: string): string | null {
  * 개발 서버로 들어온 요청 하나를 판정한다.
  * `/api` 아래도 `/sim-auth` 아래도 아니면 이 규칙과 상관없다(allow, 손대지 않음).
  */
-export function decideLanRequest(method: string, url: string, remoteAddress: string | undefined): LanDecision {
+export function decideLanRequest(
+  method: string,
+  url: string,
+  remoteAddress: string | undefined,
+  /** 운행 기기(isOperatorDevice)와 그 요청의 X-Sim-Rider — 운행 기기만 쓰기·도구 경로를 쓸 수 있다 */
+  operator: { device: boolean; simRider?: string } = { device: false },
+): LanDecision {
   const path = url.split('?')[0] ?? '';
   const loopback = isLoopback(remoteAddress);
+  const opDevice = !loopback && operator.device;
 
   if (
     path === SIM_AUTH_PREFIX ||
@@ -98,10 +128,12 @@ export function decideLanRequest(method: string, url: string, remoteAddress: str
     path === SIM_OPERATION_PREFIX ||
     path.startsWith(`${SIM_OPERATION_PREFIX}/`)
   ) {
-    return loopback ? { allow: true, stripAuthorization: false, token: null } : { allow: false, status: 403, code: 'LOOPBACK_ONLY' };
+    return loopback || opDevice ? { allow: true, stripAuthorization: false, token: null } : { allow: false, status: 403, code: 'LOOPBACK_ONLY' };
   }
   if (path !== '/api' && !path.startsWith('/api/')) return { allow: true, stripAuthorization: false, token: null };
   if (loopback) return { allow: true, stripAuthorization: false, token: null };
+  // 운행 기기의 시뮬레이터 라이더 본인 호출 — 모든 메서드·경로(라이더 토큰이 허락하는 만큼만, 백엔드가 판정)
+  if (opDevice && isListedSimRider(operator.simRider)) return { allow: true, stripAuthorization: true, token: 'SIM_RIDER' };
 
   const m = method.toUpperCase();
   if (m !== 'GET' && m !== 'HEAD') return { allow: false, status: 403, code: 'LAN_READ_ONLY' };

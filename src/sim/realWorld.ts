@@ -143,6 +143,8 @@ export class RealWorld implements World {
   private controlStatus: string | null = null;
   /** 이 PC 개발 서버에 관제 계정 비밀번호 파일이 있나(/sim-auth/status) */
   private controlAvailable = false;
+  /** 다른 PC 의 운행 기기(사용자 2026-11-26) — 운행은 되고, 관제 계정은 라이더 보기 셋만(전달지·주문은 개발 서버 PC 만) */
+  private remoteOperator = false;
   private lastControlAt = -Infinity;
   /** 화면 표기를 물어본 라이더 → 시뮬 시각(없는 ID·실패는 NAME_RETRY_SEC 뒤 다시) */
   private nameAskedAt = new Map<string, number>();
@@ -155,7 +157,7 @@ export class RealWorld implements World {
   readonly orders = new OrderLookup(
     { getOrder: (id) => this.backend.getStaffOrder(id), reveal: (id, body, w) => this.backend.revealOrderPii(id, body, w) },
     () =>
-      this.writeAccess === 'remote'
+      this.writeAccess === 'remote' || this.remoteOperator
         ? '다른 기기에서는 주문 상세를 보지 않음 — 개발 서버가 있는 PC 에서만(관제 계정)'
         : this.controlAvailable
           ? null
@@ -163,7 +165,7 @@ export class RealWorld implements World {
   );
 
   dropLocation(deliveryId: string): DropLocationView {
-    if (this.writeAccess === 'remote') return { state: 'none', reason: '다른 기기에서는 전달지를 보지 않음 — 개발 서버가 있는 PC 에서만(관제 계정)' };
+    if (this.writeAccess === 'remote' || this.remoteOperator) return { state: 'none', reason: '다른 기기에서는 전달지를 보지 않음 — 개발 서버가 있는 PC 에서만(관제 계정)' };
     if (!this.controlAvailable) return { state: 'none', reason: '이 PC 에 관제 계정 비밀번호 파일이 없어 전달지를 못 읽음' };
     const cur = this.drops.get(deliveryId);
     // 서버 오류(none + 5xx 등)는 30초 뒤 다시, 나머지는 한 번 읽은 값 그대로
@@ -206,7 +208,7 @@ export class RealWorld implements World {
   private readonly opTimes = new Map<string, OperatingTimeView & { at: number }>();
 
   operatingTime(riderId: string): OperatingTimeView {
-    if (this.writeAccess === 'remote') return { state: 'none', reason: '다른 기기에서는 못 봄 — 개발 서버가 있는 PC 에서만(관제 계정)' };
+    if (this.writeAccess === 'remote' || this.remoteOperator) return { state: 'none', reason: '다른 기기에서는 못 봄 — 개발 서버가 있는 PC 에서만(관제 계정)' };
     if (!this.controlAvailable) return { state: 'none', reason: '이 PC 에 관제 계정 비밀번호 파일이 없음' };
     const cur = this.opTimes.get(riderId);
     if (cur && (cur.state === 'loading' || this.clock.now - cur.at < 60)) return cur;
@@ -491,8 +493,9 @@ export class RealWorld implements World {
         this.writeAccess = 'remote';
         return;
       }
-      const s = (await res.json()) as { riderSigning?: boolean; observer?: boolean; control?: boolean };
-      this.authStatus = `개발 서버: 라이더 서명키 ${s.riderSigning ? '있음' : '없음'}, 관찰 계정 ${s.observer ? '있음' : '없음'}, 관제 계정 ${s.control ? '있음' : '없음'}`;
+      const s = (await res.json()) as { riderSigning?: boolean; observer?: boolean; control?: boolean; remoteOperator?: boolean };
+      this.remoteOperator = !!s.remoteOperator;
+      this.authStatus = `${s.remoteOperator ? "다른 PC(운행 기기) — " : ""}개발 서버: 라이더 서명키 ${s.riderSigning ? '있음' : '없음'}, 관찰 계정 ${s.observer ? '있음' : '없음'}, 관제 계정 ${s.control ? '있음' : '없음'}`;
       this.controlAvailable = !!s.control;
       this.writeAccess = s.riderSigning ? 'ok' : 'no-key';
     } catch {
@@ -586,7 +589,7 @@ export class RealWorld implements World {
 
   /** 라이더 보기(관제 계정 조회 셋)를 부를 수 있나 — 이 PC 는 비밀 파일이 있을 때, 다른 기기는 개발 서버가 넘겨 줌(사용자 2026-11-26) */
   private get canViewRiders(): boolean {
-    return this.writeAccess === 'remote' || (this.writeAccess === 'ok' && this.controlAvailable);
+    return this.writeAccess === 'remote' || this.remoteOperator || (this.writeAccess === 'ok' && this.controlAvailable);
   }
 
   private async pollControl() {
@@ -635,7 +638,7 @@ export class RealWorld implements World {
         ].join(' · ');
       }
       for (const id of [...this.appRiders.keys()]) if (!seen.has(id)) this.appRiders.delete(id); // 운행 끈 라이더는 목록에서 빠진다
-      this.controlStatus = `라이더 관제(관제 계정 claude-dev${this.writeAccess === 'remote' ? ' — 개발 서버 PC 를 거쳐' : ''}): 운행 중 라이더 앱 라이더 ${seen.size}명 · 위치 있음 ${located}명`;
+      this.controlStatus = `라이더 관제(관제 계정 claude-dev${this.writeAccess === 'remote' || this.remoteOperator ? ' — 개발 서버 PC 를 거쳐' : ''}): 운행 중 라이더 앱 라이더 ${seen.size}명 · 위치 있음 ${located}명`;
     } catch (e) {
       this.controlStatus = `라이더 관제 실패: ${describe(e)}`;
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideLanRequest, isListedSimRider, isLoopback } from '../../server/lanPolicy';
+import { decideLanRequest, isListedSimRider, isLoopback, isOperatorDevice, isPrivateLan } from '../../server/lanPolicy';
 
 const LAN = '192.168.0.55';
 const ME = '127.0.0.1';
@@ -76,5 +76,39 @@ describe('LAN 다른 기기 가드 (docs/design.md §6-4)', () => {
   it('/api·/sim-auth 밖(화면 파일)은 손대지 않는다', () => {
     expect(decideLanRequest('GET', '/src/main.tsx', LAN)).toEqual({ allow: true, stripAuthorization: false, token: null });
     expect(decideLanRequest('GET', '/apiary', LAN)).toEqual({ allow: true, stripAuthorization: false, token: null });
+  });
+});
+
+describe('운행 기기 — 다른 PC 에서 가상 라이더 운행 (사용자 2026-11-26)', () => {
+  const OP = { device: true };
+  it('LAN 사설 주소만, 허용 IP 가 있으면 그 안만', () => {
+    expect(isPrivateLan('192.168.0.55')).toBe(true);
+    expect(isPrivateLan('::ffff:10.1.2.3')).toBe(true);
+    expect(isPrivateLan('172.20.0.1')).toBe(true);
+    expect(isPrivateLan('172.32.0.1')).toBe(false);
+    expect(isPrivateLan('8.8.8.8')).toBe(false);
+    expect(isOperatorDevice(LAN, [])).toBe(true);
+    expect(isOperatorDevice(ME, [])).toBe(false); // 이 PC 는 원래 다 됨
+    expect(isOperatorDevice('8.8.8.8', [])).toBe(false);
+    expect(isOperatorDevice(LAN, ['192.168.0.77'])).toBe(false);
+    expect(isOperatorDevice(`::ffff:${LAN}`, ['192.168.0.77', LAN])).toBe(true);
+  });
+
+  it('시뮬레이터 라이더 본인 호출은 쓰기·모든 경로, 도구 경로도 열린다', () => {
+    const r = { ...OP, simRider: 'RD-sim-01' };
+    expect(decideLanRequest('PUT', '/api/v1/riders/me/state', LAN, r)).toEqual({ allow: true, stripAuthorization: true, token: 'SIM_RIDER' });
+    expect(decideLanRequest('POST', '/api/v1/offers/OF-1/responses', LAN, r)).toMatchObject({ allow: true, token: 'SIM_RIDER' });
+    expect(decideLanRequest('GET', '/api/v1/deliveries/D-1/drop-info', LAN, r)).toMatchObject({ allow: true, token: 'SIM_RIDER' });
+    for (const p of ['/sim-auth/status', '/sim-operation/beat', '/sim-route', '/sim-geocode']) {
+      expect(decideLanRequest('POST', p, LAN, OP), p).toMatchObject({ allow: true });
+    }
+  });
+
+  it('라이더가 아니거나 운행 기기가 아니면 그대로 막힌다 — 관제 계정 전달지·주문도', () => {
+    expect(decideLanRequest('PUT', '/api/v1/riders/me/state', LAN, { ...OP, simRider: 'RD-real-1' })).toMatchObject({ allow: false, code: 'LAN_READ_ONLY' });
+    expect(decideLanRequest('PUT', '/api/v1/riders/me/state', LAN, { device: false, simRider: 'RD-sim-01' })).toMatchObject({ allow: false, code: 'LAN_READ_ONLY' });
+    expect(decideLanRequest('POST', '/sim-operation/beat', LAN)).toMatchObject({ allow: false, code: 'LOOPBACK_ONLY' });
+    expect(decideLanRequest('GET', '/api/v1/deliveries/D-1/drop-location', LAN, OP)).toMatchObject({ allow: false, code: 'LAN_PATH_BLOCKED' });
+    expect(decideLanRequest('POST', '/api/v1/orders/lookups/OR-1/pii-reveals', LAN, OP)).toMatchObject({ allow: false, code: 'LAN_READ_ONLY' });
   });
 });

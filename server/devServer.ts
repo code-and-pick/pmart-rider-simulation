@@ -6,6 +6,8 @@
 //     브라우저는 `X-Sim-Rider: RD-sim-NN`(라이더 본인 API) 또는 `X-Sim-Actor: observer`(관찰 직원 조회)만 보내고,
 //     개발 서버가 시험 라이더 토큰을 서명하거나(조건 3·4) 관찰 계정으로 로그인해 Authorization 을 붙인 뒤 X-Sim-* 를 지운다.
 //  3. 401 이면 그 토큰을 버린다 → 다음 요청에서 새로(조건 7 의 앞부분. 정지 라이더 멈춤은 엔진 몫 — P3).
+//  0. 운행 기기(사용자 2026-11-26): LAN 사설 주소(.env.local SIM_OPERATOR_IPS 가 있으면 그 IP 만)는 아래 루프백만 경로와 시뮬레이터 라이더 쓰기도 쓴다.
+//     관제 계정은 그래도 라이더 보기 셋만(전달지·주문 상세·원문 열람은 이 PC 만).
 //  4. GET /sim-auth/status(루프백만) — 비밀 파일이 있는지만(값 없음).
 //  6. /sim-operation/beat·end·release(루프백만) — 실서버 운행 지킴이(operationWatch.ts): 맥박이 끊기거나 페이지가 떠나면 라이더 OFF_DUTY.
 //  5. /sim-route(도로 경로)·/sim-geocode(주소 → 좌표, POST 본문 — 다시 배송 전달지에 핀이 없어서)(루프백만). 주소·좌표는 로그에 남기지 않는다.
@@ -14,7 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { HttpProxy, Plugin } from 'vite';
-import { decideLanRequest, isControlRequest, isListedSimRider, isLoopback } from './lanPolicy';
+import { decideLanRequest, isControlRequest, isListedSimRider, isLoopback, isOperatorDevice } from './lanPolicy';
 import { makeSigner, NotSimRiderError, RiderTokenCache } from './riderToken';
 import { DEFAULT_PARAMS, OPERATION_WATCH } from '../src/config';
 import { GeocodeService, parseAddressBody } from './geocode';
@@ -40,6 +42,8 @@ interface AuthDeps {
 
 const ACTOR = Symbol('simActor');
 let deps: AuthDeps | null = null;
+/** 운행 기기 허용 IP(.env.local SIM_OPERATOR_IPS) — 비면 LAN 사설 주소 전체(lanPolicy.isOperatorDevice, 사용자 2026-11-26) */
+let operatorIps: readonly string[] = [];
 
 function initDeps(root: string, kakaoRestKey: string | null, kakaoLocalKey: string | null, gateway: string): AuthDeps {
   const secrets = new Secrets(secretsDir(root));
@@ -122,7 +126,9 @@ function header(req: IncomingMessage, name: string): string | undefined {
 async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Promise<void> {
   const url = req.url ?? '/';
   const method = req.method ?? 'GET';
-  const decision = decideLanRequest(method, url, req.socket.remoteAddress);
+  const remote = req.socket.remoteAddress;
+  const opDevice = isOperatorDevice(remote, operatorIps);
+  const decision = decideLanRequest(method, url, remote, { device: opDevice, simRider: header(req, 'x-sim-rider') });
   if (!decision.allow) return problem(res, decision.status, decision.code, '다른 기기에서는 허용하지 않는 요청');
 
   const path = url.split('?')[0] ?? '';
@@ -130,7 +136,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: Next): Pr
     const st = deps?.secrets.status() ?? { riderSigning: false, observer: false, control: false };
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
-    res.end(JSON.stringify({ ...st, secretsDir: deps ? '설정됨' : '없음' }));
+    // 운행 기기: 운행은 되지만 관제 계정은 라이더 보기 셋만(전달지·주문은 이 PC 만) — 화면이 그에 맞게 고른다
+    const body = opDevice ? { ...st, control: false, remoteOperator: true } : st;
+    res.end(JSON.stringify({ ...body, secretsDir: deps ? '설정됨' : '없음' }));
     return;
   }
   if (path === '/sim-auth' || path.startsWith('/sim-auth/')) return problem(res, 404, 'NOT_FOUND', '없는 경로');
@@ -285,8 +293,11 @@ export function configureApiProxy(proxy: HttpProxy.Server): void {
   });
 }
 
-export function pmartDevServer(opts: { kakaoRestKey?: string | null; kakaoLocalKey?: string | null; gateway?: string } = {}): Plugin {
+export function pmartDevServer(
+  opts: { kakaoRestKey?: string | null; kakaoLocalKey?: string | null; gateway?: string; operatorIps?: string | null } = {},
+): Plugin {
   const gateway = opts.gateway ?? 'http://192.168.0.40:8080';
+  operatorIps = (opts.operatorIps ?? '').split(',').map((x) => x.trim()).filter(Boolean);
   const restKey = opts.kakaoRestKey?.trim() || null;
   const localKey = opts.kakaoLocalKey?.trim() || null;
   return {
