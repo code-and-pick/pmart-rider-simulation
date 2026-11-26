@@ -11,8 +11,18 @@ export interface WatchedWorld {
   stopByWatch(): void;
 }
 
+/**
+ * 페이지 맥박 ID(개발 서버 parseWatchBody: 영숫자·- 8~64자). crypto.randomUUID 는 보안 출처(https·localhost)에서만 있어
+ * LAN 주소(http://192.168…)로 열면 없다 — 그때 실서버 화면 전체가 그리기 전에 멈췄다(2026-11-26). getRandomValues 는 어디서나.
+ */
+export function sessionId(): string {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return `page-${[...b].map((x) => x.toString(16).padStart(2, '0')).join('')}`;
+}
+
 export function startOperationWatch(world: WatchedWorld, beatSec: number = OPERATION_WATCH.beatSec): () => void {
-  const session = crypto.randomUUID();
+  const session = sessionId();
   let watching = false;
   let stoppedByServer = false;
   let inFlight = false;

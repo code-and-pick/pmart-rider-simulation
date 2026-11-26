@@ -38,7 +38,12 @@ if (mode === 'http') {
   void geocoder.refresh();
   const real = new RealWorld({ ...DEFAULT_PARAMS, ...siteParams, ...codeParams, mode: 'http' }, REAL_RIDER_GATE, routes, { locator: geocoder });
   // 운행 창이 닫히거나 멈춰도 라이더가 ON_DUTY 로 남지 않게 — 개발 서버 지킴이에 맥박(config OPERATION_WATCH)
-  startOperationWatch(real);
+  // 지킴이가 못 떠도 화면은 띄운다(2026-11-26 — LAN 주소에서 randomUUID 가 없어 화면 전체가 멈췄던 일)
+  try {
+    startOperationWatch(real);
+  } catch (e) {
+    console.warn('운행 지킴이를 못 띄움 — 창을 닫으면 라이더가 ON_DUTY 로 남을 수 있음', e);
+  }
   world = real;
 } else {
   const sim = new Simulation({ ...DEFAULT_PARAMS, ...siteParams, ...codeParams }, { routes });
